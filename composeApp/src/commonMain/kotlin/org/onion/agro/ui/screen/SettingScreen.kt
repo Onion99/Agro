@@ -529,10 +529,7 @@ fun ContextLimitsCard(chatViewModel: ChatViewModel, maxTokens: Int, contextShift
                         .clip(AppTheme.shape.md)
                         .background(AppTheme.colors.surfaceVariant.copy(alpha = 0.5f))
                         .clickable {
-                            val current = chatViewModel.lmMaxNumTokens.value
-                            if (current > 128) {
-                                chatViewModel.lmMaxNumTokens.value = current - 128
-                            }
+                            chatViewModel.adjustLmMaxNumTokens(increase = false)
                         },
                     contentAlignment = Alignment.Center
                 ) {
@@ -560,10 +557,7 @@ fun ContextLimitsCard(chatViewModel: ChatViewModel, maxTokens: Int, contextShift
                         .clip(AppTheme.shape.md)
                         .background(AppTheme.colors.surfaceVariant.copy(alpha = 0.5f))
                         .clickable {
-                            val current = chatViewModel.lmMaxNumTokens.value
-                            if (current < 8192) {
-                                chatViewModel.lmMaxNumTokens.value = current + 128
-                            }
+                            chatViewModel.adjustLmMaxNumTokens(increase = true)
                         },
                     contentAlignment = Alignment.Center
                 ) {

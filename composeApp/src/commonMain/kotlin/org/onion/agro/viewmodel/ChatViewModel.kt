@@ -33,6 +33,7 @@ import org.onion.agro.native.llm.AgentLoopConfig
 import org.onion.agro.native.llm.AgentLoopEvent
 import org.onion.agro.native.llm.AgentLoopRunner
 import org.onion.agro.native.llm.AgentTools
+import org.onion.agro.native.llm.LiteRtLmModelMetadata
 import agro.composeapp.generated.resources.Res
 import agro.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.getString
@@ -143,7 +144,10 @@ class ChatViewModel(
     var lmBackend = mutableStateOf("GPU")//NPU,CPU,GPU
     var lmVisionBackend = mutableStateOf("")
     var lmAudioBackend = mutableStateOf("")
-    var lmMaxNumTokens = mutableStateOf(4096)
+    var lmMaxNumTokens = mutableStateOf(DEFAULT_LM_MAX_NUM_TOKENS)
+    private val _lmModelMaxNumTokens = mutableStateOf<Int?>(null)
+    val lmModelMaxNumTokens: State<Int?> = _lmModelMaxNumTokens
+    private var lmMetadataModelPath: String? = null
     var lmMaxNumImages = mutableStateOf(-1)
     var lmMainBackendNumThreads = mutableStateOf(2)
     var lmAudioBackendNumThreads = mutableStateOf(-1)
@@ -174,7 +178,8 @@ class ChatViewModel(
             topK.value = 40
             enableThinking.value = false
             enableSpeculativeDecoding.value = false
-            lmMaxNumTokens.value = 4096
+            lmMaxNumTokens.value =
+                _lmModelMaxNumTokens.value ?: DEFAULT_LM_MAX_NUM_TOKENS
             systemContextShift.value = true
             try {
                 systemPrompt.value = getString(Res.string.llm_setting_system_prompt_default,
@@ -233,9 +238,41 @@ class ChatViewModel(
     suspend fun selectLlmFile(): String{
         isLlmModelLoading.value = true
         val path = LiteRtLmJni.getModelFilePath()
+        if (path != llmPath.value) {
+            lmMetadataModelPath = null
+            _lmModelMaxNumTokens.value = null
+            lmMaxNumTokens.value = DEFAULT_LM_MAX_NUM_TOKENS
+        }
         llmPath.value = path
         isLlmModelLoading.value = false
         return path
+    }
+
+    fun adjustLmMaxNumTokens(increase: Boolean) {
+        val delta = if (increase) LM_MAX_NUM_TOKENS_STEP else -LM_MAX_NUM_TOKENS_STEP
+        val upperBound = _lmModelMaxNumTokens.value ?: DEFAULT_LM_MAX_NUM_TOKENS
+        val lowerBound = MIN_LM_MAX_NUM_TOKENS.coerceAtMost(upperBound)
+        lmMaxNumTokens.value = (lmMaxNumTokens.value + delta).coerceIn(
+            minimumValue = lowerBound,
+            maximumValue = upperBound
+        )
+    }
+
+    private fun resolveLmMaxNumTokens(modelPath: String) {
+        if (lmMetadataModelPath == modelPath) return
+
+        val modelMaxNumTokens = runCatching {
+            LiteRtLmModelMetadata.getLmMaxNumTokens(modelPath)
+        }.onFailure { error ->
+            println(
+                "Unable to read lmMaxNumTokens from LiteRT-LM model " +
+                    "'$modelPath': ${error.message}"
+            )
+        }.getOrNull()
+
+        _lmModelMaxNumTokens.value = modelMaxNumTokens
+        lmMaxNumTokens.value = modelMaxNumTokens ?: DEFAULT_LM_MAX_NUM_TOKENS
+        lmMetadataModelPath = modelPath
     }
 
     suspend fun selectClipLFile(): String{
@@ -297,6 +334,7 @@ class ChatViewModel(
                 println("cacheDir path is: ${FileKit.cacheDir.path}")
                 isLlmModelLoading.value = true
                 val currentLlmPath = llmPath.value
+                resolveLmMaxNumTokens(currentLlmPath)
                 lmEngine = org.onion.agro.native.llm.LmEngine(
                     modelPath = currentLlmPath,
                     backend = lmBackend.value,
@@ -352,6 +390,7 @@ class ChatViewModel(
                 if (isGenerating.value) {
                     stopGeneration()
                 }
+                resolveLmMaxNumTokens(currentLlmPath)
                 
                 val needsEngineReinit = lmEngine == null ||
                         activeModelPath != currentLlmPath ||
@@ -1037,6 +1076,10 @@ class ChatViewModel(
     }
 
     private companion object {
+        const val DEFAULT_LM_MAX_NUM_TOKENS = 8192
+        const val MIN_LM_MAX_NUM_TOKENS = 128
+        const val LM_MAX_NUM_TOKENS_STEP = 128
+
         val SVG_IMAGE_SYSTEM_INSTRUCTION = """
             You are ${BuildConfig.APP_NAME}'s dedicated SVG image generator.
 

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-07-26] - LiteRT-LM 模型 Context 上限读取
+- [新增] 在主仓库 commonMain 增加 `LiteRtLmModelMetadata`，通过随机读取 `.litertlm` header、`LlmMetadataProto` section 与 protobuf 字段 5 获取模型 `max_num_tokens`，不修改 `cpp/lite-rt-lm` submodule。
+- [修改] `ChatViewModel` 在创建或重建 `LmEngine` 前使用模型声明的 Context 上限更新 `lmMaxNumTokens`，设置页 token 调整上限同步改为模型值，读取失败时保留 8192 回退。
+- [测试] 新增 `LiteRtLmModelMetadataTest`，覆盖 Context 上限读取、字段缺失与非法容器 magic。
+- [文档] 新增 `docs/designs/litertlm-model-context-limit.md`，记录 submodule 只读边界、容器解析流程与回退策略。
+
 ## [2026-07-25] - 可扩展聊天消息与 SVG 图片消息
 - [新增] 引入 `ChatMessageContent` 类型化内容模型，支持文本、位图、SVG 与未知内容降级；`ChatBubble` 改为按有序内容列表分发独立渲染器。
 - [新增] 基于 `coil-svg` 渲染经安全校验的 SVG 消息，并提供源码复制、跨端 `.svg` 保存、渲染失败提示和 1 MiB/外部资源/可执行内容限制。
