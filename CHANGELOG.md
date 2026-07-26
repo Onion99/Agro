@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-07-25] - 可扩展聊天消息与 SVG 图片消息
+- [新增] 引入 `ChatMessageContent` 类型化内容模型，支持文本、位图、SVG 与未知内容降级；`ChatBubble` 改为按有序内容列表分发独立渲染器。
+- [新增] 基于 `coil-svg` 渲染经安全校验的 SVG 消息，并提供源码复制、跨端 `.svg` 保存、渲染失败提示和 1 MiB/外部资源/可执行内容限制。
+- [修改] Room 数据库升级到 v2，新增 `chat_message_contents`、会话 `mode` 与 `system_instruction` 快照，并提供 v1 文本及旧 SVG JSON 的迁移。
+- [新增] Chat 页增加遵循 Ethereal Minimalism 主题的当前聊天对象提示条，可显示上下文应用状态、展开查看并复制完整 system instruction。
+- [修复] 取消生成时同步删除 Room 助手占位记录，并阻止已取消协程覆盖最后一条用户消息。
+- [测试] 新增 `SvgMessageParserTest` 与 `ChatHistoryMigrationTest`，覆盖合法 SVG、Markdown 包裹、畸形 XML、脚本/外链、超限载荷，以及 v1 文本/旧 SVG 数据迁移。
+- [文档] 新增 `docs/designs/extensible-chat-messages.md`，并更新聊天持久化、SVG 会话和数据模型规范。
+
 ## [2026-07-23] - SVG JSON 内容字段复制渲染修复
 - [修复] 收紧 `ChatViewModel` 中 SVG 图像生成专用 `systemInstruction`，要求 `svg` 字段使用单引号属性、单行 markup、严格 XML 标签配对，并避免 `rgba(...)` 兼容性问题，修复从 JSON 中复制 SVG 内容后无法正常渲染的风险。
 - [文档] 更新 `docs/specs/svg-image-library-card.md`，记录 `svg` 字段可复制、可渲染的 JSON 输出约束。

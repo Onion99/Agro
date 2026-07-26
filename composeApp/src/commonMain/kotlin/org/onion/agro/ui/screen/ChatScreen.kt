@@ -31,8 +31,11 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
@@ -43,9 +46,12 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
+import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Search
@@ -89,18 +95,33 @@ import coil3.compose.AsyncImage
 import com.mohamedrejeb.richeditor.model.rememberRichTextState
 import com.mohamedrejeb.richeditor.ui.material3.RichText
 import com.onion.model.ChatMessage
+import com.onion.model.ChatMessageContent
+import com.onion.model.ChatSessionMode
+import com.onion.model.ConversationContextState
 import com.onion.theme.state.ContentType
 import com.onion.theme.style.MediumOutlinedTextField
 import com.onion.theme.style.glassSurface
 import com.onion.theme.style.watercolorGradient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import io.github.vinceglb.filekit.FileKit
+import io.github.vinceglb.filekit.dialogs.openFileSaver
+import io.github.vinceglb.filekit.write
 import agro.composeapp.generated.resources.Res
 import agro.composeapp.generated.resources.ai_image
 import agro.composeapp.generated.resources.attachment
 import agro.composeapp.generated.resources.chat_date_desktop
 import agro.composeapp.generated.resources.chat_date_mobile
 import agro.composeapp.generated.resources.chat_disclaimer
+import agro.composeapp.generated.resources.chat_context_collapse
+import agro.composeapp.generated.resources.chat_context_copy
+import agro.composeapp.generated.resources.chat_context_current_instruction
+import agro.composeapp.generated.resources.chat_context_default_description
+import agro.composeapp.generated.resources.chat_context_default_title
+import agro.composeapp.generated.resources.chat_context_expand
+import agro.composeapp.generated.resources.chat_context_not_applied
+import agro.composeapp.generated.resources.chat_context_svg_description
+import agro.composeapp.generated.resources.chat_context_svg_title
 import agro.composeapp.generated.resources.chat_input_hint_desktop
 import agro.composeapp.generated.resources.chat_input_hint_mobile
 import agro.composeapp.generated.resources.copy
@@ -122,7 +143,11 @@ import agro.composeapp.generated.resources.scroll_to_bottom
 import agro.composeapp.generated.resources.send_message
 import agro.composeapp.generated.resources.settings_back
 import agro.composeapp.generated.resources.stop_generation
+import agro.composeapp.generated.resources.svg_render_failed
+import agro.composeapp.generated.resources.svg_save_failed
+import agro.composeapp.generated.resources.svg_saved
 import agro.composeapp.generated.resources.text_copied
+import agro.composeapp.generated.resources.unsupported_message
 import agro.composeapp.generated.resources.user_image
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
@@ -148,6 +173,7 @@ fun ChatScreen(
     ) {
         val chatViewModel = koinInject<ChatViewModel>()
         val chatMessages = chatViewModel.currentChatMessages
+        val conversationContext by chatViewModel.conversationContext
         var text by remember { mutableStateOf("") }
         val keyboardController = LocalSoftwareKeyboardController.current
         val focusManager = LocalFocusManager.current
@@ -210,10 +236,17 @@ fun ChatScreen(
         Column(
             modifier = Modifier.fillMaxSize().zIndex(10f)
         ) {
-            // Mobile Top Header
-            if (AppTheme.contentType == ContentType.Single) {
-                //...
-            }
+            ConversationContextHeader(
+                context = conversationContext,
+                activeSessionId = chatViewModel.activeSessionId.value,
+                onHistoryClick = { chatViewModel.setHistoryVisible(true) },
+                onCopyInstruction = { instruction ->
+                    clipboardManager.setText(AnnotatedString(instruction))
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar(getString(Res.string.text_copied))
+                    }
+                }
+            )
 
             // Chat History Scrollable Area
             Box(
@@ -259,32 +292,6 @@ fun ChatScreen(
                 },
                 onTextChange = { text = it }
             )
-        }
-
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(AppTheme.spacing.lg)
-                .zIndex(40f)
-                .glassSurface(
-                    shape = AppTheme.shape.full,
-                    alpha = AppTheme.elevation.glassSurfaceAlpha,
-                    borderAlpha = AppTheme.elevation.glassBorderAlpha
-                )
-                .padding(horizontal = AppTheme.spacing.xs, vertical = AppTheme.spacing.xs),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = { chatViewModel.setHistoryVisible(true) },
-                modifier = Modifier.size(AppTheme.size.iconButton)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.History,
-                    contentDescription = stringResource(Res.string.history),
-                    tint = AppTheme.colors.primary,
-                    modifier = Modifier.size(AppTheme.size.icon)
-                )
-            }
         }
 
         AnimatedVisibility(
@@ -336,6 +343,225 @@ fun ChatScreen(
                 )
             }
         )
+    }
+}
+
+@Composable
+private fun ConversationContextHeader(
+    context: ConversationContextState,
+    activeSessionId: String?,
+    onHistoryClick: () -> Unit,
+    onCopyInstruction: (String) -> Unit
+) {
+    val isSingle = AppTheme.contentType == ContentType.Single
+    var expanded by remember(activeSessionId, context.systemInstruction) {
+        mutableStateOf(false)
+    }
+    val isSvgMode = context.mode == ChatSessionMode.SVG_IMAGE
+    val title = stringResource(
+        if (isSvgMode) {
+            Res.string.chat_context_svg_title
+        } else {
+            Res.string.chat_context_default_title
+        },
+        BuildConfig.APP_NAME
+    )
+    val description = stringResource(
+        if (isSvgMode) {
+            Res.string.chat_context_svg_description
+        } else {
+            Res.string.chat_context_default_description
+        }
+    )
+    val statusColor = if (context.isApplied) {
+        AppTheme.colors.primary
+    } else {
+        AppTheme.colors.tertiary
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = if (isSingle) {
+                    AppTheme.spacing.containerPaddingMobile
+                } else {
+                    AppTheme.spacing.containerPaddingDesktop
+                },
+                end = if (isSingle) {
+                    AppTheme.spacing.containerPaddingMobile
+                } else {
+                    AppTheme.spacing.containerPaddingDesktop
+                },
+                top = AppTheme.spacing.sm
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .widthIn(max = AppTheme.size.maxContentWidth)
+                    .fillMaxWidth()
+                    .padding(horizontal = AppTheme.size.iconButton)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .glassSurface(
+                            shape = AppTheme.shape.full,
+                            alpha = AppTheme.elevation.glassSurfaceAlpha,
+                            borderAlpha = AppTheme.elevation.glassBorderAlpha
+                        )
+                        .background(
+                            color = AppTheme.colors.surfaceContainerLow.copy(alpha = 0.42f),
+                            shape = AppTheme.shape.full
+                        )
+                        .clickable { expanded = !expanded }
+                        .padding(
+                            horizontal = AppTheme.spacing.md,
+                            vertical = AppTheme.spacing.sm
+                        ),
+                    horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (isSvgMode) {
+                            Icons.Filled.Photo
+                        } else {
+                            Icons.Filled.AutoAwesome
+                        },
+                        contentDescription = null,
+                        tint = AppTheme.colors.primary,
+                        modifier = Modifier.size(AppTheme.size.icon)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(AppTheme.spacing.sm)
+                            .background(statusColor, AppTheme.shape.full)
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = title,
+                            style = AppTheme.typography.labelMedium,
+                            color = AppTheme.colors.onSurface,
+                            maxLines = 1
+                        )
+                        if (!isSingle) {
+                            Text(
+                                text = if (context.isApplied) {
+                                    description
+                                } else {
+                                    stringResource(Res.string.chat_context_not_applied)
+                                },
+                                style = AppTheme.typography.bodySmall,
+                                color = AppTheme.colors.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = if (expanded) {
+                            Icons.Filled.ExpandLess
+                        } else {
+                            Icons.Filled.ExpandMore
+                        },
+                        contentDescription = stringResource(
+                            if (expanded) {
+                                Res.string.chat_context_collapse
+                            } else {
+                                Res.string.chat_context_expand
+                            }
+                        ),
+                        tint = AppTheme.colors.onSurfaceVariant,
+                        modifier = Modifier.size(AppTheme.size.icon)
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .glassSurface(
+                        shape = AppTheme.shape.full,
+                        alpha = AppTheme.elevation.glassSurfaceAlpha,
+                        borderAlpha = AppTheme.elevation.glassBorderAlpha
+                    )
+            ) {
+                IconButton(
+                    onClick = onHistoryClick,
+                    modifier = Modifier.size(AppTheme.size.iconButton)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.History,
+                        contentDescription = stringResource(Res.string.history),
+                        tint = AppTheme.colors.primary,
+                        modifier = Modifier.size(AppTheme.size.icon)
+                    )
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = expanded,
+            enter = Animations.slideFadeIn(),
+            exit = Animations.slideFadeOut()
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(top = AppTheme.spacing.sm)
+                    .fillMaxWidth(if (isSingle) 1f else 0.72f)
+                    .widthIn(max = AppTheme.size.maxContentWidth)
+                    .glassSurface(
+                        shape = AppTheme.shape.xl,
+                        alpha = AppTheme.elevation.glassSurfaceAlpha,
+                        borderAlpha = AppTheme.elevation.glassBorderAlpha
+                    )
+                    .background(
+                        color = AppTheme.colors.surfaceContainerLowest.copy(alpha = 0.72f),
+                        shape = AppTheme.shape.xl
+                    )
+                    .padding(AppTheme.spacing.md),
+                verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(Res.string.chat_context_current_instruction),
+                        style = AppTheme.typography.labelMedium,
+                        color = AppTheme.colors.primary
+                    )
+                    IconButton(
+                        onClick = {
+                            onCopyInstruction(context.systemInstruction)
+                        },
+                        modifier = Modifier.size(AppTheme.size.iconButtonSmall)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.ContentCopy,
+                            contentDescription = stringResource(
+                                Res.string.chat_context_copy
+                            ),
+                            tint = AppTheme.colors.primary,
+                            modifier = Modifier.size(AppTheme.size.iconSmall)
+                        )
+                    }
+                }
+                SelectionContainer {
+                    Text(
+                        text = context.systemInstruction,
+                        style = AppTheme.typography.bodySmall,
+                        color = AppTheme.colors.onSurfaceVariant,
+                        modifier = Modifier
+                            .heightIn(max = AppTheme.size.cardMedium)
+                            .verticalScroll(rememberScrollState())
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -685,6 +911,25 @@ private fun ChatMessagesList(
                                 // val success = chatViewModel.diffusionLoader.saveImage(imageData, fileName, message.metadata)
                             }
                         },
+                        onSaveSvg = { svg ->
+                            coroutineScope.launch {
+                                runCatching {
+                                    val file = FileKit.openFileSaver(
+                                        suggestedName = "svg_${message.id}",
+                                        extension = "svg"
+                                    ) ?: return@launch
+                                    file.write(svg.encodeToByteArray())
+                                }.onSuccess {
+                                    snackbarHostState.showSnackbar(
+                                        getString(Res.string.svg_saved)
+                                    )
+                                }.onFailure {
+                                    snackbarHostState.showSnackbar(
+                                        getString(Res.string.svg_save_failed)
+                                    )
+                                }
+                            }
+                        },
                         onRegenerate = if (message.metadata?.containsKey("prompt") == true) {
                             {
                                 if (chatViewModel.isGenerating.value) {
@@ -730,7 +975,7 @@ private fun ChatMessagesList(
     val lastMessageScrollKey by remember {
         derivedStateOf {
             chatMessages.lastOrNull()?.let { message ->
-                "${message.id}:${message.message.length}:${message.metadata?.get("is_generating")}"
+                "${message.id}:${message.contents.hashCode()}:${message.metadata?.get("is_generating")}"
             }
         }
     }
@@ -789,14 +1034,12 @@ private fun ScrollToBottomButton(
 fun ChatBubble(
     message: ChatMessage,
     onSaveImage: ((ByteArray) -> Unit)? = null,
+    onSaveSvg: ((String) -> Unit)? = null,
     onRegenerate: (() -> Unit)? = null,
     onCopyText: ((String) -> Unit)? = null
 ) {
     val isSingle = AppTheme.contentType == ContentType.Single
     val isUser = message.isUser
-    val textContent = message.message
-    val image = message.image
-    val metadata = message.metadata
 
     Box(
         modifier = Modifier
@@ -831,7 +1074,14 @@ fun ChatBubble(
                         )
                         .padding(horizontal = 20.dp, vertical = 16.dp)
                 ) {
-                    UserMessageContent(textContent, image, onCopyText, isSingle = true)
+                    MessageContentList(
+                        message = message,
+                        onSaveImage = onSaveImage,
+                        onSaveSvg = onSaveSvg,
+                        onRegenerate = onRegenerate,
+                        onCopyText = onCopyText,
+                        isSingle = true
+                    )
                 }
             } else {
                 // Desktop User Bubble
@@ -853,7 +1103,14 @@ fun ChatBubble(
                         )
                         .padding(horizontal = 24.dp, vertical = 20.dp)
                 ) {
-                    UserMessageContent(textContent, image, onCopyText, isSingle = false)
+                    MessageContentList(
+                        message = message,
+                        onSaveImage = onSaveImage,
+                        onSaveSvg = onSaveSvg,
+                        onRegenerate = onRegenerate,
+                        onCopyText = onCopyText,
+                        isSingle = false
+                    )
                 }
             }
         } else {
@@ -878,7 +1135,14 @@ fun ChatBubble(
                         )
                         .padding(horizontal = 20.dp, vertical = 16.dp)
                 ) {
-                    AiMessageContent(textContent, image, onSaveImage, onRegenerate, onCopyText, metadata, isSingle = true)
+                    MessageContentList(
+                        message = message,
+                        onSaveImage = onSaveImage,
+                        onSaveSvg = onSaveSvg,
+                        onRegenerate = onRegenerate,
+                        onCopyText = onCopyText,
+                        isSingle = true
+                    )
                 }
             } else {
                 // Desktop AI Bubble with Avatar
@@ -951,216 +1215,374 @@ fun ChatBubble(
                         )
 
                         Box(modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp)) {
-                            AiMessageContent(textContent, image, onSaveImage, onRegenerate, onCopyText, metadata, isSingle = false)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun UserMessageContent(
-    message: String,
-    image: ByteArray? = null,
-    onCopyText: ((String) -> Unit)? = null,
-    isSingle: Boolean
-) {
-    val textColor = if (isSingle) AppTheme.colors.onPrimary else AppTheme.colors.onSurface
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        if (image != null) {
-            AsyncImage(
-                model = image,
-                contentDescription = stringResource(Res.string.user_image),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .wrapContentHeight()
-                    .clip(RoundedCornerShape(12.dp))
-                    .padding(bottom = 8.dp)
-            )
-        }
-        if (message.isNotEmpty()) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                val richTextState = rememberRichTextState()
-                val primaryColor = AppTheme.colors.primary
-                val codeColor = AppTheme.colors.primary
-                val codeBgColor = AppTheme.colors.surfaceVariant.copy(alpha = 0.5f)
-                LaunchedEffect(primaryColor, codeColor, codeBgColor) {
-                    richTextState.config.linkColor = primaryColor
-                    richTextState.config.codeSpanColor = codeColor
-                    richTextState.config.codeSpanBackgroundColor = codeBgColor
-                }
-                LaunchedEffect(message) {
-                    richTextState.setMarkdown(message)
-                }
-
-                RichText(
-                    state = richTextState,
-                    style = if (isSingle) AppTheme.typography.bodyMedium else AppTheme.typography.bodyLarge,
-                    color = textColor,
-                    modifier = Modifier
-                        .padding(top = 4.dp, end = 8.dp)
-                        .weight(1f)
-                )
-                if (onCopyText != null) {
-                    IconButton(
-                        onClick = { onCopyText.invoke(message) },
-                        modifier = Modifier.size(24.dp).padding(start = 4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.ContentCopy,
-                            contentDescription = stringResource(Res.string.copy),
-                            tint = if (isSingle) AppTheme.colors.onPrimary.copy(alpha = 0.7f) else AppTheme.colors.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AiMessageContent(
-    message: String,
-    image: ByteArray? = null,
-    onSaveImage: ((ByteArray) -> Unit)? = null,
-    onRegenerate: (() -> Unit)? = null,
-    onCopyText: ((String) -> Unit)? = null,
-    metadata: Map<String, String>? = null,
-    isSingle: Boolean
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        if (image != null) {
-            Box(modifier = Modifier.wrapContentSize().padding(bottom = 12.dp)) {
-                val widthStr = metadata?.get("width")
-                val heightStr = metadata?.get("height")
-                val imgModifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .let { m ->
-                        if (widthStr != null && heightStr != null && widthStr.toFloatOrNull() != null && heightStr.toFloatOrNull() != null) {
-                            val w = widthStr.toFloat()
-                            val h = heightStr.toFloat()
-                            m.aspectRatio(w / h)
-                        } else {
-                            m.wrapContentSize()
-                        }
-                    }
-
-                AsyncImage(
-                    model = image,
-                    contentDescription = stringResource(Res.string.ai_image),
-                    alignment = Alignment.Center,
-                    contentScale = ContentScale.Fit,
-                    modifier = imgModifier
-                )
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .background(
-                            color = AppTheme.colors.surface.copy(alpha = 0.7f),
-                            shape = RoundedCornerShape(16.dp)
-                        )
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    if (onRegenerate != null) {
-                        IconButton(
-                            onClick = onRegenerate,
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Refresh,
-                                contentDescription = stringResource(Res.string.regenerate),
-                                tint = AppTheme.colors.onSurface,
-                                modifier = Modifier.size(20.dp)
+                            MessageContentList(
+                                message = message,
+                                onSaveImage = onSaveImage,
+                                onSaveSvg = onSaveSvg,
+                                onRegenerate = onRegenerate,
+                                onCopyText = onCopyText,
+                                isSingle = false
                             )
                         }
                     }
-                    IconButton(
-                        onClick = { onSaveImage?.invoke(image) },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.SaveAlt,
-                            contentDescription = stringResource(Res.string.save_image),
-                            tint = AppTheme.colors.primary,
-                            modifier = Modifier.size(20.dp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MessageContentList(
+    message: ChatMessage,
+    onSaveImage: ((ByteArray) -> Unit)?,
+    onSaveSvg: ((String) -> Unit)?,
+    onRegenerate: (() -> Unit)?,
+    onCopyText: ((String) -> Unit)?,
+    isSingle: Boolean
+) {
+    val isGenerating = message.metadata?.get("is_generating") == "true"
+    val hasVisibleContent = message.contents.any { content ->
+        content !is ChatMessageContent.Text || content.text.isNotEmpty()
+    }
+    val textColor = if (message.isUser && isSingle) {
+        AppTheme.colors.onPrimary
+    } else {
+        AppTheme.colors.onSurface
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)
+    ) {
+        if (!hasVisibleContent && isGenerating) {
+            GeneratingMessageContent(isSingle)
+        } else {
+            message.contents.forEach { content ->
+                when (content) {
+                    is ChatMessageContent.Text -> {
+                        if (content.text.isNotEmpty() || isGenerating) {
+                            TextMessageContent(
+                                text = content.text,
+                                isGenerating = isGenerating,
+                                isSingle = isSingle,
+                                textColor = textColor,
+                                copyTint = if (message.isUser && isSingle) {
+                                    AppTheme.colors.onPrimary.copy(alpha = 0.7f)
+                                } else {
+                                    AppTheme.colors.primary
+                                },
+                                onCopyText = onCopyText
+                            )
+                        }
+                    }
+                    is ChatMessageContent.RasterImage -> {
+                        RasterImageMessageContent(
+                            content = content,
+                            onSaveImage = onSaveImage,
+                            onRegenerate = onRegenerate
+                        )
+                    }
+                    is ChatMessageContent.SvgImage -> {
+                        SvgImageMessageContent(
+                            content = content,
+                            onSaveSvg = onSaveSvg,
+                            onCopyText = onCopyText
+                        )
+                    }
+                    is ChatMessageContent.Unsupported -> {
+                        UnsupportedMessageContent(
+                            content = content,
+                            onCopyText = onCopyText
                         )
                     }
                 }
             }
         }
-        
-        val isGenerating = metadata?.get("is_generating") == "true"
+    }
+}
 
-        if (message.isEmpty() && isGenerating) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.Start,
-                verticalAlignment = Alignment.CenterVertically
+@Composable
+private fun GeneratingMessageContent(isSingle: Boolean) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = AppTheme.spacing.sm),
+        horizontalArrangement = Arrangement.Start,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(AppTheme.size.icon),
+            color = AppTheme.colors.primary,
+            strokeWidth = AppTheme.size.borderWidth
+        )
+        Text(
+            text = stringResource(Res.string.creating) + "...",
+            style = if (isSingle) {
+                AppTheme.typography.bodyMedium
+            } else {
+                AppTheme.typography.bodyLarge
+            },
+            color = AppTheme.colors.onSurfaceVariant,
+            modifier = Modifier.padding(start = AppTheme.spacing.sm)
+        )
+    }
+}
+
+@Composable
+private fun TextMessageContent(
+    text: String,
+    isGenerating: Boolean,
+    isSingle: Boolean,
+    textColor: Color,
+    copyTint: Color,
+    onCopyText: ((String) -> Unit)?
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Bottom
+    ) {
+        val displayText = if (isGenerating) "$text ▌" else text
+        val richTextState = rememberRichTextState()
+        val primaryColor = AppTheme.colors.primary
+        val codeBackground = AppTheme.colors.surfaceVariant.copy(alpha = 0.5f)
+        LaunchedEffect(primaryColor, codeBackground) {
+            richTextState.config.linkColor = primaryColor
+            richTextState.config.codeSpanColor = primaryColor
+            richTextState.config.codeSpanBackgroundColor = codeBackground
+        }
+        LaunchedEffect(displayText) {
+            richTextState.setMarkdown(displayText)
+        }
+        RichText(
+            state = richTextState,
+            style = if (isSingle) {
+                AppTheme.typography.bodyMedium
+            } else {
+                AppTheme.typography.bodyLarge
+            },
+            color = textColor.copy(alpha = 0.9f),
+            modifier = Modifier
+                .padding(top = AppTheme.spacing.xs, end = AppTheme.spacing.sm)
+                .weight(1f)
+        )
+        if (onCopyText != null && !isGenerating && text.isNotEmpty()) {
+            IconButton(
+                onClick = { onCopyText(text) },
+                modifier = Modifier.size(AppTheme.size.iconButtonSmall)
             ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    color = AppTheme.colors.primary,
-                    strokeWidth = 2.dp
-                )
-                Text(
-                    text = stringResource(Res.string.creating) + "...",
-                    style = if (isSingle) AppTheme.typography.bodyMedium else AppTheme.typography.bodyLarge,
-                    color = AppTheme.colors.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 12.dp)
+                Icon(
+                    imageVector = Icons.Filled.ContentCopy,
+                    contentDescription = stringResource(Res.string.copy),
+                    tint = copyTint,
+                    modifier = Modifier.size(AppTheme.size.iconSmall)
                 )
             }
-        } else if (message.isNotEmpty() || isGenerating) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                val displayText = if (isGenerating) "$message ▌" else message
-                val richTextState = rememberRichTextState()
-                val primaryColor = AppTheme.colors.primary
-                val codeColor = AppTheme.colors.primary
-                val codeBgColor = AppTheme.colors.surfaceVariant.copy(alpha = 0.5f)
-                LaunchedEffect(primaryColor, codeColor, codeBgColor) {
-                    richTextState.config.linkColor = primaryColor
-                    richTextState.config.codeSpanColor = codeColor
-                    richTextState.config.codeSpanBackgroundColor = codeBgColor
-                }
-                LaunchedEffect(displayText) {
-                    richTextState.setMarkdown(displayText)
-                }
+        }
+    }
+}
 
-                RichText(
-                    state = richTextState,
-                    style = if (isSingle) AppTheme.typography.bodyMedium else AppTheme.typography.bodyLarge,
-                    color = AppTheme.colors.onSurface.copy(alpha = 0.9f),
-                    modifier = Modifier
-                        .padding(top = 4.dp, end = 8.dp)
-                        .weight(1f)
-                )
-                if (onCopyText != null) {
-                    IconButton(
-                        onClick = { onCopyText.invoke(message) },
-                        modifier = Modifier.size(24.dp).padding(start = 4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.ContentCopy,
-                            contentDescription = stringResource(Res.string.copy),
-                            tint = AppTheme.colors.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
+@Composable
+private fun RasterImageMessageContent(
+    content: ChatMessageContent.RasterImage,
+    onSaveImage: ((ByteArray) -> Unit)?,
+    onRegenerate: (() -> Unit)?
+) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+        val width = content.width
+        val height = content.height
+        val ratio = if (
+            width != null &&
+            height != null &&
+            height > 0
+        ) {
+            width.toFloat() / height.toFloat()
+        } else {
+            null
+        }
+        AsyncImage(
+            model = content.bytes,
+            contentDescription = stringResource(Res.string.ai_image),
+            alignment = Alignment.Center,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxWidth()
+                .let { modifier ->
+                    if (ratio != null) {
+                        modifier.aspectRatio(ratio)
+                    } else {
+                        modifier.wrapContentHeight()
                     }
                 }
+                .clip(AppTheme.shape.md)
+        )
+        ImageContentActions(
+            onRegenerate = onRegenerate,
+            onCopy = null,
+            onSave = onSaveImage?.let { save -> { save(content.bytes) } },
+            modifier = Modifier.align(Alignment.TopEnd)
+        )
+    }
+}
+
+@Composable
+private fun SvgImageMessageContent(
+    content: ChatMessageContent.SvgImage,
+    onSaveSvg: ((String) -> Unit)?,
+    onCopyText: ((String) -> Unit)?
+) {
+    val svgBytes = remember(content.svg) { content.svg.encodeToByteArray() }
+    var renderFailed by remember(content.svg) { mutableStateOf(false) }
+    val ratio = (content.width / content.height).takeIf {
+        it.isFinite() && it > 0f
+    } ?: 1f
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(ratio)
+            .clip(AppTheme.shape.md)
+            .background(AppTheme.colors.surfaceContainerLow.copy(alpha = 0.46f))
+    ) {
+        AsyncImage(
+            model = svgBytes,
+            contentDescription = stringResource(Res.string.ai_image),
+            alignment = Alignment.Center,
+            contentScale = ContentScale.Fit,
+            onSuccess = { renderFailed = false },
+            onError = { renderFailed = true },
+            modifier = Modifier.fillMaxSize()
+        )
+        if (renderFailed) {
+            Text(
+                text = stringResource(Res.string.svg_render_failed),
+                style = AppTheme.typography.bodySmall,
+                color = AppTheme.colors.error,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(AppTheme.spacing.md)
+            )
+        }
+        ImageContentActions(
+            onRegenerate = null,
+            onCopy = onCopyText?.let { copy -> { copy(content.svg) } },
+            onSave = onSaveSvg?.let { save -> { save(content.svg) } },
+            modifier = Modifier.align(Alignment.TopEnd)
+        )
+    }
+}
+
+@Composable
+private fun UnsupportedMessageContent(
+    content: ChatMessageContent.Unsupported,
+    onCopyText: ((String) -> Unit)?
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = AppTheme.colors.errorContainer.copy(alpha = 0.35f),
+                shape = AppTheme.shape.md
+            )
+            .border(
+                width = AppTheme.size.borderWidthThin,
+                color = AppTheme.colors.error.copy(alpha = 0.35f),
+                shape = AppTheme.shape.md
+            )
+            .padding(AppTheme.spacing.md),
+        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(Res.string.unsupported_message),
+                style = AppTheme.typography.labelMedium,
+                color = AppTheme.colors.error
+            )
+            if (onCopyText != null) {
+                IconButton(
+                    onClick = { onCopyText(content.rawPayload) },
+                    modifier = Modifier.size(AppTheme.size.iconButtonSmall)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ContentCopy,
+                        contentDescription = stringResource(Res.string.copy),
+                        tint = AppTheme.colors.error,
+                        modifier = Modifier.size(AppTheme.size.iconSmall)
+                    )
+                }
+            }
+        }
+        SelectionContainer {
+            Text(
+                text = content.rawPayload,
+                style = AppTheme.typography.bodySmall,
+                color = AppTheme.colors.onErrorContainer,
+                modifier = Modifier.heightIn(max = AppTheme.size.cardMedium)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ImageContentActions(
+    onRegenerate: (() -> Unit)?,
+    onCopy: (() -> Unit)?,
+    onSave: (() -> Unit)?,
+    modifier: Modifier = Modifier
+) {
+    if (onRegenerate == null && onCopy == null && onSave == null) return
+    Row(
+        modifier = modifier
+            .padding(AppTheme.spacing.sm)
+            .background(
+                color = AppTheme.colors.surface.copy(alpha = 0.78f),
+                shape = AppTheme.shape.full
+            )
+            .padding(AppTheme.spacing.xs),
+        horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (onRegenerate != null) {
+            IconButton(
+                onClick = onRegenerate,
+                modifier = Modifier.size(AppTheme.size.iconButtonSmall)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = stringResource(Res.string.regenerate),
+                    tint = AppTheme.colors.onSurface,
+                    modifier = Modifier.size(AppTheme.size.icon)
+                )
+            }
+        }
+        if (onCopy != null) {
+            IconButton(
+                onClick = onCopy,
+                modifier = Modifier.size(AppTheme.size.iconButtonSmall)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.ContentCopy,
+                    contentDescription = stringResource(Res.string.copy),
+                    tint = AppTheme.colors.primary,
+                    modifier = Modifier.size(AppTheme.size.icon)
+                )
+            }
+        }
+        if (onSave != null) {
+            IconButton(
+                onClick = onSave,
+                modifier = Modifier.size(AppTheme.size.iconButtonSmall)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.SaveAlt,
+                    contentDescription = stringResource(Res.string.save_image),
+                    tint = AppTheme.colors.primary,
+                    modifier = Modifier.size(AppTheme.size.icon)
+                )
             }
         }
     }

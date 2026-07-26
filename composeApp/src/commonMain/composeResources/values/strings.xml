@@ -193,6 +193,19 @@
     <string name="library_svg_image">SVG Image</string>
     <string name="library_svg_desc">Generate structured JSON with safe, self-contained SVG artwork.</string>
     <string name="library_forge_vessel">Forge New Vessel</string>
+    <string name="chat_context_default_title">%1$s · General Assistant</string>
+    <string name="chat_context_svg_title">%1$s · SVG Image Generator</string>
+    <string name="chat_context_default_description">Analytical local intelligence</string>
+    <string name="chat_context_svg_description">Creates safe, self-contained vector images</string>
+    <string name="chat_context_not_applied">Waiting for the model context</string>
+    <string name="chat_context_current_instruction">Current System Instruction</string>
+    <string name="chat_context_expand">Show system instruction</string>
+    <string name="chat_context_collapse">Hide system instruction</string>
+    <string name="chat_context_copy">Copy system instruction</string>
+    <string name="svg_saved">SVG saved successfully</string>
+    <string name="svg_save_failed">Failed to save SVG</string>
+    <string name="svg_render_failed">Unable to render this SVG. You can still copy or save its source.</string>
+    <string name="unsupported_message">This structured message could not be displayed</string>
     <string name="chat_running_tool">\n`[Running tool: %1$s...]`\n</string>
     <string name="chat_tool_completed">\n`[Tool \'%1$s\' completed]`\n</string>
 </resources>

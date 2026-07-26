@@ -42,6 +42,7 @@ compottie = { module = "io.github.alexzhirkevich:compottie", version.ref = "lott
 compottie-dot = { module = "io.github.alexzhirkevich:compottie-dot", version.ref = "lottieVersion" }
 coil-network-ktor = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
+coil-svg = { module = "io.coil-kt.coil3:coil-svg", version.ref = "coil" }
 #=== IO
 filekit-coil = { module = "io.github.vinceglb:filekit-coil", version.ref = "fileKitVersion" }
 filekit-core = { module = "io.github.vinceglb:filekit-core", version.ref = "fileKitVersion" }

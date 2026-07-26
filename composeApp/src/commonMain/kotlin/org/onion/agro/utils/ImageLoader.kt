@@ -7,6 +7,7 @@ import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
 import coil3.request.CachePolicy
 import coil3.request.crossfade
+import coil3.svg.SvgDecoder
 import coil3.util.DebugLogger
 import okio.FileSystem
 
@@ -15,6 +16,9 @@ fun imageLoaderMemoryCache(
     debug: Boolean = false
 ): ImageLoader = ImageLoader
     .Builder(context)
+    .components {
+        add(SvgDecoder.Factory())
+    }
     .memoryCachePolicy(CachePolicy.ENABLED)
     .memoryCache {
         MemoryCache
@@ -37,6 +41,9 @@ fun imageLoaderDiskCache(
     debug: Boolean = false
 ): ImageLoader = ImageLoader
     .Builder(context)
+    .components {
+        add(SvgDecoder.Factory())
+    }
     .diskCachePolicy(CachePolicy.ENABLED)
     .networkCachePolicy(CachePolicy.ENABLED)
     .diskCache {

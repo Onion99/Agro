@@ -14,6 +14,7 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.composeHotReload)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.androidx.room)
 }
 
@@ -150,6 +151,7 @@ kotlin {
             implementation(libs.filekit.dialogs.compose)
             implementation(libs.filekit.coil)
             implementation(libs.coil.compose)
+            implementation(libs.coil.svg)
             // ---- Persistence ------
             implementation(libs.androidx.room.runtime)
             implementation(libs.androidx.sqlite.bundled)

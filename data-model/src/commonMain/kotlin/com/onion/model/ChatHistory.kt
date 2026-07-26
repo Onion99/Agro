@@ -19,6 +19,21 @@ enum class ChatRole {
 }
 
 @Serializable
+enum class ChatSessionMode {
+    @SerialName("default")
+    DEFAULT,
+
+    @SerialName("svg_image")
+    SVG_IMAGE
+}
+
+data class ConversationContextState(
+    val mode: ChatSessionMode = ChatSessionMode.DEFAULT,
+    val systemInstruction: String = "",
+    val isApplied: Boolean = false
+)
+
+@Serializable
 data class PersistentToolCall(
     val name: String,
     val arguments: String,

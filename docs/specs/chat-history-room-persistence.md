@@ -1,6 +1,6 @@
 # Chat 会话持久化与历史记录
 
-> 日期: 2026-06-25
+> 日期: 2026-06-25（2026-07-25 更新至 Schema v2）
 > 范围: `composeApp` Chat/Library 会话历史能力
 
 ## 1. 目标
@@ -12,7 +12,7 @@
 采用 KMP Room 作为跨端持久化层。
 
 - Room/KMP 配置依据 Android 官方 Room KMP 文档: https://developer.android.com/kotlin/multiplatform/room
-- 数据库定义位于 commonMain: `org.onion.agent.database.AgentDatabase`
+- 数据库定义位于 commonMain: `org.onion.agro.database.AgentDatabase`
 - 平台差异仅保留 database builder:
   - Android: `AndroidAgentDatabase.kt`
   - Desktop: `DesktopAgentDatabase.kt`
@@ -27,6 +27,8 @@
 
 - `id`: 会话主键。
 - `title`: 会话标题，默认由首条消息截断生成。
+- `mode`: 会话模式，当前为 `default` 或 `svg_image`。
+- `system_instruction`: 已成功应用到原生模型会话的 system instruction 快照。
 - `created_at_millis`: 创建时间。
 - `updated_at_millis`: 更新时间。
 - `message_count`: 消息数量。
@@ -39,11 +41,23 @@
 - `id`: 消息主键，对应运行时 `ChatMessage.id`。
 - `session_id`: 所属会话。
 - `role`: `system`、`user`、`assistant`、`tool`。
-- `content`: 消息正文。
+- `content`: 文本检索与预览兼容列；完整正文以 `chat_message_contents` 为准。
 - `tool_calls`: 工具调用 JSON。
 - `tool_responses`: 工具响应 JSON。
 - `metadata`: 消息元数据 JSON。
 - `created_at_millis`: 消息创建时间。
+
+### `chat_message_contents`（v2）
+
+保存一条消息下按顺序排列的类型化内容块。
+
+- `id`: 内容主键，格式为 `<message_id>:content:<position>`。
+- `message_id`: 所属消息，父消息删除时级联删除。
+- `position`: 内容在消息内的位置，与 `message_id` 组成唯一索引。
+- `type`: `text`、`raster_image`、`svg_image` 或 `unsupported`。
+- `schema_version`: 单个内容载荷的版本，当前为 `1`。
+- `payload_json`: 文本或媒体元数据的 JSON。
+- `payload_blob`: 可空二进制载荷，当前用于位图。
 
 ### `chat_tool_logs`
 
@@ -65,11 +79,29 @@
 - 发送消息前若无活跃会话，则自动创建新会话。
 - 用户消息立即写入 Room。
 - 助手消息先写入占位记录，生成完成或错误时覆盖同一条消息。
+- 父消息与全部内容块在一个 Room transaction 中 upsert，避免读到半更新状态。
+- 用户取消生成时同时删除内存与 Room 中的助手占位消息。
+- 打开历史会话时恢复 `mode` 与 `system_instruction`，重新创建对应的原生 LLM 会话。
 - 工具调用开始和完成时写入 `chat_tool_logs`，并在最终助手消息中保存 `tool_calls` 与 `tool_responses`。
 - Chat 页历史面板支持搜索、打开、重命名、删除、导出。
 - Library 页 Living Memory 卡片展示最近会话，点击后打开该会话并跳转 Chat。
 
-## 5. 当前限制
+## 5. Schema v1 → v2 迁移
+
+`MIGRATION_1_2` 执行以下兼容转换：
+
+1. 为 `chat_sessions` 增加带默认值的 `mode` 与 `system_instruction`。
+2. 创建 `chat_message_contents`、外键和两个索引。
+3. 将每条旧 `chat_messages.content` 回填为 position 0 的内容块。
+4. 若旧助手正文是合法的 `{"type":"svg_image","svg":"..."}`，则迁移为
+   `svg_image` 内容并把所属会话标记为 SVG 模式；其他内容迁移为 `text`。
+5. SVG 父消息的兼容 `content` 置空，并重新计算会话预览，避免在历史列表展示完整 JSON。
+
+导出的 Room schema 位于
+`composeApp/schemas/org.onion.agro.database.AgentDatabase/2.json`，迁移必须与该 schema
+保持一致。
+
+## 6. 当前限制
 
 - 导出当前实现为 Markdown 文本复制到剪贴板，尚未接入跨端文件保存流程。
 - 应用重启后会恢复历史消息 UI；本地 LLM 原生会话上下文会重新创建，尚未将历史消息重放进模型上下文。

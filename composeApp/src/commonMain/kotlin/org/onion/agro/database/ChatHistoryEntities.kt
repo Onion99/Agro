@@ -13,6 +13,9 @@ import androidx.room.PrimaryKey
 data class ChatSessionEntity(
     @PrimaryKey val id: String,
     val title: String,
+    @ColumnInfo(defaultValue = "'default'") val mode: String = "default",
+    @ColumnInfo(name = "system_instruction", defaultValue = "''")
+    val systemInstruction: String = "",
     @ColumnInfo(name = "created_at_millis") val createdAtMillis: Long,
     @ColumnInfo(name = "updated_at_millis") val updatedAtMillis: Long,
     @ColumnInfo(name = "message_count") val messageCount: Int,
@@ -40,6 +43,31 @@ data class ChatMessageEntity(
     @ColumnInfo(name = "tool_responses") val toolResponsesJson: String,
     @ColumnInfo(name = "metadata") val metadataJson: String,
     @ColumnInfo(name = "created_at_millis") val createdAtMillis: Long
+)
+
+@Entity(
+    tableName = "chat_message_contents",
+    foreignKeys = [
+        ForeignKey(
+            entity = ChatMessageEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["message_id"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index(value = ["message_id"]),
+        Index(value = ["message_id", "position"], unique = true)
+    ]
+)
+data class ChatMessageContentEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "message_id") val messageId: String,
+    val position: Int,
+    val type: String,
+    @ColumnInfo(name = "schema_version") val schemaVersion: Int,
+    @ColumnInfo(name = "payload_json") val payloadJson: String,
+    @ColumnInfo(name = "payload_blob") val payloadBlob: ByteArray?
 )
 
 @Entity(

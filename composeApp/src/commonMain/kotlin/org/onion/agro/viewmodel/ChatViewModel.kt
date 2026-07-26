@@ -2,11 +2,15 @@ package org.onion.agro.viewmodel
 
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.State
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onion.model.ChatMessage
+import com.onion.model.ChatMessageContent
 import com.onion.model.ChatRole
+import com.onion.model.ChatSessionMode
+import com.onion.model.ConversationContextState
 import com.onion.model.LoraConfig
 import com.onion.model.PersistentToolCall
 import com.onion.model.PersistentToolResponse
@@ -37,6 +41,7 @@ import org.onion.agro.database.ChatHistoryRepository
 import org.onion.agro.database.ChatSessionEntity
 import org.onion.agro.database.ChatToolLogEntity
 import org.onion.agro.native.llm.KEY_THINK_MODE
+import org.onion.agro.message.SvgMessageParser
 
 class ChatViewModel(
     private val chatHistoryRepository: ChatHistoryRepository
@@ -150,8 +155,15 @@ class ChatViewModel(
     var enableThinking = mutableStateOf(false)
     var enableSpeculativeDecoding = mutableStateOf(false)
     var systemPrompt = mutableStateOf("You are  ${BuildConfig.APP_NAME}, an analytical and precise local intelligence. Prioritize factual accuracy and concise formatting. Maintain a calm, neutral tone.")
-    var systemContextShift = mutableStateOf(true)
-    private var activeSystemInstructionOverride: String? = null
+    var systemContextShift = mutableStateOf(false)
+    private val _conversationContext = mutableStateOf(
+        ConversationContextState(
+            mode = ChatSessionMode.DEFAULT,
+            systemInstruction = systemPrompt.value,
+            isApplied = false
+        )
+    )
+    val conversationContext: State<ConversationContextState> = _conversationContext
 
 
 
@@ -306,13 +318,16 @@ class ChatViewModel(
                 lmConversation = lmEngine?.createConversation(
                     systemInstruction = currentSystemInstruction(),
                     toolsDescriptionJsonString = agentTools.getToolsDescriptionJson(),
-                    enableConversationConstrainedDecoding = activeSystemInstructionOverride != null,
+                    enableConversationConstrainedDecoding =
+                        _conversationContext.value.mode == ChatSessionMode.SVG_IMAGE,
                     samplerConfig = com.google.ai.edge.litertlm.SamplerConfig(
                         temperature = temperature.value.toDouble(),
                         topP = topP.value.toDouble(),
                         topK = topK.value
                     )
                 )
+                markConversationContextApplied(lmConversation != null)
+                persistAppliedConversationContext()
                 activeModelPath = currentLlmPath
                 activeEnableSpeculativeDecoding = enableSpeculativeDecoding.value
                 activeMaxNumTokens = lmMaxNumTokens.value
@@ -388,31 +403,40 @@ class ChatViewModel(
                 
                 val engine = lmEngine
                 if (engine != null) {
+                    val instruction = instructionForMode(_conversationContext.value.mode)
+                    selectConversationContext(
+                        mode = _conversationContext.value.mode,
+                        systemInstruction = instruction
+                    )
                     lmConversation = engine.createConversation(
-                        systemInstruction = currentSystemInstruction(),
+                        systemInstruction = instruction,
                         toolsDescriptionJsonString = agentTools.getToolsDescriptionJson(),
-                        enableConversationConstrainedDecoding = activeSystemInstructionOverride != null,
+                        enableConversationConstrainedDecoding =
+                            _conversationContext.value.mode == ChatSessionMode.SVG_IMAGE,
                         samplerConfig = com.google.ai.edge.litertlm.SamplerConfig(
                             temperature = temperature.value.toDouble(),
                             topP = topP.value.toDouble(),
                             topK = topK.value
                         )
                     )
+                    markConversationContextApplied(true)
+                    persistAppliedConversationContext()
                 }
                 _currentChatMessages.clear()
                 val text = getString(Res.string.chat_system_parameters_applied)
                 val sessionId = ensureActiveSession(text)
                 chatHistoryRepository.clearSessionMessages(sessionId)
-                val message = ChatMessage(text, false, role = ChatRole.SYSTEM)
+                val message = ChatMessage.text(text, role = ChatRole.SYSTEM)
                 _currentChatMessages.add(message)
                 chatHistoryRepository.saveMessage(sessionId, message)
             } catch (e: Exception) {
                 e.printStackTrace()
+                markConversationContextApplied(false)
                 _currentChatMessages.clear()
                 val text = getString(Res.string.chat_system_parameters_apply_failed, e.message ?: "")
                 val sessionId = ensureActiveSession(text)
                 chatHistoryRepository.clearSessionMessages(sessionId)
-                val message = ChatMessage(text, false, role = ChatRole.SYSTEM)
+                val message = ChatMessage.text(text, role = ChatRole.SYSTEM)
                 _currentChatMessages.add(message)
                 chatHistoryRepository.saveMessage(sessionId, message)
             } finally {
@@ -473,11 +497,17 @@ class ChatViewModel(
     fun openSession(sessionId: String) {
         viewModelScope.launch(Dispatchers.Default) {
             if (isGenerating.value) stopGeneration()
-            activeSystemInstructionOverride = null
+            val session = chatHistoryRepository.getSession(sessionId) ?: return@launch
+            val mode = session.mode.toSessionMode()
+            val instruction = session.systemInstruction.ifBlank {
+                instructionForMode(mode)
+            }
+            selectConversationContext(mode, instruction)
             activeSessionId.value = sessionId
             _currentChatMessages.clear()
             _currentChatMessages.addAll(chatHistoryRepository.loadMessages(sessionId))
             recreateLmConversation()
+            persistAppliedConversationContext()
             isHistoryVisible.value = false
         }
     }
@@ -508,11 +538,18 @@ class ChatViewModel(
             if(isGenerating.value) stopGeneration()
             if(message.isBlank()) return@launch
             val sessionId = ensureActiveSession(message)
-            val userMessage = ChatMessage(message, isUser, role = if (isUser) ChatRole.USER else ChatRole.ASSISTANT)
+            val userMessage = ChatMessage.text(
+                text = message,
+                role = if (isUser) ChatRole.USER else ChatRole.ASSISTANT
+            )
             _currentChatMessages.add(userMessage)
             chatHistoryRepository.saveMessage(sessionId, userMessage)
             val meta = mapOf("is_generating" to "true")
-            val assistantMessage = ChatMessage("", false, role = ChatRole.ASSISTANT, metadata = meta)
+            val assistantMessage = ChatMessage.text(
+                text = "",
+                role = ChatRole.ASSISTANT,
+                metadata = meta
+            )
             _currentChatMessages.add(assistantMessage)
             chatHistoryRepository.saveMessage(sessionId, assistantMessage)
             isGenerating.value = true
@@ -534,12 +571,19 @@ class ChatViewModel(
                 stopGeneration()
             }
             try {
-                activeSystemInstructionOverride = null
+                selectConversationContext(
+                    mode = ChatSessionMode.DEFAULT,
+                    systemInstruction = systemPrompt.value
+                )
                 recreateLmConversation()
-                activeSessionId.value = chatHistoryRepository.createSession()
+                activeSessionId.value = chatHistoryRepository.createSession(
+                    mode = ChatSessionMode.DEFAULT,
+                    systemInstruction = appliedSystemInstructionOrEmpty()
+                )
             } catch (e: Exception) {
                 e.printStackTrace()
                 lmConversation = null
+                markConversationContextApplied(false)
             } finally {
                 _currentChatMessages.clear()
                 isGenerating.value = false
@@ -554,17 +598,23 @@ class ChatViewModel(
                 stopGeneration()
             }
             try {
-                activeSystemInstructionOverride = SVG_IMAGE_SYSTEM_INSTRUCTION
+                selectConversationContext(
+                    mode = ChatSessionMode.SVG_IMAGE,
+                    systemInstruction = SVG_IMAGE_SYSTEM_INSTRUCTION
+                )
                 recreateLmConversation(
                     systemInstruction = SVG_IMAGE_SYSTEM_INSTRUCTION,
                     enableConstrainedDecoding = true
                 )
                 activeSessionId.value = chatHistoryRepository.createSession(
-                    getString(Res.string.library_svg_image)
+                    title = getString(Res.string.library_svg_image),
+                    mode = ChatSessionMode.SVG_IMAGE,
+                    systemInstruction = appliedSystemInstructionOrEmpty()
                 )
             } catch (e: Exception) {
                 e.printStackTrace()
                 lmConversation = null
+                markConversationContextApplied(false)
             } finally {
                 _currentChatMessages.clear()
                 isGenerating.value = false
@@ -581,7 +631,12 @@ class ChatViewModel(
         responseGenerationJob?.cancel()
         val lastIndex = _currentChatMessages.lastIndex
         if (lastIndex >= 0) {
-            _currentChatMessages.removeAt(lastIndex)
+            val removedMessage = _currentChatMessages.removeAt(lastIndex)
+            activeSessionId.value?.let { sessionId ->
+                viewModelScope.launch(Dispatchers.Default) {
+                    chatHistoryRepository.deleteMessage(sessionId, removedMessage.id)
+                }
+            }
         }
     }
 
@@ -598,27 +653,89 @@ class ChatViewModel(
     private fun restoreMostRecentSession() {
         viewModelScope.launch(Dispatchers.Default) {
             val session = chatHistoryRepository.getMostRecentSession() ?: return@launch
-            activeSystemInstructionOverride = null
+            val mode = session.mode.toSessionMode()
+            val instruction = session.systemInstruction.ifBlank {
+                instructionForMode(mode)
+            }
+            selectConversationContext(mode, instruction)
             activeSessionId.value = session.id
             _currentChatMessages.clear()
             _currentChatMessages.addAll(chatHistoryRepository.loadMessages(session.id))
+            if (lmEngine != null) {
+                recreateLmConversation()
+                persistAppliedConversationContext()
+            }
         }
     }
 
     private suspend fun ensureActiveSession(firstMessage: String): String {
         activeSessionId.value?.let { return it }
-        return chatHistoryRepository.createSession(firstMessage.take(36)).also {
+        return chatHistoryRepository.createSession(
+            title = firstMessage.take(36),
+            mode = _conversationContext.value.mode,
+            systemInstruction = appliedSystemInstructionOrEmpty()
+        ).also {
             activeSessionId.value = it
         }
     }
 
+    private fun selectConversationContext(
+        mode: ChatSessionMode,
+        systemInstruction: String
+    ) {
+        _conversationContext.value = ConversationContextState(
+            mode = mode,
+            systemInstruction = systemInstruction,
+            isApplied = false
+        )
+    }
+
+    private fun markConversationContextApplied(applied: Boolean) {
+        _conversationContext.value = _conversationContext.value.copy(isApplied = applied)
+    }
+
+    private suspend fun persistAppliedConversationContext() {
+        val context = _conversationContext.value
+        val sessionId = activeSessionId.value
+        if (!context.isApplied || sessionId == null) return
+        chatHistoryRepository.updateSessionContext(
+            sessionId = sessionId,
+            mode = context.mode,
+            systemInstruction = context.systemInstruction
+        )
+    }
+
+    private fun appliedSystemInstructionOrEmpty(): String {
+        return _conversationContext.value
+            .takeIf { it.isApplied }
+            ?.systemInstruction
+            .orEmpty()
+    }
+
+    private fun instructionForMode(mode: ChatSessionMode): String {
+        return when (mode) {
+            ChatSessionMode.DEFAULT -> systemPrompt.value
+            ChatSessionMode.SVG_IMAGE -> SVG_IMAGE_SYSTEM_INSTRUCTION
+        }
+    }
+
+    private fun String.toSessionMode(): ChatSessionMode {
+        return when (this) {
+            "svg_image" -> ChatSessionMode.SVG_IMAGE
+            else -> ChatSessionMode.DEFAULT
+        }
+    }
+
     private fun currentSystemInstruction(): String {
-        return activeSystemInstructionOverride ?: systemPrompt.value
+        return _conversationContext.value.systemInstruction.ifBlank {
+            instructionForMode(_conversationContext.value.mode)
+        }
     }
 
     private suspend fun recreateLmConversation(
         systemInstruction: String = currentSystemInstruction(),
-        enableConstrainedDecoding: Boolean = activeSystemInstructionOverride != null
+        enableConstrainedDecoding: Boolean =
+            _conversationContext.value.mode == ChatSessionMode.SVG_IMAGE
     ) {
         lmConversation?.close()
         lmConversation = lmEngine?.createConversation(
@@ -631,6 +748,7 @@ class ChatViewModel(
                 topK = topK.value
             )
         )
+        markConversationContextApplied(lmConversation != null)
     }
     
     @OptIn(ExperimentalTime::class)
@@ -644,7 +762,11 @@ class ChatViewModel(
                     val lastIdx = _currentChatMessages.lastIndex
                     val meta = mapOf("is_generating" to "false")
                     val updated = _currentChatMessages[lastIdx].copy(
-                        message = getString(Res.string.chat_system_engine_not_initialized),
+                        contents = listOf(
+                            ChatMessageContent.Text(
+                                getString(Res.string.chat_system_engine_not_initialized)
+                            )
+                        ),
                         metadata = meta
                     )
                     _currentChatMessages[lastIdx] = updated
@@ -666,13 +788,18 @@ class ChatViewModel(
             val persistentToolResponses = mutableListOf<PersistentToolResponse>()
             val sessionId = activeSessionId.value
             val assistantMessageId = _currentChatMessages.lastOrNull()?.id?.toString().orEmpty()
+            val sessionMode = _conversationContext.value.mode
             val toolLogIds = mutableMapOf<String, String>()
             var terminalTransition = "RUNNING"
             var terminalTurnCount = 0
 
-            suspend fun updateAssistantMessage(isGeneratingNow: Boolean) {
-                val thinkingPrefix = if (generatedThought.isNotEmpty()) getString(Res.string.chat_thinking_prefix) else ""
-                val fullMessage = buildString {
+            suspend fun displayText(): String {
+                val thinkingPrefix = if (generatedThought.isNotEmpty()) {
+                    getString(Res.string.chat_thinking_prefix)
+                } else {
+                    ""
+                }
+                return buildString {
                     if (thinkingPrefix.isNotEmpty()) {
                         append(thinkingPrefix)
                         generatedThought.lineSequence().forEach { line ->
@@ -681,14 +808,23 @@ class ChatViewModel(
                         append("\n")
                     }
                     append(generatedResult)
-                }
+                }.trim()
+            }
 
-                if (_currentChatMessages.isNotEmpty()) {
-                    val lastIdx = _currentChatMessages.lastIndex
-                    val msgToUpdate = _currentChatMessages[lastIdx]
+            suspend fun updateAssistantMessage(isGeneratingNow: Boolean) {
+                val messageIndex = _currentChatMessages.indexOfFirst {
+                    it.id.toString() == assistantMessageId
+                }
+                if (messageIndex >= 0) {
+                    val msgToUpdate = _currentChatMessages[messageIndex]
                     val meta = mapOf("is_generating" to isGeneratingNow.toString())
-                    _currentChatMessages[lastIdx] = msgToUpdate.copy(
-                        message = fullMessage.trim(),
+                    val contents = if (sessionMode == ChatSessionMode.SVG_IMAGE) {
+                        listOf(ChatMessageContent.Text(""))
+                    } else {
+                        listOf(ChatMessageContent.Text(displayText()))
+                    }
+                    _currentChatMessages[messageIndex] = msgToUpdate.copy(
+                        contents = contents,
                         metadata = meta
                     )
                 }
@@ -712,9 +848,12 @@ class ChatViewModel(
                 isInferenceOn = false
                 if (e is CancellationException) {
                     onCancelled()
+                    throw e
                 } else {
-                    if (_currentChatMessages.isNotEmpty()) {
-                        val lastIdx = _currentChatMessages.lastIndex
+                    val messageIndex = _currentChatMessages.indexOfFirst {
+                        it.id.toString() == assistantMessageId
+                    }
+                    if (messageIndex >= 0) {
                         val meta = mapOf("is_generating" to "false")
                         val errMsg = e.message ?: ""
                         val isTokenLimit = errMsg.contains("too long", ignoreCase = true) ||
@@ -725,11 +864,11 @@ class ChatViewModel(
                         } else {
                             getString(Res.string.chat_system_error_prefix, errMsg.ifEmpty { getString(Res.string.unknown_error) })
                         }
-                        val updated = _currentChatMessages[lastIdx].copy(
-                            message = displayMsg,
+                        val updated = _currentChatMessages[messageIndex].copy(
+                            contents = listOf(ChatMessageContent.Text(displayMsg)),
                             metadata = meta
                         )
-                        _currentChatMessages[lastIdx] = updated
+                        _currentChatMessages[messageIndex] = updated
                         sessionId?.let { chatHistoryRepository.saveMessage(it, updated) }
                     }
                     onError(e)
@@ -782,7 +921,12 @@ class ChatViewModel(
                             )
                         }
 
-                        generatedResult += getString(Res.string.chat_running_tool, event.toolCall.name)
+                        if (sessionMode != ChatSessionMode.SVG_IMAGE) {
+                            generatedResult += getString(
+                                Res.string.chat_running_tool,
+                                event.toolCall.name
+                            )
+                        }
                         updateAssistantMessage(isGeneratingNow = true)
                     }
                     is AgentLoopEvent.ToolFinished -> {
@@ -816,7 +960,12 @@ class ChatViewModel(
                             )
                         }
 
-                        generatedResult += getString(Res.string.chat_tool_completed, event.toolCall.name)
+                        if (sessionMode != ChatSessionMode.SVG_IMAGE) {
+                            generatedResult += getString(
+                                Res.string.chat_tool_completed,
+                                event.toolCall.name
+                            )
+                        }
                         updateAssistantMessage(isGeneratingNow = true)
                     }
                     is AgentLoopEvent.Completed -> {
@@ -832,8 +981,10 @@ class ChatViewModel(
             
             println("ChatViewModel: collect finished!")
             val generationDuration = Clock.System.now().toEpochMilliseconds() - startTime
-            if (_currentChatMessages.isNotEmpty()) {
-                val lastIdx = _currentChatMessages.lastIndex
+            val messageIndex = _currentChatMessages.indexOfFirst {
+                it.id.toString() == assistantMessageId
+            }
+            if (messageIndex >= 0) {
                 val meta = mapOf(
                     "prompt" to promptContent,
                     "time_taken" to formatDuration(generationDuration),
@@ -841,12 +992,20 @@ class ChatViewModel(
                     "agent_turn_count" to terminalTurnCount.toString(),
                     "agent_transition" to terminalTransition
                 )
-                val updated = _currentChatMessages[lastIdx].copy(
+                val finalContents = if (
+                    sessionMode == ChatSessionMode.SVG_IMAGE
+                ) {
+                    listOf(SvgMessageParser.parseCompletedResponse(generatedResult.trim()))
+                } else {
+                    listOf(ChatMessageContent.Text(displayText()))
+                }
+                val updated = _currentChatMessages[messageIndex].copy(
+                    contents = finalContents,
                     metadata = meta,
                     toolCalls = persistentToolCalls,
                     toolResponses = persistentToolResponses
                 )
-                _currentChatMessages[lastIdx] = updated
+                _currentChatMessages[messageIndex] = updated
                 sessionId?.let { chatHistoryRepository.saveMessage(it, updated) }
             }
             
@@ -859,6 +1018,16 @@ class ChatViewModel(
         viewModelScope.launch {
             try {
                 systemPrompt.value = getString(Res.string.llm_setting_system_prompt_default,BuildConfig.APP_NAME)
+                if (
+                    activeSessionId.value == null &&
+                    _conversationContext.value.mode == ChatSessionMode.DEFAULT &&
+                    !_conversationContext.value.isApplied
+                ) {
+                    selectConversationContext(
+                        mode = ChatSessionMode.DEFAULT,
+                        systemInstruction = systemPrompt.value
+                    )
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -886,6 +1055,8 @@ class ChatViewModel(
             - Keep the svg field value on one line. Do not insert JSON newline escape sequences in the SVG markup.
             - Verify the SVG is well-formed XML before responding: every opening tag has exactly one matching
               closing tag, no stray closing tags are allowed, and all visible elements live inside the root <svg>.
+            - Keep the SVG self-contained. Do not use scripts, event-handler attributes, DOCTYPE or ENTITY
+              declarations, foreignObject, external links, remote images, @import, or non-local URL references.
             - Prefer vector primitives, paths, gradients, masks, and text only when the user requests text.
             - Prefer hex colors plus explicit opacity attributes over rgba(...) values for SVG renderer compatibility.
         """.trimIndent()

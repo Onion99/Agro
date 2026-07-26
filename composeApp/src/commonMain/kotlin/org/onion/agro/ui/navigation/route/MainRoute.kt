@@ -14,13 +14,9 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 sealed interface MainRoute {
-    @Serializable
     data object HomeRoute : RoutePage(Res.drawable.ic_home, Res.string.home)
-    @Serializable
     data object ChatRoute : RoutePage(Res.drawable.ic_chat, Res.string.chat)
-    @Serializable
     data object LibraryRoute : RoutePage(Res.drawable.ic_library, Res.string.library)
-    @Serializable
     data object SettingRoute : RoutePage(Res.drawable.ic_setting, Res.string.setting)
 }
 

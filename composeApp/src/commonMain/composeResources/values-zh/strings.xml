@@ -194,4 +194,17 @@
     <string name="library_svg_image">SVG 图像</string>
     <string name="library_svg_desc">生成结构化 JSON 与安全自包含的 SVG 作品。</string>
     <string name="library_forge_vessel">锻造新容器</string>
+    <string name="chat_context_default_title">%1$s · 通用助手</string>
+    <string name="chat_context_svg_title">%1$s · SVG 图像生成器</string>
+    <string name="chat_context_default_description">善于分析且严谨的本地智能</string>
+    <string name="chat_context_svg_description">创作安全、自包含的矢量图像</string>
+    <string name="chat_context_not_applied">正在等待模型应用当前上下文</string>
+    <string name="chat_context_current_instruction">当前系统指令</string>
+    <string name="chat_context_expand">查看系统指令</string>
+    <string name="chat_context_collapse">收起系统指令</string>
+    <string name="chat_context_copy">复制系统指令</string>
+    <string name="svg_saved">SVG 已保存</string>
+    <string name="svg_save_failed">SVG 保存失败</string>
+    <string name="svg_render_failed">无法渲染此 SVG，你仍可复制或保存其源码。</string>
+    <string name="unsupported_message">暂时无法显示这条结构化消息</string>
 </resources>
