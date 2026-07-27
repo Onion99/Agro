@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-07-27] - 8-bit BGM 生成与播放
+- [新增] 新增 `CHIPTUNE_BGM_MML` 专用聊天模式、JSON + MML parser、轨道校验、确定性 pulse/triangle/noise 合成器和 8-bit unsigned PCM WAV writer。
+- [修改] 将 `LibraryScreen` 的 Creative Nebula 入口替换为可点击的 `EightBitBgmCard`，生成结果以 `ChatMessageContent.Audio` 持久化并保留源乐谱 JSON。
+- [新增] 接入 `composemediaplayer-audio:0.11.1`，在 `ChatScreen` 音频气泡提供播放、暂停、停止、seek、保存 WAV、复制源 JSON 和错误反馈。
+- [测试] 新增 `ChiptuneBgmMmlParserTest`，覆盖协议校验、MML repeat/noise 解析、tempo 拒绝、WAV header、时长与确定性渲染。
+- [文档] 更新 `docs/specs/Gemma4 8bit BGM JSON + MML Tracks.md` 与 `docs/agents/data-model.md`，记录实现结构、持久化边界和验证状态。
+
 ## [2026-07-26] - LiteRT-LM 模型 Context 上限读取
 - [新增] 在主仓库 commonMain 增加 `LiteRtLmModelMetadata`，通过随机读取 `.litertlm` header、`LlmMetadataProto` section 与 protobuf 字段 5 获取模型 `max_num_tokens`，不修改 `cpp/lite-rt-lm` submodule。
 - [修改] `ChatViewModel` 在创建或重建 `LmEngine` 前使用模型声明的 Context 上限更新 `lmMaxNumTokens`，设置页 token 调整上限同步改为模型值，读取失败时保留 8192 回退。

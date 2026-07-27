@@ -16,15 +16,26 @@
   `contents: List<ChatMessageContent>` 表达正文。
 - 禁止继续在 `ChatMessage` 上增加某一种媒体专属的可空字段；新增内容形态必须实现
   `ChatMessageContent`。
-- `ChatMessageContent` 当前包含 `Text`、`RasterImage`、`SvgImage` 与
+- `ChatMessageContent` 当前包含 `Text`、`RasterImage`、`SvgImage`、`Audio` 与
   `Unsupported`。每个实现都必须携带 `schemaVersion`。
+- `Audio` 只持久化本地文件路径、MIME、标题、时长、采样信息、循环区间和可选
+  `sourceSpecJson`，不得把 WAV/PCM 作为 Room blob 保存。BGM 缓存丢失后可依据
+  `sourceSpecJson` 重新渲染。
 - `Unsupported` 是前向兼容边界：未知类型、更高版本或无效载荷必须保留原始内容，
   不得让整段会话反序列化失败。
 - 纯文本消息优先通过 `ChatMessage.text(...)` 创建，避免调用端重复构造单元素列表。
 
 ## 4. 聊天会话上下文
 
-- `ChatSessionMode` 表达可持久化的聊天对象/协议模式，当前支持普通助手与 SVG 图像生成器。
+- `ChatSessionMode` 表达可持久化的聊天对象/协议模式，当前支持普通助手、SVG 图像
+  生成器与 `CHIPTUNE_BGM_MML` 8-bit BGM 作曲器。
 - `ConversationContextState` 是 UI 与 ViewModel 共享的当前上下文状态；
   `isApplied` 只在原生模型 conversation 成功创建后为 `true`。
 - system instruction 的完整文本由持久化层保存快照，不应仅从模式名在 UI 中推断。
+
+## 5. 8-bit BGM 规格
+
+- `ChiptuneBgmMmlSpec` 是 `chiptune_bgm_mml` JSON envelope 的可序列化模型，承载
+  BPM、循环小节、采样率、位深、主音量与轨道集合。
+- `ChiptuneMmlTrack` 只承载 channel、可选 duty cycle 与 MML；MML 事件和渲染状态
+  属于 `composeApp` 内部模型，不进入持久化公共数据层。

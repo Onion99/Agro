@@ -144,6 +144,14 @@ class ChatHistoryRepository(
                         is ChatMessageContent.RasterImage -> {
                             appendLine("[Raster image: ${content.mimeType ?: "unknown"}]")
                         }
+                        is ChatMessageContent.Audio -> {
+                            appendLine("[Audio: ${content.title}]")
+                            content.sourceSpecJson?.let { source ->
+                                appendLine("```json")
+                                appendLine(source)
+                                appendLine("```")
+                            }
+                        }
                         is ChatMessageContent.Unsupported -> {
                             appendLine("```")
                             appendLine(content.rawPayload)
@@ -262,6 +270,25 @@ class ChatHistoryRepository(
                     SvgPayload(svg = svg, width = width, height = height)
                 )
             )
+            is ChatMessageContent.Audio -> EncodedContent(
+                type = ChatMessageContent.TYPE_AUDIO,
+                schemaVersion = schemaVersion,
+                payloadJson = json.encodeToString(
+                    AudioPayload(
+                        path = path,
+                        mimeType = mimeType,
+                        title = title,
+                        durationMs = durationMs,
+                        sampleRate = sampleRate,
+                        bitDepth = bitDepth,
+                        bpm = bpm,
+                        loopBars = loopBars,
+                        loopStartMs = loopStartMs,
+                        loopEndMs = loopEndMs,
+                        sourceSpecJson = sourceSpecJson
+                    )
+                )
+            )
             is ChatMessageContent.Unsupported -> EncodedContent(
                 type = ChatMessageContent.TYPE_UNSUPPORTED,
                 schemaVersion = schemaVersion,
@@ -315,6 +342,23 @@ class ChatHistoryRepository(
                 svg?.let(SvgMessageParser::parseStoredSvg)
                     ?: unsupported("invalid_svg_payload")
             }
+            ChatMessageContent.TYPE_AUDIO -> runCatching {
+                val payload = json.decodeFromString<AudioPayload>(payloadJson)
+                ChatMessageContent.Audio(
+                    path = payload.path,
+                    mimeType = payload.mimeType,
+                    title = payload.title,
+                    durationMs = payload.durationMs,
+                    sampleRate = payload.sampleRate,
+                    bitDepth = payload.bitDepth,
+                    bpm = payload.bpm,
+                    loopBars = payload.loopBars,
+                    loopStartMs = payload.loopStartMs,
+                    loopEndMs = payload.loopEndMs,
+                    sourceSpecJson = payload.sourceSpecJson,
+                    schemaVersion = schemaVersion
+                )
+            }.getOrElse { unsupported("invalid_audio_payload") }
             ChatMessageContent.TYPE_UNSUPPORTED -> runCatching {
                 val payload = json.decodeFromString<UnsupportedPayload>(payloadJson)
                 ChatMessageContent.Unsupported(
@@ -342,6 +386,7 @@ class ChatHistoryRepository(
             when (content) {
                 is ChatMessageContent.Text -> content.text
                 is ChatMessageContent.Unsupported -> content.rawPayload
+                is ChatMessageContent.Audio -> content.title
                 is ChatMessageContent.RasterImage,
                 is ChatMessageContent.SvgImage -> null
             }
@@ -359,6 +404,7 @@ class ChatHistoryRepository(
     private fun ChatSessionMode.toDatabaseValue(): String = when (this) {
         ChatSessionMode.DEFAULT -> "default"
         ChatSessionMode.SVG_IMAGE -> "svg_image"
+        ChatSessionMode.CHIPTUNE_BGM_MML -> "chiptune_bgm_mml"
     }
 
     private data class EncodedContent(
@@ -389,6 +435,21 @@ class ChatHistoryRepository(
     private data class SvgEnvelopePayload(
         val type: String,
         val svg: String
+    )
+
+    @Serializable
+    private data class AudioPayload(
+        val path: String,
+        val mimeType: String,
+        val title: String,
+        val durationMs: Long,
+        val sampleRate: Int,
+        val bitDepth: Int,
+        val bpm: Int? = null,
+        val loopBars: Int? = null,
+        val loopStartMs: Long = 0,
+        val loopEndMs: Long = durationMs,
+        val sourceSpecJson: String? = null
     )
 
     @Serializable

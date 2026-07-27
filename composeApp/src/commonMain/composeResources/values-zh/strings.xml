@@ -189,6 +189,8 @@
     <string name="library_logic_desc">强类型结构与语义化代码生成。</string>
     <string name="library_creative_nebula">创意星云</string>
     <string name="library_creative_desc">开阔、无拘无束的散文与艺术构思。</string>
+    <string name="library_chiptune_bgm">8-bit BGM</string>
+    <string name="library_chiptune_bgm_desc">创作可循环的芯片音乐乐谱，并在本地渲染为 WAV。</string>
     <string name="library_data_crystal">数据水晶</string>
     <string name="library_data_desc">分形分析与硬模式识别。</string>
     <string name="library_svg_image">SVG 图像</string>
@@ -196,8 +198,10 @@
     <string name="library_forge_vessel">锻造新容器</string>
     <string name="chat_context_default_title">%1$s · 通用助手</string>
     <string name="chat_context_svg_title">%1$s · SVG 图像生成器</string>
+    <string name="chat_context_bgm_title">%1$s · 8-bit BGM 作曲器</string>
     <string name="chat_context_default_description">善于分析且严谨的本地智能</string>
     <string name="chat_context_svg_description">创作安全、自包含的矢量图像</string>
+    <string name="chat_context_bgm_description">创作 JSON + MML 芯片音乐并渲染本地 WAV 音频</string>
     <string name="chat_context_not_applied">正在等待模型应用当前上下文</string>
     <string name="chat_context_current_instruction">当前系统指令</string>
     <string name="chat_context_expand">查看系统指令</string>
@@ -207,4 +211,13 @@
     <string name="svg_save_failed">SVG 保存失败</string>
     <string name="svg_render_failed">无法渲染此 SVG，你仍可复制或保存其源码。</string>
     <string name="unsupported_message">暂时无法显示这条结构化消息</string>
+    <string name="bgm_play">播放</string>
+    <string name="bgm_pause">暂停</string>
+    <string name="bgm_stop">停止</string>
+    <string name="bgm_save">保存 WAV</string>
+    <string name="bgm_copy_source">复制乐谱 JSON</string>
+    <string name="bgm_saved">BGM 保存成功</string>
+    <string name="bgm_save_failed">BGM 保存失败</string>
+    <string name="bgm_player_error">播放失败：%1$s</string>
+    <string name="bgm_audio_details">%1$d BPM · %2$d Hz · %3$d-bit</string>
 </resources>

@@ -17,9 +17,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AllInclusive
-import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -159,7 +159,11 @@ fun LibraryScreen(
                                 .fillMaxWidth()
                                 .height(200.dp)
                         )
-                        CreativeNebulaCard(
+                        EightBitBgmCard(
+                            onClick = {
+                                chatViewModel.startChiptuneBgmConversation()
+                                onOpenChat()
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(200.dp)
@@ -209,7 +213,11 @@ fun LibraryScreen(
                                 .weight(1f)
                                 .height(180.dp)
                         )
-                        CreativeNebulaCard(
+                        EightBitBgmCard(
+                            onClick = {
+                                chatViewModel.startChiptuneBgmConversation()
+                                onOpenChat()
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(180.dp)
@@ -504,16 +512,18 @@ fun LogicVesselCard(
 }
 
 @Composable
-fun CreativeNebulaCard(
-    modifier: Modifier = Modifier
+fun EightBitBgmCard(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
 ) {
     ThemedBentoCard(
         modifier = modifier,
-        title = stringResource(Res.string.library_creative_nebula),
-        desc = stringResource(Res.string.library_creative_desc),
-        icon = Icons.Filled.Brush,
+        title = stringResource(Res.string.library_chiptune_bgm),
+        desc = stringResource(Res.string.library_chiptune_bgm_desc),
+        icon = Icons.Filled.MusicNote,
         backgroundColorBlob = AppTheme.colors.tertiary,
-        blobCenter = { w, _ -> Offset(w + 20.dp.value, -20.dp.value) }
+        blobCenter = { w, _ -> Offset(w + 20.dp.value, -20.dp.value) },
+        onClick = onClick
     )
 }
 

@@ -37,6 +37,23 @@ sealed interface ChatMessageContent {
     ) : ChatMessageContent
 
     @Serializable
+    @SerialName(TYPE_AUDIO)
+    data class Audio(
+        val path: String,
+        val mimeType: String,
+        val title: String,
+        val durationMs: Long,
+        val sampleRate: Int,
+        val bitDepth: Int,
+        val bpm: Int? = null,
+        val loopBars: Int? = null,
+        val loopStartMs: Long = 0,
+        val loopEndMs: Long = durationMs,
+        val sourceSpecJson: String? = null,
+        override val schemaVersion: Int = CURRENT_SCHEMA_VERSION
+    ) : ChatMessageContent
+
+    @Serializable
     @SerialName(TYPE_UNSUPPORTED)
     data class Unsupported(
         val declaredType: String,
@@ -50,6 +67,7 @@ sealed interface ChatMessageContent {
         const val TYPE_TEXT = "text"
         const val TYPE_RASTER_IMAGE = "raster_image"
         const val TYPE_SVG_IMAGE = "svg_image"
+        const val TYPE_AUDIO = "audio"
         const val TYPE_UNSUPPORTED = "unsupported"
     }
 }

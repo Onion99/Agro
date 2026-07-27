@@ -14,8 +14,9 @@ androidx-lifecycle = "2.9.6"
 androidx-testExt = "1.2.1"
 composeHotReload = "1.0.0"
 composeMultiplatform = "1.10.1"
+composeMediaPlayer = "0.11.1"
 android-desugar-jdk-libs = "2.1.5"
-fileKitVersion = "0.12.0"
+fileKitVersion = "0.14.2"
 junit = "4.13.2"
 kotlin = "2.3.20"
 kotlinx-coroutines = "1.10.2"
@@ -127,6 +128,7 @@ kotlin-gradlePlugin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-pl
 kotlin-serializationPlugin = { group = "org.jetbrains.kotlin", name = "kotlin-serialization", version.ref = "kotlin" }
 android-desugarJdkLibs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "android-desugar-jdk-libs" }
 compose-rich-editor = { module = "com.mohamedrejeb.richeditor:richeditor-compose", version = "1.0.0-rc14" }
+composemediaplayer-audio = { module = "io.github.kdroidfilter:composemediaplayer-audio", version.ref = "composeMediaPlayer" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

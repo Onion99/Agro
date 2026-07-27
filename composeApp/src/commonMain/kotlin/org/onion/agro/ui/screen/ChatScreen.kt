@@ -51,6 +51,9 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SaveAlt
@@ -65,9 +68,11 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -104,9 +109,13 @@ import com.onion.theme.style.glassSurface
 import com.onion.theme.style.watercolorGradient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import io.github.vinceglb.filekit.FileKit
 import io.github.vinceglb.filekit.dialogs.openFileSaver
 import io.github.vinceglb.filekit.write
+import io.github.kdroidfilter.composemediaplayer.audio.AudioPlayerState
+import io.github.kdroidfilter.composemediaplayer.audio.ErrorListener
+import io.github.kdroidfilter.composemediaplayer.audio.rememberAudioPlayerLiveState
 import agro.composeapp.generated.resources.Res
 import agro.composeapp.generated.resources.ai_image
 import agro.composeapp.generated.resources.attachment
@@ -118,6 +127,8 @@ import agro.composeapp.generated.resources.chat_context_copy
 import agro.composeapp.generated.resources.chat_context_current_instruction
 import agro.composeapp.generated.resources.chat_context_default_description
 import agro.composeapp.generated.resources.chat_context_default_title
+import agro.composeapp.generated.resources.chat_context_bgm_description
+import agro.composeapp.generated.resources.chat_context_bgm_title
 import agro.composeapp.generated.resources.chat_context_expand
 import agro.composeapp.generated.resources.chat_context_not_applied
 import agro.composeapp.generated.resources.chat_context_svg_description
@@ -148,11 +159,22 @@ import agro.composeapp.generated.resources.svg_save_failed
 import agro.composeapp.generated.resources.svg_saved
 import agro.composeapp.generated.resources.text_copied
 import agro.composeapp.generated.resources.unsupported_message
+import agro.composeapp.generated.resources.unknown_error
+import agro.composeapp.generated.resources.bgm_audio_details
+import agro.composeapp.generated.resources.bgm_copy_source
+import agro.composeapp.generated.resources.bgm_pause
+import agro.composeapp.generated.resources.bgm_play
+import agro.composeapp.generated.resources.bgm_player_error
+import agro.composeapp.generated.resources.bgm_save
+import agro.composeapp.generated.resources.bgm_save_failed
+import agro.composeapp.generated.resources.bgm_saved
+import agro.composeapp.generated.resources.bgm_stop
 import agro.composeapp.generated.resources.user_image
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 import org.onion.agro.BuildConfig
+import org.onion.agro.audio.BgmAudioFileStore
 import org.onion.agro.database.ChatSessionEntity
 import org.onion.agro.utils.Animations
 import org.onion.agro.viewmodel.ChatViewModel
@@ -357,22 +379,25 @@ private fun ConversationContextHeader(
     var expanded by remember(activeSessionId, context.systemInstruction) {
         mutableStateOf(false)
     }
-    val isSvgMode = context.mode == ChatSessionMode.SVG_IMAGE
-    val title = stringResource(
-        if (isSvgMode) {
-            Res.string.chat_context_svg_title
-        } else {
-            Res.string.chat_context_default_title
-        },
-        BuildConfig.APP_NAME
-    )
-    val description = stringResource(
-        if (isSvgMode) {
-            Res.string.chat_context_svg_description
-        } else {
-            Res.string.chat_context_default_description
-        }
-    )
+    val title = when (context.mode) {
+        ChatSessionMode.DEFAULT -> stringResource(
+            Res.string.chat_context_default_title,
+            BuildConfig.APP_NAME
+        )
+        ChatSessionMode.SVG_IMAGE -> stringResource(
+            Res.string.chat_context_svg_title,
+            BuildConfig.APP_NAME
+        )
+        ChatSessionMode.CHIPTUNE_BGM_MML -> stringResource(
+            Res.string.chat_context_bgm_title,
+            BuildConfig.APP_NAME
+        )
+    }
+    val description = when (context.mode) {
+        ChatSessionMode.DEFAULT -> stringResource(Res.string.chat_context_default_description)
+        ChatSessionMode.SVG_IMAGE -> stringResource(Res.string.chat_context_svg_description)
+        ChatSessionMode.CHIPTUNE_BGM_MML -> stringResource(Res.string.chat_context_bgm_description)
+    }
     val statusColor = if (context.isApplied) {
         AppTheme.colors.primary
     } else {
@@ -426,10 +451,10 @@ private fun ConversationContextHeader(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = if (isSvgMode) {
-                            Icons.Filled.Photo
-                        } else {
-                            Icons.Filled.AutoAwesome
+                        imageVector = when (context.mode) {
+                            ChatSessionMode.DEFAULT -> Icons.Filled.AutoAwesome
+                            ChatSessionMode.SVG_IMAGE -> Icons.Filled.Photo
+                            ChatSessionMode.CHIPTUNE_BGM_MML -> Icons.Filled.MusicNote
                         },
                         contentDescription = null,
                         tint = AppTheme.colors.primary,
@@ -930,6 +955,24 @@ private fun ChatMessagesList(
                                 }
                             }
                         },
+                        onSaveAudio = { audio ->
+                            coroutineScope.launch {
+                                runCatching {
+                                    val file = FileKit.openFileSaver(
+                                        suggestedName = audio.title.ifBlank { "chiptune_${message.id}" },
+                                        extension = "wav"
+                                    ) ?: return@launch
+                                    val wavBytes = withContext(Dispatchers.Default) {
+                                        BgmAudioFileStore.read(audio.path)
+                                    }
+                                    file.write(wavBytes)
+                                }.onSuccess {
+                                    snackbarHostState.showSnackbar(getString(Res.string.bgm_saved))
+                                }.onFailure {
+                                    snackbarHostState.showSnackbar(getString(Res.string.bgm_save_failed))
+                                }
+                            }
+                        },
                         onRegenerate = if (message.metadata?.containsKey("prompt") == true) {
                             {
                                 if (chatViewModel.isGenerating.value) {
@@ -1035,6 +1078,7 @@ fun ChatBubble(
     message: ChatMessage,
     onSaveImage: ((ByteArray) -> Unit)? = null,
     onSaveSvg: ((String) -> Unit)? = null,
+    onSaveAudio: ((ChatMessageContent.Audio) -> Unit)? = null,
     onRegenerate: (() -> Unit)? = null,
     onCopyText: ((String) -> Unit)? = null
 ) {
@@ -1078,6 +1122,7 @@ fun ChatBubble(
                         message = message,
                         onSaveImage = onSaveImage,
                         onSaveSvg = onSaveSvg,
+                        onSaveAudio = onSaveAudio,
                         onRegenerate = onRegenerate,
                         onCopyText = onCopyText,
                         isSingle = true
@@ -1107,6 +1152,7 @@ fun ChatBubble(
                         message = message,
                         onSaveImage = onSaveImage,
                         onSaveSvg = onSaveSvg,
+                        onSaveAudio = onSaveAudio,
                         onRegenerate = onRegenerate,
                         onCopyText = onCopyText,
                         isSingle = false
@@ -1139,6 +1185,7 @@ fun ChatBubble(
                         message = message,
                         onSaveImage = onSaveImage,
                         onSaveSvg = onSaveSvg,
+                        onSaveAudio = onSaveAudio,
                         onRegenerate = onRegenerate,
                         onCopyText = onCopyText,
                         isSingle = true
@@ -1219,6 +1266,7 @@ fun ChatBubble(
                                 message = message,
                                 onSaveImage = onSaveImage,
                                 onSaveSvg = onSaveSvg,
+                                onSaveAudio = onSaveAudio,
                                 onRegenerate = onRegenerate,
                                 onCopyText = onCopyText,
                                 isSingle = false
@@ -1236,6 +1284,7 @@ private fun MessageContentList(
     message: ChatMessage,
     onSaveImage: ((ByteArray) -> Unit)?,
     onSaveSvg: ((String) -> Unit)?,
+    onSaveAudio: ((ChatMessageContent.Audio) -> Unit)?,
     onRegenerate: (() -> Unit)?,
     onCopyText: ((String) -> Unit)?,
     isSingle: Boolean
@@ -1286,6 +1335,13 @@ private fun MessageContentList(
                         SvgImageMessageContent(
                             content = content,
                             onSaveSvg = onSaveSvg,
+                            onCopyText = onCopyText
+                        )
+                    }
+                    is ChatMessageContent.Audio -> {
+                        BgmAudioMessageContent(
+                            content = content,
+                            onSaveAudio = onSaveAudio,
                             onCopyText = onCopyText
                         )
                     }
@@ -1470,6 +1526,207 @@ private fun SvgImageMessageContent(
             modifier = Modifier.align(Alignment.TopEnd)
         )
     }
+}
+
+@Composable
+private fun BgmAudioMessageContent(
+    content: ChatMessageContent.Audio,
+    onSaveAudio: ((ChatMessageContent.Audio) -> Unit)?,
+    onCopyText: ((String) -> Unit)?
+) {
+    val audioState = rememberAudioPlayerLiveState()
+    var loadedSource by remember(content.path) { mutableStateOf(false) }
+    var errorMessage by remember(content.path) { mutableStateOf<String?>(null) }
+    val durationMs = audioState.duration.takeIf { it > 0L } ?: content.durationMs
+    val positionMs = audioState.position.coerceIn(0L, durationMs.coerceAtLeast(0L))
+    val progress = if (durationMs > 0L) {
+        positionMs.toFloat() / durationMs.toFloat()
+    } else {
+        0f
+    }
+
+    DisposableEffect(audioState.player, content.path) {
+        audioState.player.setOnErrorListener(
+            object : ErrorListener {
+                override fun onError(message: String?) {
+                    errorMessage = message.orEmpty()
+                }
+            }
+        )
+        onDispose {
+            audioState.player.stop()
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = AppTheme.colors.surfaceContainerLow.copy(alpha = 0.52f),
+                shape = AppTheme.shape.lg
+            )
+            .border(
+                width = AppTheme.size.borderWidthThin,
+                color = AppTheme.colors.tertiary.copy(alpha = 0.28f),
+                shape = AppTheme.shape.lg
+            )
+            .padding(AppTheme.spacing.md),
+        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(AppTheme.size.iconButton)
+                    .background(
+                        AppTheme.colors.tertiary.copy(alpha = 0.14f),
+                        AppTheme.shape.full
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.MusicNote,
+                    contentDescription = null,
+                    tint = AppTheme.colors.tertiary,
+                    modifier = Modifier.size(AppTheme.size.iconLarge)
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = content.title,
+                    style = AppTheme.typography.titleMedium,
+                    color = AppTheme.colors.onSurface,
+                    maxLines = 1
+                )
+                Text(
+                    text = stringResource(
+                        Res.string.bgm_audio_details,
+                        content.bpm ?: 0,
+                        content.sampleRate,
+                        content.bitDepth
+                    ),
+                    style = AppTheme.typography.bodySmall,
+                    color = AppTheme.colors.onSurfaceVariant
+                )
+            }
+            Text(
+                text = "${formatBgmMillis(positionMs)} / ${formatBgmMillis(durationMs)}",
+                style = AppTheme.typography.bodySmall,
+                color = AppTheme.colors.onSurfaceVariant
+            )
+        }
+
+        Slider(
+            value = progress.coerceIn(0f, 1f),
+            onValueChange = { fraction ->
+                if (durationMs > 0L) {
+                    audioState.player.seekTo((durationMs * fraction).toLong())
+                }
+            },
+            enabled = durationMs > 0L,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs)) {
+                IconButton(
+                    onClick = {
+                        errorMessage = null
+                        if (!loadedSource || audioState.state == AudioPlayerState.IDLE) {
+                            audioState.player.play(content.path)
+                            loadedSource = true
+                        } else {
+                            audioState.player.play()
+                        }
+                    },
+                    modifier = Modifier.size(AppTheme.size.iconButtonSmall)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = stringResource(Res.string.bgm_play),
+                        tint = AppTheme.colors.primary
+                    )
+                }
+                IconButton(
+                    onClick = { audioState.player.pause() },
+                    enabled = audioState.state == AudioPlayerState.PLAYING,
+                    modifier = Modifier.size(AppTheme.size.iconButtonSmall)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Pause,
+                        contentDescription = stringResource(Res.string.bgm_pause),
+                        tint = AppTheme.colors.secondary
+                    )
+                }
+                IconButton(
+                    onClick = {
+                        audioState.player.stop()
+                        loadedSource = false
+                    },
+                    enabled = audioState.state != AudioPlayerState.IDLE,
+                    modifier = Modifier.size(AppTheme.size.iconButtonSmall)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Stop,
+                        contentDescription = stringResource(Res.string.bgm_stop),
+                        tint = AppTheme.colors.tertiary
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs)) {
+                val sourceSpecJson = content.sourceSpecJson
+                if (sourceSpecJson != null && onCopyText != null) {
+                    IconButton(
+                        onClick = { onCopyText(sourceSpecJson) },
+                        modifier = Modifier.size(AppTheme.size.iconButtonSmall)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.ContentCopy,
+                            contentDescription = stringResource(Res.string.bgm_copy_source),
+                            tint = AppTheme.colors.primary
+                        )
+                    }
+                }
+                if (onSaveAudio != null) {
+                    IconButton(
+                        onClick = { onSaveAudio(content) },
+                        modifier = Modifier.size(AppTheme.size.iconButtonSmall)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.SaveAlt,
+                            contentDescription = stringResource(Res.string.bgm_save),
+                            tint = AppTheme.colors.primary
+                        )
+                    }
+                }
+            }
+        }
+
+        errorMessage?.let { message ->
+            Text(
+                text = stringResource(
+                    Res.string.bgm_player_error,
+                    message.ifBlank { stringResource(Res.string.unknown_error) }
+                ),
+                style = AppTheme.typography.bodySmall,
+                color = AppTheme.colors.error
+            )
+        }
+    }
+}
+
+private fun formatBgmMillis(value: Long): String {
+    val totalSeconds = value.coerceAtLeast(0L) / 1_000L
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return "${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
 }
 
 @Composable

@@ -43,6 +43,7 @@ import org.onion.agro.database.ChatSessionEntity
 import org.onion.agro.database.ChatToolLogEntity
 import org.onion.agro.native.llm.KEY_THINK_MODE
 import org.onion.agro.message.SvgMessageParser
+import org.onion.agro.message.ChiptuneBgmMessageParser
 
 class ChatViewModel(
     private val chatHistoryRepository: ChatHistoryRepository
@@ -357,7 +358,7 @@ class ChatViewModel(
                     systemInstruction = currentSystemInstruction(),
                     toolsDescriptionJsonString = agentTools.getToolsDescriptionJson(),
                     enableConversationConstrainedDecoding =
-                        _conversationContext.value.mode == ChatSessionMode.SVG_IMAGE,
+                        _conversationContext.value.mode.isStructuredGenerationMode(),
                     samplerConfig = com.google.ai.edge.litertlm.SamplerConfig(
                         temperature = temperature.value.toDouble(),
                         topP = topP.value.toDouble(),
@@ -451,7 +452,7 @@ class ChatViewModel(
                         systemInstruction = instruction,
                         toolsDescriptionJsonString = agentTools.getToolsDescriptionJson(),
                         enableConversationConstrainedDecoding =
-                            _conversationContext.value.mode == ChatSessionMode.SVG_IMAGE,
+                            _conversationContext.value.mode.isStructuredGenerationMode(),
                         samplerConfig = com.google.ai.edge.litertlm.SamplerConfig(
                             temperature = temperature.value.toDouble(),
                             topP = topP.value.toDouble(),
@@ -662,6 +663,37 @@ class ChatViewModel(
         }
     }
 
+    fun startChiptuneBgmConversation() {
+        viewModelScope.launch(Dispatchers.Default) {
+            if (isGenerating.value) {
+                stopGeneration()
+            }
+            try {
+                selectConversationContext(
+                    mode = ChatSessionMode.CHIPTUNE_BGM_MML,
+                    systemInstruction = CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION
+                )
+                recreateLmConversation(
+                    systemInstruction = CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION,
+                    enableConstrainedDecoding = true
+                )
+                activeSessionId.value = chatHistoryRepository.createSession(
+                    title = getString(Res.string.library_chiptune_bgm),
+                    mode = ChatSessionMode.CHIPTUNE_BGM_MML,
+                    systemInstruction = appliedSystemInstructionOrEmpty()
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+                lmConversation = null
+                markConversationContextApplied(false)
+            } finally {
+                _currentChatMessages.clear()
+                isGenerating.value = false
+                isInferenceOn = false
+            }
+        }
+    }
+
     fun stopGeneration() {
         isGenerating.value = false
         if (lmConversation != null && llmPath.value.isNotBlank()) {
@@ -755,12 +787,14 @@ class ChatViewModel(
         return when (mode) {
             ChatSessionMode.DEFAULT -> systemPrompt.value
             ChatSessionMode.SVG_IMAGE -> SVG_IMAGE_SYSTEM_INSTRUCTION
+            ChatSessionMode.CHIPTUNE_BGM_MML -> CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION
         }
     }
 
     private fun String.toSessionMode(): ChatSessionMode {
         return when (this) {
             "svg_image" -> ChatSessionMode.SVG_IMAGE
+            "chiptune_bgm_mml" -> ChatSessionMode.CHIPTUNE_BGM_MML
             else -> ChatSessionMode.DEFAULT
         }
     }
@@ -774,7 +808,7 @@ class ChatViewModel(
     private suspend fun recreateLmConversation(
         systemInstruction: String = currentSystemInstruction(),
         enableConstrainedDecoding: Boolean =
-            _conversationContext.value.mode == ChatSessionMode.SVG_IMAGE
+            _conversationContext.value.mode.isStructuredGenerationMode()
     ) {
         lmConversation?.close()
         lmConversation = lmEngine?.createConversation(
@@ -857,7 +891,7 @@ class ChatViewModel(
                 if (messageIndex >= 0) {
                     val msgToUpdate = _currentChatMessages[messageIndex]
                     val meta = mapOf("is_generating" to isGeneratingNow.toString())
-                    val contents = if (sessionMode == ChatSessionMode.SVG_IMAGE) {
+                    val contents = if (sessionMode.isStructuredGenerationMode()) {
                         listOf(ChatMessageContent.Text(""))
                     } else {
                         listOf(ChatMessageContent.Text(displayText()))
@@ -960,7 +994,7 @@ class ChatViewModel(
                             )
                         }
 
-                        if (sessionMode != ChatSessionMode.SVG_IMAGE) {
+                        if (!sessionMode.isStructuredGenerationMode()) {
                             generatedResult += getString(
                                 Res.string.chat_running_tool,
                                 event.toolCall.name
@@ -999,7 +1033,7 @@ class ChatViewModel(
                             )
                         }
 
-                        if (sessionMode != ChatSessionMode.SVG_IMAGE) {
+                        if (!sessionMode.isStructuredGenerationMode()) {
                             generatedResult += getString(
                                 Res.string.chat_tool_completed,
                                 event.toolCall.name
@@ -1031,12 +1065,16 @@ class ChatViewModel(
                     "agent_turn_count" to terminalTurnCount.toString(),
                     "agent_transition" to terminalTransition
                 )
-                val finalContents = if (
-                    sessionMode == ChatSessionMode.SVG_IMAGE
-                ) {
-                    listOf(SvgMessageParser.parseCompletedResponse(generatedResult.trim()))
-                } else {
-                    listOf(ChatMessageContent.Text(displayText()))
+                val finalContents = when (sessionMode) {
+                    ChatSessionMode.SVG_IMAGE -> {
+                        listOf(SvgMessageParser.parseCompletedResponse(generatedResult.trim()))
+                    }
+                    ChatSessionMode.CHIPTUNE_BGM_MML -> {
+                        listOf(ChiptuneBgmMessageParser.parseCompletedResponse(generatedResult.trim()))
+                    }
+                    ChatSessionMode.DEFAULT -> {
+                        listOf(ChatMessageContent.Text(displayText()))
+                    }
                 }
                 val updated = _currentChatMessages[messageIndex].copy(
                     contents = finalContents,
@@ -1103,5 +1141,65 @@ class ChatViewModel(
             - Prefer vector primitives, paths, gradients, masks, and text only when the user requests text.
             - Prefer hex colors plus explicit opacity attributes over rgba(...) values for SVG renderer compatibility.
         """.trimIndent()
+
+        val CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION = """
+            You are ${BuildConfig.APP_NAME}'s dedicated 8-bit chiptune BGM composer.
+
+            Output exactly one raw valid JSON object containing a loopable 8-bit BGM score whose
+            tracks are written in Music Macro Language. Do not use Markdown fences or add prose.
+            Do not output WAV, PCM samples, base64 audio, MIDI, file paths, or scripts.
+
+            Use this JSON structure exactly:
+            {
+              "type": "chiptune_bgm_mml",
+              "schemaVersion": 1,
+              "title": "BGM Title",
+              "seed": 12345,
+              "bpm": 140,
+              "timeSignature": "4/4",
+              "loopBars": 2,
+              "sampleRate": 22050,
+              "bitDepth": 8,
+              "masterVolume": 0.8,
+              "tracks": [
+                {
+                  "channel": "pulse1",
+                  "dutyCycle": 0.5,
+                  "mml": "T140 O5 L4 V12 C E G >C | <G E C D"
+                },
+                {
+                  "channel": "pulse2",
+                  "dutyCycle": 0.25,
+                  "mml": "T140 O4 L4 V9 E G C G | F A C A"
+                },
+                {
+                  "channel": "triangle",
+                  "mml": "T140 O3 L4 C C G G | A A G G"
+                },
+                {
+                  "channel": "noise",
+                  "mml": "T140 L8 [K R H R S R H R]x2"
+                }
+              ]
+            }
+
+            Rules:
+            - type must be "chiptune_bgm_mml" and schemaVersion must be 1.
+            - bpm must be 60..200, timeSignature must be "4/4", and loopBars must be 2..16.
+            - sampleRate must be 22050 unless the user asks for 11025 or 44100; bitDepth must be 8.
+            - Use 1..4 unique tracks and prefer pulse1, pulse2, triangle, and noise.
+            - pulse1 dutyCycle must be 0.5; pulse2 dutyCycle must be 0.25 or 0.125.
+            - A track T value, when present, must equal the top-level bpm.
+            - Melodic tracks may use O1..O7, L1/L2/L4/L8/L16/L32, V0..V15, A..G,
+              # sharps, - flats, R/P rests, octave shifts < and >, |, and [ ... ]xN repeats.
+            - The triangle track should use O2 or O3 for a clean bass line.
+            - The noise track may use K, S, H, T, R, P, L8/L16, |, and [ ... ]xN repeats.
+            - Compose exactly loopBars measures in 4/4 and make the phrase loop seamlessly.
+            - Do not include comments, trailing commas, or text outside the JSON object.
+        """.trimIndent()
+    }
+
+    private fun ChatSessionMode.isStructuredGenerationMode(): Boolean {
+        return this == ChatSessionMode.SVG_IMAGE || this == ChatSessionMode.CHIPTUNE_BGM_MML
     }
 }

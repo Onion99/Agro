@@ -150,6 +150,7 @@ kotlin {
             implementation(libs.filekit.dialogs)
             implementation(libs.filekit.dialogs.compose)
             implementation(libs.filekit.coil)
+            implementation(libs.okio)
             implementation(libs.coil.compose)
             implementation(libs.coil.svg)
             // ---- Persistence ------
@@ -163,6 +164,7 @@ kotlin {
             implementation(libs.quickjs.kt)
             implementation(libs.ksoup)
             implementation(libs.compose.rich.editor)
+            implementation(libs.composemediaplayer.audio)
         }
         commonTest.dependencies {
             implementation(projects.dataNetwork)

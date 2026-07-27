@@ -24,7 +24,10 @@ enum class ChatSessionMode {
     DEFAULT,
 
     @SerialName("svg_image")
-    SVG_IMAGE
+    SVG_IMAGE,
+
+    @SerialName("chiptune_bgm_mml")
+    CHIPTUNE_BGM_MML
 }
 
 data class ConversationContextState(
