@@ -214,6 +214,8 @@
     <string name="bgm_play">播放</string>
     <string name="bgm_pause">暂停</string>
     <string name="bgm_stop">停止</string>
+    <string name="bgm_copy_spec">复制乐谱 JSON</string>
+    <string name="bgm_save_wav">保存 WAV</string>
     <string name="bgm_save">保存 WAV</string>
     <string name="bgm_copy_source">复制乐谱 JSON</string>
     <string name="bgm_saved">BGM 保存成功</string>
@@ -223,5 +225,9 @@
     <string name="library_8bit_bgm">8-Bit BGM</string>
     <string name="library_8bit_bgm_desc">生成可循环芯片音乐 JSON，并渲染为可播放的 WAV 音频。</string>
     <string name="library_8bit_chip_label">8BIT</string>
+    <string name="bgm_audio_default_title">8-Bit BGM</string>
+    <string name="bgm_audio_metadata">%1$d Hz · %2$d-bit · %3$s</string>
+    <string name="bgm_duration_seconds">%1$s 秒</string>
+    <string name="bgm_duration_minutes">%1$d分 %2$02d秒</string>
 
 </resources>

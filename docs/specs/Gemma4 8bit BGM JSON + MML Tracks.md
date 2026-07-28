@@ -42,8 +42,17 @@ flowchart TD
   输出单声道 8-bit unsigned PCM WAV。
 - WAV 写入 FileKit cache 下的 `generated-bgm`，消息只持久化路径与音频元数据，并保留
   `sourceSpecJson`。
-- `ChatScreen` 已通过 ComposeMediaPlayer audio module 提供播放、暂停、停止、seek、
+- `ChatScreen` 已通过 ComposeMediaPlayer audio module 提供播放/暂停切换、只读进度展示、
   保存 WAV、复制源 JSON 和错误展示。
+
+### 2.2 2026-07-28 音频消息 UI 同步
+
+- 音频消息卡片改为单个圆形播放/暂停按钮，右侧展示标题、采样率、位深和时长，
+  并保留复制源 JSON 与保存 WAV 的图标操作。
+- 进度从可拖动 Slider 调整为细条渐变进度，减少聊天流中的操作密度；
+  播放结束或重新进入消息时仍通过 ComposeMediaPlayer 重新加载本地 WAV 路径。
+- 播放层仍沿用 `composemediaplayer-audio` 与 `BgmAudioFileStore`，本次不改变
+  `ChatMessageContent.Audio` schema、cache 写入策略或 Room 持久化结构。
 
 ## 3. 路线定位
 

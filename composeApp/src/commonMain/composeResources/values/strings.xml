@@ -213,6 +213,8 @@
     <string name="bgm_play">Play</string>
     <string name="bgm_pause">Pause</string>
     <string name="bgm_stop">Stop</string>
+    <string name="bgm_copy_spec">Copy score JSON</string>
+    <string name="bgm_save_wav">Save WAV</string>
     <string name="bgm_save">Save WAV</string>
     <string name="bgm_copy_source">Copy score JSON</string>
     <string name="bgm_saved">BGM saved successfully</string>
@@ -224,5 +226,9 @@
     <string name="library_8bit_bgm">8-Bit BGM</string>
     <string name="library_8bit_bgm_desc">Generate loopable chiptune JSON and render it as playable WAV audio.</string>
     <string name="library_8bit_chip_label">8BIT</string>
+    <string name="bgm_audio_default_title">8-Bit BGM</string>
+    <string name="bgm_audio_metadata">%1$d Hz · %2$d-bit · %3$s</string>
+    <string name="bgm_duration_seconds">%1$s s</string>
+    <string name="bgm_duration_minutes">%1$dm %2$02ds</string>
 
 </resources>

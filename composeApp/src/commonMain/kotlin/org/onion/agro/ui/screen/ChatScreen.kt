@@ -68,7 +68,6 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -160,15 +159,17 @@ import agro.composeapp.generated.resources.svg_saved
 import agro.composeapp.generated.resources.text_copied
 import agro.composeapp.generated.resources.unsupported_message
 import agro.composeapp.generated.resources.unknown_error
-import agro.composeapp.generated.resources.bgm_audio_details
-import agro.composeapp.generated.resources.bgm_copy_source
+import agro.composeapp.generated.resources.bgm_audio_default_title
+import agro.composeapp.generated.resources.bgm_audio_metadata
+import agro.composeapp.generated.resources.bgm_copy_spec
+import agro.composeapp.generated.resources.bgm_duration_minutes
+import agro.composeapp.generated.resources.bgm_duration_seconds
 import agro.composeapp.generated.resources.bgm_pause
 import agro.composeapp.generated.resources.bgm_play
 import agro.composeapp.generated.resources.bgm_player_error
-import agro.composeapp.generated.resources.bgm_save
+import agro.composeapp.generated.resources.bgm_save_wav
 import agro.composeapp.generated.resources.bgm_save_failed
 import agro.composeapp.generated.resources.bgm_saved
-import agro.composeapp.generated.resources.bgm_stop
 import agro.composeapp.generated.resources.user_image
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
@@ -1339,7 +1340,7 @@ private fun MessageContentList(
                         )
                     }
                     is ChatMessageContent.Audio -> {
-                        BgmAudioMessageContent(
+                        AudioMessageContent(
                             content = content,
                             onSaveAudio = onSaveAudio,
                             onCopyText = onCopyText
@@ -1529,7 +1530,7 @@ private fun SvgImageMessageContent(
 }
 
 @Composable
-private fun BgmAudioMessageContent(
+private fun AudioMessageContent(
     content: ChatMessageContent.Audio,
     onSaveAudio: ((ChatMessageContent.Audio) -> Unit)?,
     onCopyText: ((String) -> Unit)?
@@ -1537,13 +1538,25 @@ private fun BgmAudioMessageContent(
     val audioState = rememberAudioPlayerLiveState()
     var loadedSource by remember(content.path) { mutableStateOf(false) }
     var errorMessage by remember(content.path) { mutableStateOf<String?>(null) }
-    val durationMs = audioState.duration.takeIf { it > 0L } ?: content.durationMs
+    val fallbackDurationMs = content.durationMs.coerceAtLeast(0L)
+    val durationMs = audioState.duration.takeIf { it > 0L } ?: fallbackDurationMs
     val positionMs = audioState.position.coerceIn(0L, durationMs.coerceAtLeast(0L))
     val progress = if (durationMs > 0L) {
-        positionMs.toFloat() / durationMs.toFloat()
+        (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
     } else {
         0f
     }
+    val isPlaying = audioState.state == AudioPlayerState.PLAYING
+    val title = content.title.ifBlank {
+        stringResource(Res.string.bgm_audio_default_title)
+    }
+    val durationText = bgmDurationText(durationMs)
+    val metadata = stringResource(
+        Res.string.bgm_audio_metadata,
+        content.sampleRate,
+        content.bitDepth,
+        durationText
+    )
 
     DisposableEffect(audioState.player, content.path) {
         audioState.player.setOnErrorListener(
@@ -1562,151 +1575,128 @@ private fun BgmAudioMessageContent(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = AppTheme.colors.surfaceContainerLow.copy(alpha = 0.52f),
-                shape = AppTheme.shape.lg
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        AppTheme.colors.surfaceContainerLow.copy(alpha = 0.62f),
+                        AppTheme.colors.tertiaryContainer.copy(alpha = 0.32f)
+                    )
+                ),
+                shape = AppTheme.shape.md
             )
             .border(
                 width = AppTheme.size.borderWidthThin,
-                color = AppTheme.colors.tertiary.copy(alpha = 0.28f),
-                shape = AppTheme.shape.lg
+                color = AppTheme.colors.tertiary.copy(alpha = 0.2f),
+                shape = AppTheme.shape.md
             )
             .padding(AppTheme.spacing.md),
         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(AppTheme.size.iconButton)
-                    .background(
-                        AppTheme.colors.tertiary.copy(alpha = 0.14f),
-                        AppTheme.shape.full
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.MusicNote,
-                    contentDescription = null,
-                    tint = AppTheme.colors.tertiary,
-                    modifier = Modifier.size(AppTheme.size.iconLarge)
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = content.title,
-                    style = AppTheme.typography.titleMedium,
-                    color = AppTheme.colors.onSurface,
-                    maxLines = 1
-                )
-                Text(
-                    text = stringResource(
-                        Res.string.bgm_audio_details,
-                        content.bpm ?: 0,
-                        content.sampleRate,
-                        content.bitDepth
-                    ),
-                    style = AppTheme.typography.bodySmall,
-                    color = AppTheme.colors.onSurfaceVariant
-                )
-            }
-            Text(
-                text = "${formatBgmMillis(positionMs)} / ${formatBgmMillis(durationMs)}",
-                style = AppTheme.typography.bodySmall,
-                color = AppTheme.colors.onSurfaceVariant
-            )
-        }
-
-        Slider(
-            value = progress.coerceIn(0f, 1f),
-            onValueChange = { fraction ->
-                if (durationMs > 0L) {
-                    audioState.player.seekTo((durationMs * fraction).toLong())
-                }
-            },
-            enabled = durationMs > 0L,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs)) {
-                IconButton(
-                    onClick = {
+            IconButton(
+                onClick = {
+                    if (isPlaying) {
+                        audioState.player.pause()
+                    } else {
                         errorMessage = null
-                        if (!loadedSource || audioState.state == AudioPlayerState.IDLE) {
+                        val isAtEnd = durationMs > 0L && positionMs >= durationMs
+                        if (!loadedSource || audioState.state == AudioPlayerState.IDLE || isAtEnd) {
                             audioState.player.play(content.path)
                             loadedSource = true
                         } else {
                             audioState.player.play()
                         }
-                    },
-                    modifier = Modifier.size(AppTheme.size.iconButtonSmall)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.PlayArrow,
-                        contentDescription = stringResource(Res.string.bgm_play),
-                        tint = AppTheme.colors.primary
+                    }
+                },
+                modifier = Modifier
+                    .size(AppTheme.size.iconButton)
+                    .background(
+                        color = AppTheme.colors.tertiary.copy(alpha = 0.16f),
+                        shape = AppTheme.shape.full
                     )
-                }
+            ) {
+                Icon(
+                    imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    contentDescription = stringResource(
+                        if (isPlaying) Res.string.bgm_pause else Res.string.bgm_play
+                    ),
+                    tint = AppTheme.colors.tertiary,
+                    modifier = Modifier.size(AppTheme.size.icon)
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs)
+            ) {
+                Text(
+                    text = title,
+                    style = AppTheme.typography.labelMedium,
+                    color = AppTheme.colors.onSurface,
+                    maxLines = 1
+                )
+                Text(
+                    text = metadata,
+                    style = AppTheme.typography.bodySmall,
+                    color = AppTheme.colors.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
+
+            val sourceSpecJson = content.sourceSpecJson
+            if (!sourceSpecJson.isNullOrBlank() && onCopyText != null) {
                 IconButton(
-                    onClick = { audioState.player.pause() },
-                    enabled = audioState.state == AudioPlayerState.PLAYING,
+                    onClick = { onCopyText(sourceSpecJson) },
                     modifier = Modifier.size(AppTheme.size.iconButtonSmall)
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Pause,
-                        contentDescription = stringResource(Res.string.bgm_pause),
-                        tint = AppTheme.colors.secondary
-                    )
-                }
-                IconButton(
-                    onClick = {
-                        audioState.player.stop()
-                        loadedSource = false
-                    },
-                    enabled = audioState.state != AudioPlayerState.IDLE,
-                    modifier = Modifier.size(AppTheme.size.iconButtonSmall)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Stop,
-                        contentDescription = stringResource(Res.string.bgm_stop),
-                        tint = AppTheme.colors.tertiary
+                        imageVector = Icons.Filled.ContentCopy,
+                        contentDescription = stringResource(Res.string.bgm_copy_spec),
+                        tint = AppTheme.colors.primary,
+                        modifier = Modifier.size(AppTheme.size.iconSmall)
                     )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs)) {
-                val sourceSpecJson = content.sourceSpecJson
-                if (sourceSpecJson != null && onCopyText != null) {
-                    IconButton(
-                        onClick = { onCopyText(sourceSpecJson) },
-                        modifier = Modifier.size(AppTheme.size.iconButtonSmall)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.ContentCopy,
-                            contentDescription = stringResource(Res.string.bgm_copy_source),
-                            tint = AppTheme.colors.primary
-                        )
-                    }
-                }
-                if (onSaveAudio != null) {
-                    IconButton(
-                        onClick = { onSaveAudio(content) },
-                        modifier = Modifier.size(AppTheme.size.iconButtonSmall)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.SaveAlt,
-                            contentDescription = stringResource(Res.string.bgm_save),
-                            tint = AppTheme.colors.primary
-                        )
-                    }
+
+            if (onSaveAudio != null) {
+                IconButton(
+                    onClick = { onSaveAudio(content) },
+                    modifier = Modifier.size(AppTheme.size.iconButtonSmall)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.SaveAlt,
+                        contentDescription = stringResource(Res.string.bgm_save_wav),
+                        tint = AppTheme.colors.primary,
+                        modifier = Modifier.size(AppTheme.size.iconSmall)
+                    )
                 }
             }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(AppTheme.shape.full)
+                .background(AppTheme.colors.surface.copy(alpha = 0.58f))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(progress)
+                    .height(6.dp)
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(
+                                AppTheme.colors.primary.copy(alpha = 0.72f),
+                                AppTheme.colors.tertiary.copy(alpha = 0.72f)
+                            )
+                        ),
+                        shape = AppTheme.shape.full
+                    )
+            )
         }
 
         errorMessage?.let { message ->
@@ -1722,11 +1712,21 @@ private fun BgmAudioMessageContent(
     }
 }
 
-private fun formatBgmMillis(value: Long): String {
-    val totalSeconds = value.coerceAtLeast(0L) / 1_000L
-    val minutes = totalSeconds / 60L
-    val seconds = totalSeconds % 60L
-    return "${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
+@Composable
+private fun bgmDurationText(durationMs: Long): String {
+    val safeDurationMs = durationMs.coerceAtLeast(0L)
+    val totalSeconds = safeDurationMs / 1_000L
+    return if (totalSeconds < 60L) {
+        val tenths = ((safeDurationMs + 50L) / 100L).toInt()
+        val secondsText = "${tenths / 10}.${tenths % 10}"
+        stringResource(Res.string.bgm_duration_seconds, secondsText)
+    } else {
+        stringResource(
+            Res.string.bgm_duration_minutes,
+            (totalSeconds / 60L).toInt(),
+            (totalSeconds % 60L).toInt()
+        )
+    }
 }
 
 @Composable

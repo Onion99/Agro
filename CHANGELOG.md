@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-07-28] - 音频消息 UI 同步
+- [修改] 更新 `ChatScreen` 中 `ChatMessageContent.Audio` 的消息卡片，改为单键播放/暂停、渐变进度条、标题/音频元数据显示，并保留复制源 JSON、保存 WAV 和播放错误提示。
+- [新增] 为新版音频消息 UI 补充 `bgm_audio_default_title`、`bgm_audio_metadata`、`bgm_copy_spec`、`bgm_save_wav` 与时长格式化多语言资源。
+- [文档] 更新 `docs/specs/Gemma4 8bit BGM JSON + MML Tracks.md`，记录音频消息 UI 行为与未改动的播放/持久化边界。
+
 ## [2026-07-27] - 8-bit BGM 生成与播放
 - [新增] 新增 `CHIPTUNE_BGM_MML` 专用聊天模式、JSON + MML parser、轨道校验、确定性 pulse/triangle/noise 合成器和 8-bit unsigned PCM WAV writer。
 - [修改] 将 `LibraryScreen` 的 Creative Nebula 入口替换为可点击的 `EightBitBgmCard`，生成结果以 `ChatMessageContent.Audio` 持久化并保留源乐谱 JSON。
