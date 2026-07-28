@@ -1,8 +1,8 @@
-# Gemma4 8bit BGM JSON + MML Tracks 与 ComposeMediaPlayer 播放实现
+# Gemma4 8bit BGM JSON + MML Tracks 与 ComposeMediaPlayer 播放路线计划
 
 > 日期: 2026-07-27  
 > 范围: `ChatViewModel` 专用会话入口、`chiptune_bgm_mml` JSON envelope、轨道级 MML、8bit renderer、ComposeMediaPlayer audio 播放与保存  
-> 状态: 首版已实现  
+> 状态: 计划稿  
 > 关联文档: `docs/designs/gemma4-8bit-bgm-generation-plan.md`、`docs/designs/gemma4-8bit-bgm-system-instruction-route-plan.md`、`docs/designs/gemma4-8bit-bgm-mml-system-instruction-route-plan.md`  
 > 外部参考: `https://github.com/kdroidFilter/ComposeMediaPlayer/blob/master/README_AUDIO.MD`
 
@@ -18,41 +18,18 @@
 
 ```mermaid
 flowchart TD
-    A[Library / Chat 入口] --> B[startChiptuneBgmConversation]
+    A[Library / Chat 入口] --> B[startChiptuneBgmMmlConversation]
     B --> C[ChatSessionMode.CHIPTUNE_BGM_MML]
     C --> D[CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION]
     D --> E[Gemma4 输出 chiptune_bgm_mml JSON]
-    E --> F[ChiptuneBgmMmlParser]
-    F --> G[MML track parser]
+    E --> F[ChiptuneBgmMmlJsonParser]
+    F --> G[BgmMmlTrackParser]
     G --> H[BgmScoreValidator]
     H --> I[8bit Synth Renderer]
     I --> J[8-bit unsigned PCM / WAV]
     J --> K[ComposeMediaPlayer AudioPlayer]
     K --> L[跨平台播放与保存]
 ```
-
-### 2.1 2026-07-27 实施结果
-
-- Library 原 `CreativeNebulaCard` 已替换为 `EightBitBgmCard`，点击后进入
-  `ChatSessionMode.CHIPTUNE_BGM_MML` 专用会话。
-- `ChatViewModel` 已接入专用 system instruction、结构化生成流式占位和最终结果分发。
-- `ChiptuneBgmMmlParser` 已实现 JSON envelope 校验、MML note/rest/drum、octave、
-  length、volume、bar 和 `[ ... ]xN` repeat 解析；短轨补 rest，长轨拒绝。
-- `EightBitBgmRenderer` 已实现 pulse1、pulse2、triangle、noise 四通道的确定性合成，
-  输出单声道 8-bit unsigned PCM WAV。
-- WAV 写入 FileKit cache 下的 `generated-bgm`，消息只持久化路径与音频元数据，并保留
-  `sourceSpecJson`。
-- `ChatScreen` 已通过 ComposeMediaPlayer audio module 提供播放/暂停切换、只读进度展示、
-  保存 WAV、复制源 JSON 和错误展示。
-
-### 2.2 2026-07-28 音频消息 UI 同步
-
-- 音频消息卡片改为单个圆形播放/暂停按钮，右侧展示标题、采样率、位深和时长，
-  并保留复制源 JSON 与保存 WAV 的图标操作。
-- 进度从可拖动 Slider 调整为细条渐变进度，减少聊天流中的操作密度；
-  播放结束或重新进入消息时仍通过 ComposeMediaPlayer 重新加载本地 WAV 路径。
-- 播放层仍沿用 `composemediaplayer-audio` 与 `BgmAudioFileStore`，本次不改变
-  `ChatMessageContent.Audio` schema、cache 写入策略或 Room 持久化结构。
 
 ## 3. 路线定位
 
@@ -324,7 +301,7 @@ ComposeMediaPlayer audio module 适合本路线的播放层，原因:
 - README_AUDIO 的格式支持表将 WAV 标为各平台本地播放支持。
 - Maven Central 信息显示许可证为 MIT，分发风险低于依赖 VLC/vlcj 的方案。
 
-### 9.2 Gradle 接入
+### 9.2 Gradle 接入计划
 
 在 `gradle/libs.versions.toml` 中新增:
 
@@ -342,11 +319,7 @@ composemediaplayer-audio = { module = "io.github.kdroidfilter:composemediaplayer
 implementation(libs.composemediaplayer.audio)
 ```
 
-兼容性验证: 2026-07-27 使用 JDK 21 对当前 Kotlin `2.3.20`、Compose Multiplatform
-`1.10.1` 工程执行 `:composeApp:compileKotlinDesktop`，`composemediaplayer-audio:0.11.1`
-及其 JVM variant 解析、编译通过，因此首版没有升级全局 Kotlin/Compose 工具链。Android
-平台所需 Media3/Compose AAR 在本机首次缓存不完整，离线 Android 编译未完成，仍需 CI
-或具备完整依赖缓存的环境执行 Android release 编译。
+兼容性注意: 2026-07-27 查验 Maven Central 时，`composemediaplayer-audio-android:0.11.1` 的 POM 依赖 Kotlin stdlib `2.4.0` 和 Compose runtime `1.11.1`。当前项目版本目录为 Kotlin `2.3.20`、Compose Multiplatform `1.10.1`，正式接入前必须做依赖解析和编译 spike。如果 KLIB metadata 或 Compose 运行时不兼容，应选择较低版本或保留现有 `expect/actual` 播放器。
 
 ### 9.3 播放封装
 
@@ -447,26 +420,30 @@ val finalContents = when (sessionMode) {
         listOf(SvgMessageParser.parseCompletedResponse(generatedResult.trim()))
     }
     ChatSessionMode.CHIPTUNE_BGM_MML -> {
-        listOf(ChiptuneBgmMessageParser.parseCompletedResponse(generatedResult.trim()))
+        listOf(ChiptuneBgmMmlMessageParser.parseCompletedResponse(generatedResult.trim()))
     }
+    ChatSessionMode.EIGHT_BIT_BGM,
     ChatSessionMode.DEFAULT -> {
         listOf(ChatMessageContent.Text(displayText()))
     }
 }
 ```
 
-如果后续落地事件 JSON 路线，则应复用当前 renderer 和音频消息 UI，区别只保留在输入 parser。
+如果 `EIGHT_BIT_BGM` JSON-event 路线已经落地，则 `CHIPTUNE_BGM_MML` 应复用同一个 renderer 和音频消息 UI，区别只在输入 parser。
 
-## 11. 实施记录
+## 11. 实施顺序
 
-1. 已新增 `CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION`。
-2. 已新增 `ChatSessionMode.CHIPTUNE_BGM_MML` 和持久化映射。
-3. 已新增 `ChiptuneBgmMmlSpec` 与 `ChiptuneMmlTrack`。
-4. 已新增 JSON envelope parser、validator 与 MML track parser。
-5. 已新增统一内部 `BgmScore`、`EightBitBgmRenderer` 和 WAV writer。
-6. 已接入 ComposeMediaPlayer audio `0.11.1` 并通过 Desktop 编译 spike。
-7. 已新增音频消息 UI 的播放、暂停、停止、seek、保存与复制 JSON。
-8. 已新增中英文 i18n、数据模型说明和自动化测试。
+1. 新增 `CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION`。
+2. 新增 `ChatSessionMode.CHIPTUNE_BGM_MML` 和持久化映射。
+3. 新增 `ChiptuneBgmMmlSpec` 与 `ChiptuneMmlTrack`。
+4. 新增 JSON envelope parser 和 validator。
+5. 新增 MML tokenizer、track parser、duration aligner。
+6. 将解析结果转换为统一 `BgmScore`。
+7. 复用或新增 `EightBitBgmRenderer` 和 WAV writer。
+8. 引入 ComposeMediaPlayer audio dependency 并做版本兼容 spike。
+9. 使用 ComposeMediaPlayer 替换或补充现有 `BgmAudioPlayer` actual 实现。
+10. 新增音频消息 UI 的播放、暂停、停止、保存、复制 JSON。
+11. 更新 `docs/agents/data-model.md`、i18n 文案和 `CHANGELOG.md`。
 
 ## 12. 验证计划
 
@@ -480,14 +457,6 @@ val finalContents = when (sessionMode) {
 - 生成 WAV 的 RIFF header、采样率、8-bit unsigned PCM 范围正确。
 - ComposeMediaPlayer 在 Android、Desktop、iOS 播放本地 WAV。
 - 播放错误能通过 error listener 显示为用户可理解的失败状态。
-
-当前自动验证结果:
-
-- `:composeApp:compileKotlinDesktop` 通过。
-- `ChiptuneBgmMmlParserTest` 5 个用例通过，覆盖协议、tempo、noise token 歧义、
-  RIFF/WAVE header、时长和确定性输出。
-- 完整 `desktopTest` 中存在 2 个既有 `AgentToolsTest` 失败，与本功能修改无关。
-- Windows 主机不能交叉编译带 cinterop 的 iOS target；Android 离线构建缺少首次下载 AAR。
 
 ## 13. 风险与缓解
 
@@ -511,9 +480,6 @@ val finalContents = when (sessionMode) {
 - 用户能暂停、停止、保存 WAV，并复制原始 JSON。
 - 文件丢失时可用 `sourceSpecJson` 重新渲染。
 - 文档、`CHANGELOG.md` 和必要数据模型说明保持同步。
-
-首版已保留 `sourceSpecJson`，但缓存文件丢失后的自动重新渲染尚未接入播放器按钮；当前可
-重新生成消息或复制源 JSON。该恢复入口列为后续增强，不影响新生成 WAV 的即时播放与保存。
 
 ## 15. 资料来源
 
