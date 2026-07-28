@@ -221,4 +221,8 @@
     <string name="bgm_audio_details">%1$d BPM · %2$d Hz · %3$d-bit</string>
     <string name="chat_running_tool">\n`[Running tool: %1$s...]`\n</string>
     <string name="chat_tool_completed">\n`[Tool \'%1$s\' completed]`\n</string>
+    <string name="library_8bit_bgm">8-Bit BGM</string>
+    <string name="library_8bit_bgm_desc">Generate loopable chiptune JSON and render it as playable WAV audio.</string>
+    <string name="library_8bit_chip_label">8BIT</string>
+
 </resources>

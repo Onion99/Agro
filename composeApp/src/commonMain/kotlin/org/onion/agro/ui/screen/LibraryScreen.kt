@@ -516,15 +516,120 @@ fun EightBitBgmCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {}
 ) {
-    ThemedBentoCard(
+    val primaryColor = AppTheme.colors.tertiary
+    val secondaryColor = AppTheme.colors.primary
+
+    BentoCard(
         modifier = modifier,
-        title = stringResource(Res.string.library_chiptune_bgm),
-        desc = stringResource(Res.string.library_chiptune_bgm_desc),
-        icon = Icons.Filled.MusicNote,
-        backgroundColorBlob = AppTheme.colors.tertiary,
-        blobCenter = { w, _ -> Offset(w + 20.dp.value, -20.dp.value) },
+        backgroundColorBlob = primaryColor,
+        blobCenter = { w, h -> Offset(w * 0.82f, h * 0.18f) },
+        blobRadiusDp = 112f,
+        blobHoverRadiusDp = 172f,
+        blobAlpha = 0.2f,
+        blobHoverAlpha = 0.32f,
         onClick = onClick
-    )
+    ) { isHovered ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(AppTheme.spacing.md),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(
+                            color = primaryColor.copy(alpha = if (isHovered) 0.24f else 0.15f),
+                            shape = AppTheme.shape.full
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.MusicNote,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = primaryColor
+                    )
+                }
+
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = AppTheme.colors.outline.copy(alpha = if (isHovered) 0.55f else 0.3f)
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .clip(AppTheme.shape.md)
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                secondaryColor.copy(alpha = 0.12f),
+                                primaryColor.copy(alpha = 0.18f)
+                            )
+                        )
+                    )
+                    .border(
+                        width = 0.5.dp,
+                        color = primaryColor.copy(alpha = if (isHovered) 0.28f else 0.14f),
+                        shape = AppTheme.shape.md
+                    )
+            ) {
+                val label = stringResource(Res.string.library_8bit_chip_label)
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val strokeWidth = 2.dp.toPx()
+                    val columns = 12
+                    val step = size.width / columns
+                    for (index in 0 until columns) {
+                        val heightFraction = if (index % 3 == 0) 0.68f else if (index % 2 == 0) 0.42f else 0.28f
+                        val x = step * index + step * 0.5f
+                        drawLine(
+                            color = if (index % 2 == 0) primaryColor.copy(alpha = 0.72f) else secondaryColor.copy(alpha = 0.62f),
+                            start = Offset(x, size.height * (1f - heightFraction)),
+                            end = Offset(x, size.height * 0.76f),
+                            strokeWidth = strokeWidth
+                        )
+                    }
+                }
+                Text(
+                    text = label,
+                    style = AppTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppTheme.colors.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs)
+                )
+            }
+
+            Column {
+                Text(
+                    text = stringResource(Res.string.library_8bit_bgm),
+                    style = AppTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppTheme.colors.onSurface
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = stringResource(Res.string.library_chiptune_bgm_desc),
+                    style = AppTheme.typography.bodySmall,
+                    color = AppTheme.colors.onSurfaceVariant,
+                    lineHeight = AppTheme.typography.bodySmall.lineHeight * 1.2f
+                )
+            }
+        }
+    }
 }
 
 @Composable

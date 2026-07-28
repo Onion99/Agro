@@ -220,4 +220,8 @@
     <string name="bgm_save_failed">BGM 保存失败</string>
     <string name="bgm_player_error">播放失败：%1$s</string>
     <string name="bgm_audio_details">%1$d BPM · %2$d Hz · %3$d-bit</string>
+    <string name="library_8bit_bgm">8-Bit BGM</string>
+    <string name="library_8bit_bgm_desc">生成可循环芯片音乐 JSON，并渲染为可播放的 WAV 音频。</string>
+    <string name="library_8bit_chip_label">8BIT</string>
+
 </resources>
