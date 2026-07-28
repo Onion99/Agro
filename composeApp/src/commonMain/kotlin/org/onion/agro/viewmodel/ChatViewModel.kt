@@ -44,6 +44,7 @@ import org.onion.agro.database.ChatToolLogEntity
 import org.onion.agro.native.llm.KEY_THINK_MODE
 import org.onion.agro.message.SvgMessageParser
 import org.onion.agro.message.ChiptuneBgmMessageParser
+import org.onion.agro.message.LottieMessageParser
 
 class ChatViewModel(
     private val chatHistoryRepository: ChatHistoryRepository
@@ -694,6 +695,37 @@ class ChatViewModel(
         }
     }
 
+    fun startLottieAnimationConversation() {
+        viewModelScope.launch(Dispatchers.Default) {
+            if (isGenerating.value) {
+                stopGeneration()
+            }
+            try {
+                selectConversationContext(
+                    mode = ChatSessionMode.LOTTIE_ANIMATION,
+                    systemInstruction = LOTTIE_ANIMATION_SYSTEM_INSTRUCTION
+                )
+                recreateLmConversation(
+                    systemInstruction = LOTTIE_ANIMATION_SYSTEM_INSTRUCTION,
+                    enableConstrainedDecoding = true
+                )
+                activeSessionId.value = chatHistoryRepository.createSession(
+                    title = getString(Res.string.library_lottie_animation),
+                    mode = ChatSessionMode.LOTTIE_ANIMATION,
+                    systemInstruction = appliedSystemInstructionOrEmpty()
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+                lmConversation = null
+                markConversationContextApplied(false)
+            } finally {
+                _currentChatMessages.clear()
+                isGenerating.value = false
+                isInferenceOn = false
+            }
+        }
+    }
+
     fun stopGeneration() {
         isGenerating.value = false
         if (lmConversation != null && llmPath.value.isNotBlank()) {
@@ -788,6 +820,7 @@ class ChatViewModel(
             ChatSessionMode.DEFAULT -> systemPrompt.value
             ChatSessionMode.SVG_IMAGE -> SVG_IMAGE_SYSTEM_INSTRUCTION
             ChatSessionMode.CHIPTUNE_BGM_MML -> CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION
+            ChatSessionMode.LOTTIE_ANIMATION -> LOTTIE_ANIMATION_SYSTEM_INSTRUCTION
         }
     }
 
@@ -795,6 +828,7 @@ class ChatViewModel(
         return when (this) {
             "svg_image" -> ChatSessionMode.SVG_IMAGE
             "chiptune_bgm_mml" -> ChatSessionMode.CHIPTUNE_BGM_MML
+            "lottie_animation" -> ChatSessionMode.LOTTIE_ANIMATION
             else -> ChatSessionMode.DEFAULT
         }
     }
@@ -1072,6 +1106,9 @@ class ChatViewModel(
                     ChatSessionMode.CHIPTUNE_BGM_MML -> {
                         listOf(ChiptuneBgmMessageParser.parseCompletedResponse(generatedResult.trim()))
                     }
+                    ChatSessionMode.LOTTIE_ANIMATION -> {
+                        listOf(LottieMessageParser.parseCompletedResponse(generatedResult.trim()))
+                    }
                     ChatSessionMode.DEFAULT -> {
                         listOf(ChatMessageContent.Text(displayText()))
                     }
@@ -1197,9 +1234,71 @@ class ChatViewModel(
             - Compose exactly loopBars measures in 4/4 and make the phrase loop seamlessly.
             - Do not include comments, trailing commas, or text outside the JSON object.
         """.trimIndent()
+
+        val LOTTIE_ANIMATION_SYSTEM_INSTRUCTION = """
+            You are ${BuildConfig.APP_NAME}'s dedicated Lottie micro-animation planner.
+
+            Your only job is to output one raw valid JSON object containing a constrained
+            Lottie animation specification. Do not output full Lottie layers. Do not use
+            Markdown fences or add prose outside the JSON.
+
+            Use this JSON structure exactly:
+            {
+              "type": "lottie_animation_spec",
+              "schemaVersion": 1,
+              "title": "Success Check",
+              "seed": 12345,
+              "canvas": {
+                "width": 240,
+                "height": 240,
+                "background": "transparent"
+              },
+              "fps": 60,
+              "durationMs": 1200,
+              "loop": false,
+              "kind": "success_check",
+              "palette": {
+                "primary": "#22C55E",
+                "secondary": "#DCFCE7",
+                "accent": "#FFFFFF"
+              },
+              "motion": {
+                "style": "draw_then_pop",
+                "intensity": 0.72,
+                "staggerMs": 120
+              },
+              "stroke": {
+                "width": 10,
+                "lineCap": "round"
+              }
+            }
+
+            Rules:
+            - type must be "lottie_animation_spec" and schemaVersion must be 1.
+            - width and height must be 64..512 and should usually be 240.
+            - fps must be 24, 30, or 60.
+            - durationMs must be 300..3000.
+            - kind must be one of: loading_spinner, success_check, error_cross,
+              progress_dots, pulse_badge, empty_state_sparkle.
+            - loading_spinner, progress_dots, and pulse_badge should usually loop.
+            - success_check, error_cross, and empty_state_sparkle should usually not loop.
+            - loading_spinner styles: spin_arc, orbit_dots.
+            - success_check styles: draw_then_pop, circle_then_check.
+            - error_cross styles: draw_then_shake, cross_fade_in.
+            - progress_dots styles: stagger_bounce, stagger_fade.
+            - pulse_badge styles: soft_pulse, ripple.
+            - empty_state_sparkle styles: float_sparkle, fade_sparkle.
+            - colors must be #RRGGBB hex strings.
+            - stroke.width must be 1..32 and lineCap must be butt, round, or square.
+            - Do not output Lottie layers, assets, images, fonts, text layers, expressions,
+              masks, scripts, base64, URLs, file paths, or Markdown.
+            - Do not include comments, trailing commas, or text outside the JSON object.
+        """.trimIndent()
     }
 
     private fun ChatSessionMode.isStructuredGenerationMode(): Boolean {
-        return this == ChatSessionMode.SVG_IMAGE || this == ChatSessionMode.CHIPTUNE_BGM_MML
+        return this == ChatSessionMode.SVG_IMAGE ||
+                this == ChatSessionMode.CHIPTUNE_BGM_MML ||
+                this == ChatSessionMode.LOTTIE_ANIMATION
     }
 }

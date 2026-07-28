@@ -54,6 +54,20 @@ sealed interface ChatMessageContent {
     ) : ChatMessageContent
 
     @Serializable
+    @SerialName(TYPE_LOTTIE_ANIMATION)
+    data class LottieAnimation(
+        val json: String,
+        val title: String,
+        val width: Int,
+        val height: Int,
+        val durationMs: Long,
+        val fps: Int,
+        val loop: Boolean,
+        val sourceSpecJson: String? = null,
+        override val schemaVersion: Int = CURRENT_SCHEMA_VERSION
+    ) : ChatMessageContent
+
+    @Serializable
     @SerialName(TYPE_UNSUPPORTED)
     data class Unsupported(
         val declaredType: String,
@@ -68,6 +82,7 @@ sealed interface ChatMessageContent {
         const val TYPE_RASTER_IMAGE = "raster_image"
         const val TYPE_SVG_IMAGE = "svg_image"
         const val TYPE_AUDIO = "audio"
+        const val TYPE_LOTTIE_ANIMATION = "lottie_animation"
         const val TYPE_UNSUPPORTED = "unsupported"
     }
 }

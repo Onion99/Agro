@@ -113,6 +113,11 @@ import kotlinx.coroutines.withContext
 import io.github.vinceglb.filekit.FileKit
 import io.github.vinceglb.filekit.dialogs.openFileSaver
 import io.github.vinceglb.filekit.write
+import io.github.alexzhirkevich.compottie.Compottie
+import io.github.alexzhirkevich.compottie.LottieCompositionSpec
+import io.github.alexzhirkevich.compottie.animateLottieCompositionAsState
+import io.github.alexzhirkevich.compottie.rememberLottieComposition
+import io.github.alexzhirkevich.compottie.rememberLottiePainter
 import io.github.kdroidfilter.composemediaplayer.audio.AudioPlayerState
 import io.github.kdroidfilter.composemediaplayer.audio.ErrorListener
 import io.github.kdroidfilter.composemediaplayer.audio.rememberAudioPlayerLiveState
@@ -130,6 +135,8 @@ import agro.composeapp.generated.resources.chat_context_default_title
 import agro.composeapp.generated.resources.chat_context_bgm_description
 import agro.composeapp.generated.resources.chat_context_bgm_title
 import agro.composeapp.generated.resources.chat_context_expand
+import agro.composeapp.generated.resources.chat_context_lottie_description
+import agro.composeapp.generated.resources.chat_context_lottie_title
 import agro.composeapp.generated.resources.chat_context_not_applied
 import agro.composeapp.generated.resources.chat_context_svg_description
 import agro.composeapp.generated.resources.chat_context_svg_title
@@ -171,6 +178,16 @@ import agro.composeapp.generated.resources.bgm_player_error
 import agro.composeapp.generated.resources.bgm_save_wav
 import agro.composeapp.generated.resources.bgm_save_failed
 import agro.composeapp.generated.resources.bgm_saved
+import agro.composeapp.generated.resources.lottie_animation_metadata
+import agro.composeapp.generated.resources.lottie_animation_default_title
+import agro.composeapp.generated.resources.lottie_copy_json
+import agro.composeapp.generated.resources.lottie_copy_spec
+import agro.composeapp.generated.resources.lottie_duration_minutes
+import agro.composeapp.generated.resources.lottie_duration_seconds
+import agro.composeapp.generated.resources.lottie_render_failed
+import agro.composeapp.generated.resources.lottie_save_failed
+import agro.composeapp.generated.resources.lottie_save_json
+import agro.composeapp.generated.resources.lottie_saved
 import agro.composeapp.generated.resources.user_image
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
@@ -394,11 +411,16 @@ private fun ConversationContextHeader(
             Res.string.chat_context_bgm_title,
             BuildConfig.APP_NAME
         )
+        ChatSessionMode.LOTTIE_ANIMATION -> stringResource(
+            Res.string.chat_context_lottie_title,
+            BuildConfig.APP_NAME
+        )
     }
     val description = when (context.mode) {
         ChatSessionMode.DEFAULT -> stringResource(Res.string.chat_context_default_description)
         ChatSessionMode.SVG_IMAGE -> stringResource(Res.string.chat_context_svg_description)
         ChatSessionMode.CHIPTUNE_BGM_MML -> stringResource(Res.string.chat_context_bgm_description)
+        ChatSessionMode.LOTTIE_ANIMATION -> stringResource(Res.string.chat_context_lottie_description)
     }
     val modeIcon = when (context.mode) {
         ChatSessionMode.DEFAULT -> Icons.Filled.AutoAwesome
@@ -998,6 +1020,21 @@ private fun ChatMessagesList(
                                 }
                             }
                         },
+                        onSaveLottie = { lottie ->
+                            coroutineScope.launch {
+                                runCatching {
+                                    val file = FileKit.openFileSaver(
+                                        suggestedName = lottie.title.ifBlank { "lottie_${message.id}" },
+                                        extension = "json"
+                                    ) ?: return@launch
+                                    file.write(lottie.json.encodeToByteArray())
+                                }.onSuccess {
+                                    snackbarHostState.showSnackbar(getString(Res.string.lottie_saved))
+                                }.onFailure {
+                                    snackbarHostState.showSnackbar(getString(Res.string.lottie_save_failed))
+                                }
+                            }
+                        },
                         onRegenerate = if (message.metadata?.containsKey("prompt") == true) {
                             {
                                 if (chatViewModel.isGenerating.value) {
@@ -1104,6 +1141,7 @@ fun ChatBubble(
     onSaveImage: ((ByteArray) -> Unit)? = null,
     onSaveSvg: ((String) -> Unit)? = null,
     onSaveAudio: ((ChatMessageContent.Audio) -> Unit)? = null,
+    onSaveLottie: ((ChatMessageContent.LottieAnimation) -> Unit)? = null,
     onRegenerate: (() -> Unit)? = null,
     onCopyText: ((String) -> Unit)? = null
 ) {
@@ -1148,6 +1186,7 @@ fun ChatBubble(
                         onSaveImage = onSaveImage,
                         onSaveSvg = onSaveSvg,
                         onSaveAudio = onSaveAudio,
+                        onSaveLottie = onSaveLottie,
                         onRegenerate = onRegenerate,
                         onCopyText = onCopyText,
                         isSingle = true
@@ -1178,6 +1217,7 @@ fun ChatBubble(
                         onSaveImage = onSaveImage,
                         onSaveSvg = onSaveSvg,
                         onSaveAudio = onSaveAudio,
+                        onSaveLottie = onSaveLottie,
                         onRegenerate = onRegenerate,
                         onCopyText = onCopyText,
                         isSingle = false
@@ -1211,6 +1251,7 @@ fun ChatBubble(
                         onSaveImage = onSaveImage,
                         onSaveSvg = onSaveSvg,
                         onSaveAudio = onSaveAudio,
+                        onSaveLottie = onSaveLottie,
                         onRegenerate = onRegenerate,
                         onCopyText = onCopyText,
                         isSingle = true
@@ -1292,6 +1333,7 @@ fun ChatBubble(
                                 onSaveImage = onSaveImage,
                                 onSaveSvg = onSaveSvg,
                                 onSaveAudio = onSaveAudio,
+                                onSaveLottie = onSaveLottie,
                                 onRegenerate = onRegenerate,
                                 onCopyText = onCopyText,
                                 isSingle = false
@@ -1310,6 +1352,7 @@ private fun MessageContentList(
     onSaveImage: ((ByteArray) -> Unit)?,
     onSaveSvg: ((String) -> Unit)?,
     onSaveAudio: ((ChatMessageContent.Audio) -> Unit)?,
+    onSaveLottie: ((ChatMessageContent.LottieAnimation) -> Unit)?,
     onRegenerate: (() -> Unit)?,
     onCopyText: ((String) -> Unit)?,
     isSingle: Boolean
@@ -1367,6 +1410,13 @@ private fun MessageContentList(
                         AudioMessageContent(
                             content = content,
                             onSaveAudio = onSaveAudio,
+                            onCopyText = onCopyText
+                        )
+                    }
+                    is ChatMessageContent.LottieAnimation -> {
+                        LottieAnimationMessageContent(
+                            content = content,
+                            onSaveLottie = onSaveLottie,
                             onCopyText = onCopyText
                         )
                     }
@@ -1549,6 +1599,207 @@ private fun SvgImageMessageContent(
             onCopy = onCopyText?.let { copy -> { copy(content.svg) } },
             onSave = onSaveSvg?.let { save -> { save(content.svg) } },
             modifier = Modifier.align(Alignment.TopEnd)
+        )
+    }
+}
+
+@Composable
+private fun LottieAnimationMessageContent(
+    content: ChatMessageContent.LottieAnimation,
+    onSaveLottie: ((ChatMessageContent.LottieAnimation) -> Unit)?,
+    onCopyText: ((String) -> Unit)?
+) {
+    val compositionResult = rememberLottieComposition {
+        LottieCompositionSpec.JsonString(content.json)
+    }
+    val composition by compositionResult
+    val iterations = if (content.loop) {
+        Compottie.IterateForever
+    } else {
+        1
+    }
+    val progress by animateLottieCompositionAsState(
+        composition = composition,
+        iterations = iterations
+    )
+    val ratio = (content.width.toFloat() / content.height.toFloat()).takeIf {
+        it.isFinite() && it > 0f
+    } ?: 1f
+    val title = content.title.ifBlank {
+        stringResource(Res.string.lottie_animation_default_title)
+    }
+    val metadata = stringResource(
+        Res.string.lottie_animation_metadata,
+        content.width,
+        content.height,
+        content.fps,
+        lottieDurationText(content.durationMs)
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        AppTheme.colors.surfaceContainerLow.copy(alpha = 0.62f),
+                        AppTheme.colors.secondaryContainer.copy(alpha = 0.28f)
+                    )
+                ),
+                shape = AppTheme.shape.md
+            )
+            .border(
+                width = AppTheme.size.borderWidthThin,
+                color = AppTheme.colors.secondary.copy(alpha = 0.2f),
+                shape = AppTheme.shape.md
+            )
+            .padding(AppTheme.spacing.md),
+        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(ratio)
+                .clip(AppTheme.shape.md)
+                .background(AppTheme.colors.surfaceContainerLowest.copy(alpha = 0.58f))
+        ) {
+            when {
+                compositionResult.isFailure -> {
+                    Text(
+                        text = stringResource(Res.string.lottie_render_failed),
+                        style = AppTheme.typography.bodySmall,
+                        color = AppTheme.colors.error,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(AppTheme.spacing.md)
+                    )
+                }
+                composition == null -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(AppTheme.size.iconLarge),
+                        color = AppTheme.colors.primary,
+                        strokeWidth = AppTheme.size.borderWidth
+                    )
+                }
+                else -> {
+                    Image(
+                        painter = rememberLottiePainter(
+                            composition = composition,
+                            progress = { progress }
+                        ),
+                        contentDescription = title,
+                        alignment = Alignment.Center,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+
+            LottieContentActions(
+                content = content,
+                onSaveLottie = onSaveLottie,
+                onCopyText = onCopyText,
+                modifier = Modifier.align(Alignment.TopEnd)
+            )
+        }
+
+        Column(
+            verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs)
+        ) {
+            Text(
+                text = title,
+                style = AppTheme.typography.labelMedium,
+                color = AppTheme.colors.onSurface,
+                maxLines = 1
+            )
+            Text(
+                text = metadata,
+                style = AppTheme.typography.bodySmall,
+                color = AppTheme.colors.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun LottieContentActions(
+    content: ChatMessageContent.LottieAnimation,
+    onSaveLottie: ((ChatMessageContent.LottieAnimation) -> Unit)?,
+    onCopyText: ((String) -> Unit)?,
+    modifier: Modifier = Modifier
+) {
+    val sourceSpecJson = content.sourceSpecJson
+    if (onCopyText == null && onSaveLottie == null) return
+
+    Row(
+        modifier = modifier
+            .padding(AppTheme.spacing.sm)
+            .background(
+                color = AppTheme.colors.surface.copy(alpha = 0.78f),
+                shape = AppTheme.shape.full
+            )
+            .padding(AppTheme.spacing.xs),
+        horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (onCopyText != null) {
+            IconButton(
+                onClick = { onCopyText(content.json) },
+                modifier = Modifier.size(AppTheme.size.iconButtonSmall)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.ContentCopy,
+                    contentDescription = stringResource(Res.string.lottie_copy_json),
+                    tint = AppTheme.colors.primary,
+                    modifier = Modifier.size(AppTheme.size.iconSmall)
+                )
+            }
+        }
+        if (!sourceSpecJson.isNullOrBlank() && onCopyText != null) {
+            IconButton(
+                onClick = { onCopyText(sourceSpecJson) },
+                modifier = Modifier.size(AppTheme.size.iconButtonSmall)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.FileDownload,
+                    contentDescription = stringResource(Res.string.lottie_copy_spec),
+                    tint = AppTheme.colors.secondary,
+                    modifier = Modifier.size(AppTheme.size.iconSmall)
+                )
+            }
+        }
+        if (onSaveLottie != null) {
+            IconButton(
+                onClick = { onSaveLottie(content) },
+                modifier = Modifier.size(AppTheme.size.iconButtonSmall)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.SaveAlt,
+                    contentDescription = stringResource(Res.string.lottie_save_json),
+                    tint = AppTheme.colors.primary,
+                    modifier = Modifier.size(AppTheme.size.iconSmall)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun lottieDurationText(durationMs: Long): String {
+    val safeDurationMs = durationMs.coerceAtLeast(0L)
+    val totalSeconds = safeDurationMs / 1_000L
+    return if (totalSeconds < 60L) {
+        val tenths = ((safeDurationMs + 50L) / 100L).toInt()
+        val secondsText = "${tenths / 10}.${tenths % 10}"
+        stringResource(Res.string.lottie_duration_seconds, secondsText)
+    } else {
+        stringResource(
+            Res.string.lottie_duration_minutes,
+            (totalSeconds / 60L).toInt(),
+            (totalSeconds % 60L).toInt()
         )
     }
 }

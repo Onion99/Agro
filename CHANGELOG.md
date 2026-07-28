@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-07-28] - Lottie JSON 动画生成卡片与本地预览
+- [新增] 新增 `LOTTIE_ANIMATION` 专用聊天模式、`lottie_animation_spec` 数据模型、parser/validator、确定性 `LottieJsonBuilder` 与 `LottieMessageParser`，将模型输出转换为可持久化的 `ChatMessageContent.LottieAnimation`。
+- [修改] 将 `LibraryScreen` 的 `LogicVesselCard` 改为可点击的 Lottie 动画生成入口，并在 `ChatViewModel` 中接入专用 system instruction 和结构化响应分发。
+- [新增] 在 `ChatScreen` 中使用 Compottie `JsonString` 预览本地 Lottie JSON，支持复制最终 JSON、复制原始 spec 与保存 `.json`，并补齐中英文 i18n 资源。
+- [测试] 新增 `LottieMessageParserTest`，覆盖合法构建、确定性输出、Markdown 包裹拒绝、完整 layer tree 拒绝、motion style 不匹配和 duration 越界。
+- [文档] 更新 `docs/designs/gemma4-lottie-json-compottie-route-plan.md` 与 `docs/agents/data-model.md`，记录首版落地范围、持久化边界和未纳入首版的 dotLottie/外部资源能力。
+
+## [2026-07-28] - Lottie JSON 动画生成路线计划
+- [文档] 新增 `docs/designs/gemma4-lottie-json-compottie-route-plan.md`，规划参考 8-bit BGM JSON + MML 路线并基于现有 `compottie` 库实现 Lottie 微动画生成，明确 `lottie_animation_spec`、本地 Lottie JSON builder、Compottie `JsonString` 渲染、dotLottie/网络资源边界、消息持久化、验证计划与风险缓解。
+
 ## [2026-07-28] - GRIS 风格会话上下文标题
 - [修改] 按聚焦、克制与直觉交互原则重设计 `ChatScreen.ConversationContextHeader`，收敛为单层身份画幅、状态化模式图标、GRIS 水彩地平线和独立 Ghost 历史入口。
 - [修改] 移除渐变徽章、状态点、箭头底座和嵌套指令卡片；展开区域保留柔和动画、系统指令选择、滚动、复制及会话切换自动收起行为。

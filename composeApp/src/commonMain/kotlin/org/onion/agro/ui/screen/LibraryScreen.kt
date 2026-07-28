@@ -17,7 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AllInclusive
-import androidx.compose.material.icons.filled.DataObject
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Icon
@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
@@ -155,6 +156,10 @@ fun LibraryScreen(
                         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)
                     ) {
                         LogicVesselCard(
+                            onClick = {
+                                chatViewModel.startLottieAnimationConversation()
+                                onOpenChat()
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(200.dp)
@@ -209,6 +214,10 @@ fun LibraryScreen(
                         horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.md)
                     ) {
                         LogicVesselCard(
+                            onClick = {
+                                chatViewModel.startLottieAnimationConversation()
+                                onOpenChat()
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(180.dp)
@@ -499,16 +508,145 @@ private fun formatLibraryHistoryTime(updatedAtMillis: Long): String {
 
 @Composable
 fun LogicVesselCard(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
 ) {
-    ThemedBentoCard(
+    val primaryColor = AppTheme.colors.secondary
+    val secondaryColor = AppTheme.colors.primary
+    val surfaceColor = AppTheme.colors.surface
+
+    BentoCard(
         modifier = modifier,
-        title = stringResource(Res.string.library_logic_vessel),
-        desc = stringResource(Res.string.library_logic_desc),
-        icon = Icons.Filled.DataObject,
-        backgroundColorBlob = AppTheme.colors.secondary,
-        blobCenter = { _, h -> Offset(-20.dp.value, h + 20.dp.value) }
-    )
+        backgroundColorBlob = primaryColor,
+        blobCenter = { _, h -> Offset(-20.dp.value, h + 20.dp.value) },
+        blobRadiusDp = 124f,
+        blobHoverRadiusDp = 190f,
+        blobAlpha = 0.18f,
+        blobHoverAlpha = 0.31f,
+        onClick = onClick
+    ) { isHovered ->
+        val arcSweep by animateFloatAsState(
+            targetValue = if (isHovered) 320f else 235f,
+            animationSpec = tween(durationMillis = 360)
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(AppTheme.spacing.md),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(
+                            color = primaryColor.copy(alpha = if (isHovered) 0.24f else 0.15f),
+                            shape = AppTheme.shape.full
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = primaryColor
+                    )
+                }
+
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = AppTheme.colors.outline.copy(alpha = if (isHovered) 0.55f else 0.3f)
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .clip(AppTheme.shape.md)
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                secondaryColor.copy(alpha = 0.12f),
+                                primaryColor.copy(alpha = 0.18f)
+                            )
+                        )
+                    )
+                    .border(
+                        width = 0.5.dp,
+                        color = primaryColor.copy(alpha = if (isHovered) 0.28f else 0.14f),
+                        shape = AppTheme.shape.md
+                    )
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val strokeWidth = 2.dp.toPx()
+                    val radius = size.minDimension * 0.28f
+                    val center = Offset(size.width * 0.28f, size.height * 0.52f)
+                    drawCircle(
+                        color = surfaceColor.copy(alpha = 0.72f),
+                        radius = radius,
+                        center = center
+                    )
+                    drawArc(
+                        color = primaryColor.copy(alpha = 0.78f),
+                        startAngle = -90f,
+                        sweepAngle = arcSweep,
+                        useCenter = false,
+                        topLeft = Offset(center.x - radius, center.y - radius),
+                        size = Size(radius * 2f, radius * 2f),
+                        style = Stroke(width = strokeWidth)
+                    )
+                    repeat(3) { index ->
+                        val x = size.width * (0.52f + index * 0.12f)
+                        val dotRadius = size.minDimension * (0.06f + index * 0.008f)
+                        drawCircle(
+                            color = if (index % 2 == 0) {
+                                secondaryColor.copy(alpha = 0.72f)
+                            } else {
+                                primaryColor.copy(alpha = 0.68f)
+                            },
+                            radius = dotRadius,
+                            center = Offset(x, size.height * 0.52f)
+                        )
+                    }
+                }
+                Text(
+                    text = stringResource(Res.string.library_lottie_json_label),
+                    style = AppTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppTheme.colors.onSurfaceVariant.copy(alpha = 0.68f),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs)
+                )
+            }
+
+            Column {
+                Text(
+                    text = stringResource(Res.string.library_lottie_animation),
+                    style = AppTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppTheme.colors.onSurface
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = stringResource(Res.string.library_lottie_animation_desc),
+                    style = AppTheme.typography.bodySmall,
+                    color = AppTheme.colors.onSurfaceVariant,
+                    lineHeight = AppTheme.typography.bodySmall.lineHeight * 1.2f
+                )
+            }
+        }
+    }
 }
 
 @Composable

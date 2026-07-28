@@ -152,6 +152,17 @@ class ChatHistoryRepository(
                                 appendLine("```")
                             }
                         }
+                        is ChatMessageContent.LottieAnimation -> {
+                            appendLine("[Lottie animation: ${content.title}]")
+                            appendLine("```json")
+                            appendLine(content.json)
+                            appendLine("```")
+                            content.sourceSpecJson?.let { source ->
+                                appendLine("```json")
+                                appendLine(source)
+                                appendLine("```")
+                            }
+                        }
                         is ChatMessageContent.Unsupported -> {
                             appendLine("```")
                             appendLine(content.rawPayload)
@@ -289,6 +300,22 @@ class ChatHistoryRepository(
                     )
                 )
             )
+            is ChatMessageContent.LottieAnimation -> EncodedContent(
+                type = ChatMessageContent.TYPE_LOTTIE_ANIMATION,
+                schemaVersion = schemaVersion,
+                payloadJson = this@ChatHistoryRepository.json.encodeToString(
+                    LottieAnimationPayload(
+                        json = this.json,
+                        title = title,
+                        width = width,
+                        height = height,
+                        durationMs = durationMs,
+                        fps = fps,
+                        loop = loop,
+                        sourceSpecJson = sourceSpecJson
+                    )
+                )
+            )
             is ChatMessageContent.Unsupported -> EncodedContent(
                 type = ChatMessageContent.TYPE_UNSUPPORTED,
                 schemaVersion = schemaVersion,
@@ -359,6 +386,20 @@ class ChatHistoryRepository(
                     schemaVersion = schemaVersion
                 )
             }.getOrElse { unsupported("invalid_audio_payload") }
+            ChatMessageContent.TYPE_LOTTIE_ANIMATION -> runCatching {
+                val payload = json.decodeFromString<LottieAnimationPayload>(payloadJson)
+                ChatMessageContent.LottieAnimation(
+                    json = payload.json,
+                    title = payload.title,
+                    width = payload.width,
+                    height = payload.height,
+                    durationMs = payload.durationMs,
+                    fps = payload.fps,
+                    loop = payload.loop,
+                    sourceSpecJson = payload.sourceSpecJson,
+                    schemaVersion = schemaVersion
+                )
+            }.getOrElse { unsupported("invalid_lottie_payload") }
             ChatMessageContent.TYPE_UNSUPPORTED -> runCatching {
                 val payload = json.decodeFromString<UnsupportedPayload>(payloadJson)
                 ChatMessageContent.Unsupported(
@@ -387,6 +428,7 @@ class ChatHistoryRepository(
                 is ChatMessageContent.Text -> content.text
                 is ChatMessageContent.Unsupported -> content.rawPayload
                 is ChatMessageContent.Audio -> content.title
+                is ChatMessageContent.LottieAnimation -> content.title
                 is ChatMessageContent.RasterImage,
                 is ChatMessageContent.SvgImage -> null
             }
@@ -405,6 +447,7 @@ class ChatHistoryRepository(
         ChatSessionMode.DEFAULT -> "default"
         ChatSessionMode.SVG_IMAGE -> "svg_image"
         ChatSessionMode.CHIPTUNE_BGM_MML -> "chiptune_bgm_mml"
+        ChatSessionMode.LOTTIE_ANIMATION -> "lottie_animation"
     }
 
     private data class EncodedContent(
@@ -449,6 +492,18 @@ class ChatHistoryRepository(
         val loopBars: Int? = null,
         val loopStartMs: Long = 0,
         val loopEndMs: Long = durationMs,
+        val sourceSpecJson: String? = null
+    )
+
+    @Serializable
+    private data class LottieAnimationPayload(
+        val json: String,
+        val title: String,
+        val width: Int,
+        val height: Int,
+        val durationMs: Long,
+        val fps: Int,
+        val loop: Boolean,
         val sourceSpecJson: String? = null
     )
 
