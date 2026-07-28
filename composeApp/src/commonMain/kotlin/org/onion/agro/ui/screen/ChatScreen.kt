@@ -92,6 +92,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -399,191 +400,214 @@ private fun ConversationContextHeader(
         ChatSessionMode.SVG_IMAGE -> stringResource(Res.string.chat_context_svg_description)
         ChatSessionMode.CHIPTUNE_BGM_MML -> stringResource(Res.string.chat_context_bgm_description)
     }
+    val modeIcon = when (context.mode) {
+        ChatSessionMode.DEFAULT -> Icons.Filled.AutoAwesome
+        ChatSessionMode.SVG_IMAGE -> Icons.Filled.Photo
+        ChatSessionMode.CHIPTUNE_BGM_MML -> Icons.Filled.MusicNote
+    }
+    val statusText = if (context.isApplied) {
+        description
+    } else {
+        stringResource(Res.string.chat_context_not_applied)
+    }
+    val toggleDescription = stringResource(
+        if (expanded) {
+            Res.string.chat_context_collapse
+        } else {
+            Res.string.chat_context_expand
+        }
+    )
     val statusColor = if (context.isApplied) {
         AppTheme.colors.primary
     } else {
         AppTheme.colors.tertiary
+    }
+    val horizontalPadding = if (isSingle) {
+        AppTheme.spacing.containerPaddingMobile
+    } else {
+        AppTheme.spacing.containerPaddingDesktop
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(
-                start = if (isSingle) {
-                    AppTheme.spacing.containerPaddingMobile
-                } else {
-                    AppTheme.spacing.containerPaddingDesktop
-                },
-                end = if (isSingle) {
-                    AppTheme.spacing.containerPaddingMobile
-                } else {
-                    AppTheme.spacing.containerPaddingDesktop
-                },
+                start = horizontalPadding,
+                end = horizontalPadding,
                 top = AppTheme.spacing.sm
             ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .widthIn(max = AppTheme.size.maxContentWidth)
-                    .fillMaxWidth()
-                    .padding(horizontal = AppTheme.size.iconButton)
-            ) {
-                Row(
+        Row(
+            modifier = Modifier
+                .widthIn(max = AppTheme.size.maxContentWidth)
+                .fillMaxWidth(if (isSingle) 1f else 0.72f),
+            horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .glassSurface(
-                            shape = AppTheme.shape.full,
+                            shape = AppTheme.shape.xxl,
                             alpha = AppTheme.elevation.glassSurfaceAlpha,
                             borderAlpha = AppTheme.elevation.glassBorderAlpha
                         )
-                        .background(
-                            color = AppTheme.colors.surfaceContainerLow.copy(alpha = 0.42f),
-                            shape = AppTheme.shape.full
-                        )
                         .clickable { expanded = !expanded }
-                        .padding(
-                            horizontal = AppTheme.spacing.md,
-                            vertical = AppTheme.spacing.sm
-                        ),
-                    horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
-                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = when (context.mode) {
-                            ChatSessionMode.DEFAULT -> Icons.Filled.AutoAwesome
-                            ChatSessionMode.SVG_IMAGE -> Icons.Filled.Photo
-                            ChatSessionMode.CHIPTUNE_BGM_MML -> Icons.Filled.MusicNote
-                        },
-                        contentDescription = null,
-                        tint = AppTheme.colors.primary,
-                        modifier = Modifier.size(AppTheme.size.icon)
-                    )
-                    Box(
+                    Row(
                         modifier = Modifier
-                            .size(AppTheme.spacing.sm)
-                            .background(statusColor, AppTheme.shape.full)
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = title,
-                            style = AppTheme.typography.labelMedium,
-                            color = AppTheme.colors.onSurface,
-                            maxLines = 1
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = AppTheme.spacing.md,
+                                vertical = AppTheme.spacing.sm
+                            ),
+                        horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = modeIcon,
+                            contentDescription = null,
+                            tint = statusColor,
+                            modifier = Modifier.size(AppTheme.size.icon)
                         )
-                        if (!isSingle) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs)
+                        ) {
                             Text(
-                                text = if (context.isApplied) {
-                                    description
-                                } else {
-                                    stringResource(Res.string.chat_context_not_applied)
-                                },
+                                text = title,
+                                style = AppTheme.typography.bodyMedium,
+                                color = AppTheme.colors.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = statusText,
                                 style = AppTheme.typography.bodySmall,
                                 color = AppTheme.colors.onSurfaceVariant,
-                                maxLines = 1
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Icon(
+                            imageVector = if (expanded) {
+                                Icons.Filled.ExpandLess
+                            } else {
+                                Icons.Filled.ExpandMore
+                            },
+                            contentDescription = toggleDescription,
+                            tint = AppTheme.colors.onSurfaceVariant,
+                            modifier = Modifier.size(AppTheme.size.icon)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(AppTheme.size.borderWidth)
+                            .watercolorGradient(
+                                startColor = AppTheme.colors.primary.copy(alpha = 0.36f),
+                                endColor = AppTheme.colors.secondary.copy(alpha = 0.22f)
+                            )
+                    )
+                }
+
+                AnimatedVisibility(
+                    visible = expanded,
+                    enter = Animations.fadeInExpand(),
+                    exit = Animations.fadeOutShrink()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(top = AppTheme.spacing.sm)
+                            .fillMaxWidth()
+                            .glassSurface(
+                                shape = AppTheme.shape.xxl,
+                                alpha = AppTheme.elevation.glassSurfaceAlpha,
+                                borderAlpha = AppTheme.elevation.glassBorderAlpha
+                            )
+                            .padding(AppTheme.spacing.md),
+                        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(Res.string.chat_context_current_instruction),
+                                style = AppTheme.typography.labelMedium,
+                                color = AppTheme.colors.primary
+                            )
+                            IconButton(
+                                onClick = {
+                                    onCopyInstruction(context.systemInstruction)
+                                },
+                                modifier = Modifier.size(AppTheme.size.iconButtonSmall)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.ContentCopy,
+                                    contentDescription = stringResource(
+                                        Res.string.chat_context_copy
+                                    ),
+                                    tint = AppTheme.colors.primary,
+                                    modifier = Modifier.size(AppTheme.size.iconSmall)
+                                )
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(AppTheme.size.borderWidthThin)
+                                .background(
+                                    AppTheme.colors.outlineVariant.copy(alpha = 0.44f)
+                                )
+                        )
+                        SelectionContainer {
+                            Text(
+                                text = context.systemInstruction,
+                                style = AppTheme.typography.bodySmall,
+                                color = AppTheme.colors.onSurfaceVariant,
+                                modifier = Modifier
+                                    .heightIn(
+                                        max = if (isSingle) {
+                                            AppTheme.size.cardSmall
+                                        } else {
+                                            AppTheme.size.cardMedium
+                                        }
+                                    )
+                                    .verticalScroll(rememberScrollState())
                             )
                         }
                     }
-                    Icon(
-                        imageVector = if (expanded) {
-                            Icons.Filled.ExpandLess
-                        } else {
-                            Icons.Filled.ExpandMore
-                        },
-                        contentDescription = stringResource(
-                            if (expanded) {
-                                Res.string.chat_context_collapse
-                            } else {
-                                Res.string.chat_context_expand
-                            }
-                        ),
-                        tint = AppTheme.colors.onSurfaceVariant,
-                        modifier = Modifier.size(AppTheme.size.icon)
-                    )
                 }
             }
 
             Box(
                 modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .glassSurface(
-                        shape = AppTheme.shape.full,
-                        alpha = AppTheme.elevation.glassSurfaceAlpha,
-                        borderAlpha = AppTheme.elevation.glassBorderAlpha
+                    .padding(top = AppTheme.spacing.xs)
+                    .size(AppTheme.size.buttonHeight)
+                    .clip(AppTheme.shape.full)
+                    .background(
+                        AppTheme.colors.surfaceContainerLow.copy(alpha = 0.42f)
                     )
+                    .border(
+                        width = AppTheme.size.borderWidthThin,
+                        color = AppTheme.colors.outlineVariant.copy(alpha = 0.56f),
+                        shape = AppTheme.shape.full
+                    ),
+                contentAlignment = Alignment.Center
             ) {
                 IconButton(
                     onClick = onHistoryClick,
-                    modifier = Modifier.size(AppTheme.size.iconButton)
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     Icon(
                         imageVector = Icons.Filled.History,
                         contentDescription = stringResource(Res.string.history),
                         tint = AppTheme.colors.primary,
                         modifier = Modifier.size(AppTheme.size.icon)
-                    )
-                }
-            }
-        }
-
-        AnimatedVisibility(
-            visible = expanded,
-            enter = Animations.slideFadeIn(),
-            exit = Animations.slideFadeOut()
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(top = AppTheme.spacing.sm)
-                    .fillMaxWidth(if (isSingle) 1f else 0.72f)
-                    .widthIn(max = AppTheme.size.maxContentWidth)
-                    .glassSurface(
-                        shape = AppTheme.shape.xl,
-                        alpha = AppTheme.elevation.glassSurfaceAlpha,
-                        borderAlpha = AppTheme.elevation.glassBorderAlpha
-                    )
-                    .background(
-                        color = AppTheme.colors.surfaceContainerLowest.copy(alpha = 0.72f),
-                        shape = AppTheme.shape.xl
-                    )
-                    .padding(AppTheme.spacing.md),
-                verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(Res.string.chat_context_current_instruction),
-                        style = AppTheme.typography.labelMedium,
-                        color = AppTheme.colors.primary
-                    )
-                    IconButton(
-                        onClick = {
-                            onCopyInstruction(context.systemInstruction)
-                        },
-                        modifier = Modifier.size(AppTheme.size.iconButtonSmall)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.ContentCopy,
-                            contentDescription = stringResource(
-                                Res.string.chat_context_copy
-                            ),
-                            tint = AppTheme.colors.primary,
-                            modifier = Modifier.size(AppTheme.size.iconSmall)
-                        )
-                    }
-                }
-                SelectionContainer {
-                    Text(
-                        text = context.systemInstruction,
-                        style = AppTheme.typography.bodySmall,
-                        color = AppTheme.colors.onSurfaceVariant,
-                        modifier = Modifier
-                            .heightIn(max = AppTheme.size.cardMedium)
-                            .verticalScroll(rememberScrollState())
                     )
                 }
             }

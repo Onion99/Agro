@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-07-28] - GRIS 风格会话上下文标题
+- [修改] 按聚焦、克制与直觉交互原则重设计 `ChatScreen.ConversationContextHeader`，收敛为单层身份画幅、状态化模式图标、GRIS 水彩地平线和独立 Ghost 历史入口。
+- [修改] 移除渐变徽章、状态点、箭头底座和嵌套指令卡片；展开区域保留柔和动画、系统指令选择、滚动、复制及会话切换自动收起行为。
+- [文档] 新增 `docs/designs/conversation-context-header.md`，记录乔布斯式产品原则、视觉减法、响应式策略、主题 token 与交互边界。
+
 ## [2026-07-28] - 音频消息 UI 同步
 - [修改] 更新 `ChatScreen` 中 `ChatMessageContent.Audio` 的消息卡片，改为单键播放/暂停、渐变进度条、标题/音频元数据显示，并保留复制源 JSON、保存 WAV 和播放错误提示。
 - [新增] 为新版音频消息 UI 补充 `bgm_audio_default_title`、`bgm_audio_metadata`、`bgm_copy_spec`、`bgm_save_wav` 与时长格式化多语言资源。
