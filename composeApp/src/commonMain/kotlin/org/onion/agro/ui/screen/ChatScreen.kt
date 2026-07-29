@@ -215,12 +215,22 @@ fun ChatScreen(
         val chatViewModel = koinInject<ChatViewModel>()
         val chatMessages = chatViewModel.currentChatMessages
         val conversationContext by chatViewModel.conversationContext
+        val activeSessionId = chatViewModel.activeSessionId.value
+        var isContextDetailsVisible by remember(activeSessionId, conversationContext.systemInstruction) {
+            mutableStateOf(false)
+        }
         var text by remember { mutableStateOf("") }
         val keyboardController = LocalSoftwareKeyboardController.current
         val focusManager = LocalFocusManager.current
         val clipboardManager = LocalClipboardManager.current
         val snackbarHostState = remember { SnackbarHostState() }
         val coroutineScope = rememberCoroutineScope()
+        val copyContextInstruction: (String) -> Unit = { instruction ->
+            clipboardManager.setText(AnnotatedString(instruction))
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar(getString(Res.string.text_copied))
+            }
+        }
 
         // Ambient Watercolor Background Effects
         Box(modifier = Modifier.fillMaxSize().zIndex(0f)) {
@@ -279,13 +289,17 @@ fun ChatScreen(
         ) {
             ConversationContextHeader(
                 context = conversationContext,
-                activeSessionId = chatViewModel.activeSessionId.value,
-                onHistoryClick = { chatViewModel.setHistoryVisible(true) },
-                onCopyInstruction = { instruction ->
-                    clipboardManager.setText(AnnotatedString(instruction))
-                    coroutineScope.launch {
-                        snackbarHostState.showSnackbar(getString(Res.string.text_copied))
+                expanded = isContextDetailsVisible,
+                onToggleExpanded = {
+                    val shouldShowDetails = !isContextDetailsVisible
+                    isContextDetailsVisible = shouldShowDetails
+                    if (shouldShowDetails) {
+                        chatViewModel.setHistoryVisible(false)
                     }
+                },
+                onHistoryClick = {
+                    isContextDetailsVisible = false
+                    chatViewModel.setHistoryVisible(true)
                 }
             )
 
@@ -332,6 +346,21 @@ fun ChatScreen(
                     focusManager.clearFocus()
                 },
                 onTextChange = { text = it }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = isContextDetailsVisible,
+            enter = Animations.fadeInExpand(),
+            exit = Animations.fadeOutShrink(),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .zIndex(35f)
+        ) {
+            ConversationContextDetailsOverlay(
+                context = conversationContext,
+                onCopyInstruction = copyContextInstruction
             )
         }
 
@@ -390,14 +419,11 @@ fun ChatScreen(
 @Composable
 private fun ConversationContextHeader(
     context: ConversationContextState,
-    activeSessionId: String?,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
     onHistoryClick: () -> Unit,
-    onCopyInstruction: (String) -> Unit
 ) {
     val isSingle = AppTheme.contentType == ContentType.Single
-    var expanded by remember(activeSessionId, context.systemInstruction) {
-        mutableStateOf(false)
-    }
     val title = when (context.mode) {
         ChatSessionMode.DEFAULT -> stringResource(
             Res.string.chat_context_default_title,
@@ -426,6 +452,7 @@ private fun ConversationContextHeader(
         ChatSessionMode.DEFAULT -> Icons.Filled.AutoAwesome
         ChatSessionMode.SVG_IMAGE -> Icons.Filled.Photo
         ChatSessionMode.CHIPTUNE_BGM_MML -> Icons.Filled.MusicNote
+        else -> Icons.Filled.AutoAwesome
     }
     val statusText = if (context.isApplied) {
         description
@@ -476,7 +503,7 @@ private fun ConversationContextHeader(
                             alpha = AppTheme.elevation.glassSurfaceAlpha,
                             borderAlpha = AppTheme.elevation.glassBorderAlpha
                         )
-                        .clickable { expanded = !expanded }
+                        .clickable(onClick = onToggleExpanded)
                 ) {
                     Row(
                         modifier = Modifier
@@ -531,78 +558,8 @@ private fun ConversationContextHeader(
                             .watercolorGradient(
                                 startColor = AppTheme.colors.primary.copy(alpha = 0.36f),
                                 endColor = AppTheme.colors.secondary.copy(alpha = 0.22f)
-                            )
-                    )
-                }
-
-                AnimatedVisibility(
-                    visible = expanded,
-                    enter = Animations.fadeInExpand(),
-                    exit = Animations.fadeOutShrink()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .padding(top = AppTheme.spacing.sm)
-                            .fillMaxWidth()
-                            .glassSurface(
-                                shape = AppTheme.shape.xxl,
-                                alpha = AppTheme.elevation.glassSurfaceAlpha,
-                                borderAlpha = AppTheme.elevation.glassBorderAlpha
-                            )
-                            .padding(AppTheme.spacing.md),
-                        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = stringResource(Res.string.chat_context_current_instruction),
-                                style = AppTheme.typography.labelMedium,
-                                color = AppTheme.colors.primary
-                            )
-                            IconButton(
-                                onClick = {
-                                    onCopyInstruction(context.systemInstruction)
-                                },
-                                modifier = Modifier.size(AppTheme.size.iconButtonSmall)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.ContentCopy,
-                                    contentDescription = stringResource(
-                                        Res.string.chat_context_copy
-                                    ),
-                                    tint = AppTheme.colors.primary,
-                                    modifier = Modifier.size(AppTheme.size.iconSmall)
-                                )
-                            }
-                        }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(AppTheme.size.borderWidthThin)
-                                .background(
-                                    AppTheme.colors.outlineVariant.copy(alpha = 0.44f)
-                                )
                         )
-                        SelectionContainer {
-                            Text(
-                                text = context.systemInstruction,
-                                style = AppTheme.typography.bodySmall,
-                                color = AppTheme.colors.onSurfaceVariant,
-                                modifier = Modifier
-                                    .heightIn(
-                                        max = if (isSingle) {
-                                            AppTheme.size.cardSmall
-                                        } else {
-                                            AppTheme.size.cardMedium
-                                        }
-                                    )
-                                    .verticalScroll(rememberScrollState())
-                            )
-                        }
-                    }
+                    )
                 }
             }
 
@@ -632,6 +589,98 @@ private fun ConversationContextHeader(
                         modifier = Modifier.size(AppTheme.size.icon)
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConversationContextDetailsOverlay(
+    context: ConversationContextState,
+    onCopyInstruction: (String) -> Unit
+) {
+    val isSingle = AppTheme.contentType == ContentType.Single
+    val horizontalPadding = if (isSingle) {
+        AppTheme.spacing.containerPaddingMobile
+    } else {
+        AppTheme.spacing.containerPaddingDesktop
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = horizontalPadding,
+                end = horizontalPadding,
+                top = AppTheme.spacing.sm + AppTheme.size.buttonHeight + AppTheme.spacing.md
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = AppTheme.size.maxContentWidth)
+                .fillMaxWidth(if (isSingle) 1f else 0.72f)
+                .glassSurface(
+                    shape = AppTheme.shape.xxl,
+                    alpha = AppTheme.elevation.glassSurfaceAlpha,
+                    borderAlpha = AppTheme.elevation.glassBorderAlpha
+                )
+                .background(
+                    color = AppTheme.colors.surface.copy(alpha = 0.82f),
+                    shape = AppTheme.shape.xxl
+                )
+                .padding(AppTheme.spacing.md),
+            verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(Res.string.chat_context_current_instruction),
+                    style = AppTheme.typography.labelMedium,
+                    color = AppTheme.colors.primary
+                )
+                IconButton(
+                    onClick = {
+                        onCopyInstruction(context.systemInstruction)
+                    },
+                    modifier = Modifier.size(AppTheme.size.iconButtonSmall)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ContentCopy,
+                        contentDescription = stringResource(
+                            Res.string.chat_context_copy
+                        ),
+                        tint = AppTheme.colors.primary,
+                        modifier = Modifier.size(AppTheme.size.iconSmall)
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(AppTheme.size.borderWidthThin)
+                    .background(
+                        AppTheme.colors.outlineVariant.copy(alpha = 0.44f)
+                    )
+            )
+            SelectionContainer {
+                Text(
+                    text = context.systemInstruction,
+                    style = AppTheme.typography.bodySmall,
+                    color = AppTheme.colors.onSurfaceVariant,
+                    modifier = Modifier
+                        .heightIn(
+                            max = if (isSingle) {
+                                AppTheme.size.cardSmall
+                            } else {
+                                AppTheme.size.cardMedium
+                            }
+                        )
+                        .verticalScroll(rememberScrollState())
+                )
             }
         }
     }

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-07-29] - 会话上下文详情浮层展示
+- [修改] 更新 `composeApp/src/commonMain/kotlin/org/onion/agro/ui/screen/ChatScreen.kt`，将 `ConversationContextHeader` 的 system instruction 展开内容从主 `Column` 布局流中移出，避免挤占 `ChatMessagesList` 的 `weight(1f)` 空间。
+- [新增] 新增 `ConversationContextDetailsOverlay` 根级浮层，复用原有复制、选择、滚动和展开动画，并与 `ChatHistoryPanel` 保持互斥展示。
+- [文档] 新增 `docs/designs/conversation-context-header.md`，记录上下文标题栏的浮层层级、响应式宽度和交互边界。
 ## [2026-07-28] - Lottie JSON 动画生成卡片与本地预览
 - [新增] 新增 `LOTTIE_ANIMATION` 专用聊天模式、`lottie_animation_spec` 数据模型、parser/validator、确定性 `LottieJsonBuilder` 与 `LottieMessageParser`，将模型输出转换为可持久化的 `ChatMessageContent.LottieAnimation`。
 - [修改] 将 `LibraryScreen` 的 `LogicVesselCard` 改为可点击的 Lottie 动画生成入口，并在 `ChatViewModel` 中接入专用 system instruction 和结构化响应分发。
