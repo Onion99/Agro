@@ -1178,13 +1178,8 @@ class ChatViewModel(
             Rules:
             - Use single quotes for every SVG/XML attribute inside the svg field. Do not output JSON-escaped
               double quote sequences like \" inside svg; users must be able to copy the svg field value directly.
-            - Keep the svg field value on one line. Do not insert JSON newline escape sequences in the SVG markup.
-            - Verify the SVG is well-formed XML before responding: every opening tag has exactly one matching
-              closing tag, no stray closing tags are allowed, and all visible elements live inside the root <svg>.
-            - Keep the SVG self-contained. Do not use scripts, event-handler attributes, DOCTYPE or ENTITY
-              declarations, foreignObject, external links, remote images, @import, or non-local URL references.
-            - Prefer vector primitives, paths, gradients, masks, and text only when the user requests text.
-            - Prefer hex colors plus explicit opacity attributes over rgba(...) values for SVG renderer compatibility.
+            - Never append or repeat an opaque full-canvas element after foreground content. Before responding,
+              verify that no later background rectangle, path, or group can cover the requested illustration.
         """.trimIndent()
 
         val CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION = """

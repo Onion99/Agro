@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-02] - SVG 图像背景层级修复
+- [修复] 更新 `ChatViewModel` 的 SVG 图像生成指令，明确 SVG painter's order、背景位置及响应前覆盖检查，避免模型将不透明全画布背景追加到前景后导致预览只显示背景色。
+- [文档] 更新 `docs/specs/svg-image-library-card.md`，记录 SVG 背景与前景的绘制顺序约束。
+
 ## [2026-08-02] - iOS 8-bit BGM 本地播放修复
 - [修复] `ChatScreen` 通过 `BgmAudioFileStore.playbackUri()` 将缓存 WAV 的裸文件路径转换为 percent-encoded `file://` URI，再交给 ComposeMediaPlayer，修复 iOS AVFoundation 将 `/var/...` 识别为 unsupported URL 并报 `-1002` 的问题。
 - [修复] 新增 `BgmAudioPlayer` 平台播放边界；iOS 改用 `AVAudioPlayer` 直接加载本地 WAV，绕过 ComposeMediaPlayer `AVPlayer` 路径对 8-bit PCM 触发的 `FigFile -17913`，Android/Desktop 保持 ComposeMediaPlayer 后端。
