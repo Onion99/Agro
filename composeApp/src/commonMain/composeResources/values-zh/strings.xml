@@ -199,6 +199,11 @@
     <string name="library_svg_image">SVG 图像</string>
     <string name="library_svg_desc">生成结构化 JSON 与安全自包含的 SVG 作品。</string>
     <string name="library_forge_vessel">锻造新容器</string>
+    <string name="library_forge_idea_title">分享你的想法</string>
+    <string name="library_forge_idea_description">想为 MineAgent 增添新的能力？欢迎前往项目主页，向作者分享你的使用场景或改进建议。</string>
+    <string name="library_forge_idea_project_url">https://github.com/Onion99/Agro</string>
+    <string name="library_forge_idea_open_project">前往项目主页</string>
+    <string name="library_forge_idea_dismiss">稍后再说</string>
     <string name="chat_context_default_title">%1$s · 通用助手</string>
     <string name="chat_context_svg_title">%1$s · SVG 图像生成器</string>
     <string name="chat_context_bgm_title">%1$s · 8-bit BGM 作曲器</string>

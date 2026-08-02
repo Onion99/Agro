@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-02] - 创意反馈入口
+- [修改] 更新 `LibraryScreen.kt` 中的 `ForgeNewVesselCard`，点击后展示带背景模糊的创意反馈弹窗，并提供 MineAgent 项目主页跳转入口。
+- [新增] 为弹窗补充中英文标题、说明、项目地址和操作按钮资源。
+
 ## [2026-08-02] - Library card hover illustration animations
 - [修改] 更新 `LibraryScreen.kt` 中的 `EightBitBgmCard` 与 `SvgImageCard`，为均衡器柱与 SVG 预览图加入由 `isHovered` 驱动的 360ms 补间动画，使其与 `LottieAnimationCard` 的悬停反馈保持一致。
 

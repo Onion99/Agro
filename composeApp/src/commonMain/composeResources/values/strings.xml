@@ -198,6 +198,11 @@
     <string name="library_svg_image">SVG Image</string>
     <string name="library_svg_desc">Generate structured JSON with safe, self-contained SVG artwork.</string>
     <string name="library_forge_vessel">Forge New Vessel</string>
+    <string name="library_forge_idea_title">Share your idea</string>
+    <string name="library_forge_idea_description">Have an idea for a new MineAgent capability? Visit the project page and share your use case or suggestion with the author.</string>
+    <string name="library_forge_idea_project_url">https://github.com/Onion99/Agro</string>
+    <string name="library_forge_idea_open_project">Open project page</string>
+    <string name="library_forge_idea_dismiss">Maybe later</string>
     <string name="chat_context_default_title">%1$s · General Assistant</string>
     <string name="chat_context_svg_title">%1$s · SVG Image Generator</string>
     <string name="chat_context_bgm_title">%1$s · 8-bit BGM Composer</string>
