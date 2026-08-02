@@ -77,10 +77,13 @@ kotlin {
         iosSimulatorArm64()
     ).forEach { iosTarget ->
         val nativeLibDir = if (iosTarget.name == "iosArm64") "ios-device" else "ios-simulator"
+        val nativeArchive = rootProject.file(
+            "cpp/libs/$nativeLibDir/lib$iosLiteRtLmLibraryName.a"
+        )
         iosTarget.binaries.all {
             linkerOpts += listOf(
-                "-L${rootProject.file("cpp/libs/$nativeLibDir")}",
-                "-l$iosLiteRtLmLibraryName",
+                "-force_load",
+                nativeArchive.absolutePath,
                 "-framework", "Foundation",
                 "-framework", "Accelerate",
                 "-framework", "Metal",

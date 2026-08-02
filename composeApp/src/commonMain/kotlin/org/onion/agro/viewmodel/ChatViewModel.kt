@@ -358,8 +358,9 @@ class ChatViewModel(
                 lmConversation = lmEngine?.createConversation(
                     systemInstruction = currentSystemInstruction(),
                     toolsDescriptionJsonString = agentTools.getToolsDescriptionJson(),
-                    enableConversationConstrainedDecoding =
-                        _conversationContext.value.mode.isStructuredGenerationMode(),
+                    enableConversationConstrainedDecoding = resolveConstrainedDecoding(
+                        _conversationContext.value.mode.isStructuredGenerationMode()
+                    ),
                     samplerConfig = com.google.ai.edge.litertlm.SamplerConfig(
                         temperature = temperature.value.toDouble(),
                         topP = topP.value.toDouble(),
@@ -452,8 +453,9 @@ class ChatViewModel(
                     lmConversation = engine.createConversation(
                         systemInstruction = instruction,
                         toolsDescriptionJsonString = agentTools.getToolsDescriptionJson(),
-                        enableConversationConstrainedDecoding =
-                            _conversationContext.value.mode.isStructuredGenerationMode(),
+                        enableConversationConstrainedDecoding = resolveConstrainedDecoding(
+                            _conversationContext.value.mode.isStructuredGenerationMode()
+                        ),
                         samplerConfig = com.google.ai.edge.litertlm.SamplerConfig(
                             temperature = temperature.value.toDouble(),
                             topP = topP.value.toDouble(),
@@ -839,6 +841,10 @@ class ChatViewModel(
         }
     }
 
+    private fun resolveConstrainedDecoding(requested: Boolean): Boolean {
+        return requested && !getPlatform().isIOS
+    }
+
     private suspend fun recreateLmConversation(
         systemInstruction: String = currentSystemInstruction(),
         enableConstrainedDecoding: Boolean =
@@ -848,7 +854,9 @@ class ChatViewModel(
         lmConversation = lmEngine?.createConversation(
             systemInstruction = systemInstruction,
             toolsDescriptionJsonString = agentTools.getToolsDescriptionJson(),
-            enableConversationConstrainedDecoding = enableConstrainedDecoding,
+            enableConversationConstrainedDecoding = resolveConstrainedDecoding(
+                enableConstrainedDecoding
+            ),
             samplerConfig = com.google.ai.edge.litertlm.SamplerConfig(
                 temperature = temperature.value.toDouble(),
                 topP = topP.value.toDouble(),

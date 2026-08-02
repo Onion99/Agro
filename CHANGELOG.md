@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-02] - iOS LiteRT LM 会话重建兼容修复
+- [修复] `ChatViewModel` 在 iOS 静态 archive 构建中创建 LiteRT LM 会话时禁用 constrained decoding，避免 SVG、8-bit BGM、Lottie 和应用会话设置重建路径请求已由 `LITERT_LM_FST_CONSTRAINTS_DISABLED` 禁用的 FST provider 而失败。
+- [文档] 更新 `docs/specs/ios-litertlm-platform.md`，说明 iOS 结构化模式保留 prompt 和 parser 校验，但不启用原生 constrained decoding 的运行时边界。
+
 ## [2026-08-02] - iOS Kotlin/Native KLIB ABI 兼容修复
 - [修改] 将 Kotlin 升级至 `2.4.0`，并将 Compose Multiplatform 和 Compose Hot Reload 升级至 `1.11.1`，使 Kotlin/Native 能消费 FileKit `0.14.2` 与 Compose Media Player `0.11.3` 发布的 ABI `2.4.0` iOS KLIB。
 - [修改] 保留 FileKit `0.14.2` 和 Compose Media Player `0.11.3`，对齐其声明的 Kotlin `2.4.0`、Compose runtime `1.11.1` 依赖约束。

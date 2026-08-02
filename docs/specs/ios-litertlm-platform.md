@@ -46,5 +46,5 @@ This note records the iOS native bridge for `LiteRtLmJni`.
 ## Current Limitations
 
 - The LiteRT LM C API does not expose the common API's `mainBackendNumThreads`, `audioBackendNumThreads`, `channelsJsonString`, `overwritePromptTemplate`, or `visualTokenBudget` inputs. The iOS bridge currently ignores those fields.
-- Gemma FST constrained decoding through `LiteRtLmGemmaModelConstraintProvider` is disabled for iOS static archive builds. Calls that request that path fail with the upstream build-time disabled error rather than requiring an extra prebuilt dylib in the app bundle.
+- Gemma FST constrained decoding through `LiteRtLmGemmaModelConstraintProvider` is disabled for iOS static archive builds. `ChatViewModel` therefore creates iOS conversations with constrained decoding disabled, including structured SVG, chiptune, and Lottie modes; their prompt-level JSON contracts and post-generation parsers remain active. Direct C API callers must likewise pass `false` until the provider dylib is bundled and linked.
 - Intel iOS Simulator is not supported by the current target matrix. Reintroducing it requires adding `iosX64`, an `ios_x86_64` Bazel build, and an explicit simulator archive merge step.
