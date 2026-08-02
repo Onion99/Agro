@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-02] - AppIcon 主题化创意启动页
+- [修改] 重构 `SplashScreen.kt` 并新增 `SplashArtwork.kt`，移除宇航员图片，以“玻璃容器中的本地智能种子”为叙事，结合主题水彩潮汐、GRIS 风格线稿地景、AppIcon 分层生长动画、毛玻璃容器和单栏/双栏响应式构图。
+- [文档] 新增 `docs/designs/app-icon-theme-splash-screen.md`，记录品牌叙事、主题 token 落地、动画阶段与跨平台边界。
+
 ## [2026-08-02] - 创意反馈入口
 - [修改] 更新 `LibraryScreen.kt` 中的 `ForgeNewVesselCard`，点击后展示带背景模糊的创意反馈弹窗，并提供 MineAgent 项目主页跳转入口。
 - [新增] 为弹窗补充中英文标题、说明、项目地址和操作按钮资源。
