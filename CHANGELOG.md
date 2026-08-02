@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-02] - iOS Kotlin/Native KLIB ABI 兼容修复
+- [修改] 将 Kotlin 升级至 `2.4.0`，并将 Compose Multiplatform 和 Compose Hot Reload 升级至 `1.11.1`，使 Kotlin/Native 能消费 FileKit `0.14.2` 与 Compose Media Player `0.11.3` 发布的 ABI `2.4.0` iOS KLIB。
+- [修改] 保留 FileKit `0.14.2` 和 Compose Media Player `0.11.3`，对齐其声明的 Kotlin `2.4.0`、Compose runtime `1.11.1` 依赖约束。
+- [修改] 将 Coil 升级至 `3.5.0`，匹配 FileKit `0.14.2` 所需版本并对齐 Compose Multiplatform `1.11.1` 的 Skiko `0.144.6`。
+- [修复] 更新 `build-logic/convention` 的 Compose Compiler DSL，使用 Kotlin `2.4.0` 所需的 `stabilityConfigurationFiles` 配置 `stability_config.conf`。
+- [修复] 恢复 `systemFileSystem` expect/actual 边界与 Okio `use` 扩展，避免 commonMain 直接依赖平台细化的 `FileSystem.SYSTEM`，并修复 Kotlin `2.4.0` 下 `FileHandle` 的关闭调用。
+- [修复] 恢复被误删的 `SplashArtwork.kt` 和启动页设计文档，重新提供 `SplashScreen` 所引用的 `AnimatedAppIconSeed`。
+- [文档] 更新 `docs/specs/ios-litertlm-platform.md`，记录 iOS KLIB ABI `2.4.0` 的 Kotlin、Compose Multiplatform、FileKit 和 Compose Media Player 版本边界。
+
 ## [2026-08-02] - AppIcon 主题化创意启动页
 - [修改] 重构 `SplashScreen.kt` 并新增 `SplashArtwork.kt`，移除宇航员图片，以“玻璃容器中的本地智能种子”为叙事，结合主题水彩潮汐、GRIS 风格线稿地景、AppIcon 分层生长动画、毛玻璃容器和单栏/双栏响应式构图。
 - [文档] 新增 `docs/designs/app-icon-theme-splash-screen.md`，记录品牌叙事、主题 token 落地、动画阶段与跨平台边界。
