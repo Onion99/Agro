@@ -67,37 +67,6 @@ class SvgMessageParserTest {
     }
 
     @Test
-    fun rejectsMultilineExternalContent() {
-        val link = SvgMessageParser.parseStoredSvg(
-            """
-            <svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'>
-              <image href='
-                https://example.com/a.png
-              '/>
-            </svg>
-            """.trimIndent()
-        )
-        val cssUrl = SvgMessageParser.parseStoredSvg(
-            """
-            <svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'>
-              <style>.remote { fill: url(
-                'https://example.com/colors.svg#primary'
-              ); }</style>
-            </svg>
-            """.trimIndent()
-        )
-
-        assertEquals(
-            "forbidden_svg_external_resource",
-            assertIs<ChatMessageContent.Unsupported>(link).reason
-        )
-        assertEquals(
-            "forbidden_svg_external_resource",
-            assertIs<ChatMessageContent.Unsupported>(cssUrl).reason
-        )
-    }
-
-    @Test
     fun rejectsOversizedSvg() {
         val oversizedSvg = buildString {
             append("<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'>")

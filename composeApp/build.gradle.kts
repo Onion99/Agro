@@ -76,13 +76,7 @@ kotlin {
         iosArm64(),
         iosSimulatorArm64()
     ).forEach { iosTarget ->
-        val isDeviceTarget = iosTarget.name == "iosArm64"
-        val nativeLibDir = if (isDeviceTarget) "ios-device" else "ios-simulator"
-        val nativeLibValidationTask = if (isDeviceTarget) {
-            "validateIosLiteRtLmNativeLibDevice"
-        } else {
-            "validateIosLiteRtLmNativeLibSimulatorArm64"
-        }
+        val nativeLibDir = if (iosTarget.name == "iosArm64") "ios-device" else "ios-simulator"
         iosTarget.binaries.all {
             linkerOpts += listOf(
                 "-L${rootProject.file("cpp/libs/$nativeLibDir")}",
@@ -92,7 +86,7 @@ kotlin {
                 "-framework", "Metal",
                 "-framework", "MetalPerformanceShaders",
             )
-            linkTaskProvider.configure { dependsOn(nativeLibValidationTask) }
+            linkTaskProvider.configure { dependsOn("validateIosLiteRtLmNativeLibs") }
         }
         iosTarget.binaries.framework {
             baseName = "ComposeApp"
@@ -584,42 +578,28 @@ abstract class BuildIosLiteRtLmNativeArchiveTask : DefaultTask() {
         )
         println("Building iOS LiteRT LM native archive with Bazel (target=$target, config=$config)")
 
-        try {
-            execOps.exec {
-                workingDir = workDir
-                commandLine(
-                    bazelisk,
-                    "build",
-                    target,
-                    "--config=$config",
-                    "--macos_sdk_version=$macosSdk",
-                    "--ios_sdk_version=$iosSdk"
-                )
-                isIgnoreExitValue = false
-            }
-
-            val sourceArchive = File(workDir, bazelOutputPath.get())
-            if (!sourceArchive.exists()) {
-                throw GradleException("Bazel output archive not found: ${sourceArchive.absolutePath}")
-            }
-
-            val outputFile = outputArchive.get().asFile
-            outputFile.parentFile.mkdirs()
-            sourceArchive.copyTo(outputFile, overwrite = true)
-            println("Copied iOS LiteRT LM native archive: ${sourceArchive.absolutePath} -> ${outputFile.absolutePath}")
-        } finally {
-            val shutdownResult = execOps.exec {
-                workingDir = workDir
-                commandLine(bazelisk, "shutdown")
-                isIgnoreExitValue = true
-            }
-            if (shutdownResult.exitValue != 0) {
-                logger.warn(
-                    "Bazel server shutdown returned exit code ${shutdownResult.exitValue}; " +
-                        "the iOS archive result is unaffected."
-                )
-            }
+        execOps.exec {
+            workingDir = workDir
+            commandLine(
+                bazelisk,
+                "build",
+                target,
+                "--config=$config",
+                "--macos_sdk_version=$macosSdk",
+                "--ios_sdk_version=$iosSdk"
+            )
+            isIgnoreExitValue = false
         }
+
+        val sourceArchive = File(workDir, bazelOutputPath.get())
+        if (!sourceArchive.exists()) {
+            throw GradleException("Bazel output archive not found: ${sourceArchive.absolutePath}")
+        }
+
+        val outputFile = outputArchive.get().asFile
+        outputFile.parentFile.mkdirs()
+        sourceArchive.copyTo(outputFile, overwrite = true)
+        println("Copied iOS LiteRT LM native archive: ${sourceArchive.absolutePath} -> ${outputFile.absolutePath}")
     }
 
     private fun requireBazeliskExecutableAvailable(executable: String): String {
@@ -792,8 +772,6 @@ val buildIosLiteRtLmNativeLibDevice by tasks.registering(BuildIosLiteRtLmNativeA
     outputArchive.set(rootProject.layout.projectDirectory.file("cpp/libs/ios-device/lib$iosLiteRtLmLibraryName.a"))
     // 避免gradle没声明完整Bazel源码输入时,错误复用旧的.a文件
     outputs.upToDateWhen { false }
-    // 在耗时的 Bazel 构建前先暴露 cinterop/Kotlin 编译错误。
-    mustRunAfter("compileKotlinIosArm64")
     onlyIf {
         System.getProperty("os.name").lowercase(Locale.getDefault()).contains("mac")
     }
@@ -814,7 +792,6 @@ val buildIosLiteRtLmNativeLibSimulatorArm64 by tasks.registering(BuildIosLiteRtL
     outputArchive.set(rootProject.layout.projectDirectory.file("cpp/libs/ios-simulator/lib$iosLiteRtLmLibraryName.a"))
     outputs.upToDateWhen { false }
     mustRunAfter(buildIosLiteRtLmNativeLibDevice)
-    mustRunAfter("compileKotlinIosSimulatorArm64")
     onlyIf {
         System.getProperty("os.name").lowercase(Locale.getDefault()).contains("mac")
     }
@@ -926,36 +903,18 @@ tasks.matching { it.name.contains("desktopProcessResources") }.configureEach {
     dependsOn("buildNativeLibsIfNeeded")
 }
 
-val validateIosLiteRtLmNativeLibDevice by tasks.registering(ValidateIosLiteRtLmNativeLibsTask::class) {
-    dependsOn(buildIosLiteRtLmNativeLibDevice)
+tasks.register<ValidateIosLiteRtLmNativeLibsTask>("validateIosLiteRtLmNativeLibs") {
+    dependsOn("buildIosLiteRtLmNativeLibs")
     libraryName.set(iosLiteRtLmLibraryName)
     requiredDirectories.set(
         listOf(
-            rootProject.layout.projectDirectory.dir("cpp/libs/ios-device").asFile.absolutePath
-        )
-    )
-    onlyIf {
-        System.getProperty("os.name").lowercase(Locale.getDefault()).contains("mac")
-    }
-}
-
-val validateIosLiteRtLmNativeLibSimulatorArm64 by tasks.registering(ValidateIosLiteRtLmNativeLibsTask::class) {
-    dependsOn(buildIosLiteRtLmNativeLibSimulatorArm64)
-    libraryName.set(iosLiteRtLmLibraryName)
-    requiredDirectories.set(
-        listOf(
+            rootProject.layout.projectDirectory.dir("cpp/libs/ios-device").asFile.absolutePath,
             rootProject.layout.projectDirectory.dir("cpp/libs/ios-simulator").asFile.absolutePath
         )
     )
     onlyIf {
         System.getProperty("os.name").lowercase(Locale.getDefault()).contains("mac")
     }
-}
-
-tasks.register("validateIosLiteRtLmNativeLibs") {
-    group = "verification"
-    description = "Validates all LiteRT LM native libraries required by the iOS target matrix."
-    dependsOn(validateIosLiteRtLmNativeLibDevice, validateIosLiteRtLmNativeLibSimulatorArm64)
 }
 
 @CacheableTask
