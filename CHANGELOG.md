@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-02] - Library card hover illustration animations
+- [修改] 更新 `LibraryScreen.kt` 中的 `EightBitBgmCard` 与 `SvgImageCard`，为均衡器柱与 SVG 预览图加入由 `isHovered` 驱动的 360ms 补间动画，使其与 `LottieAnimationCard` 的悬停反馈保持一致。
+
 ## [2026-07-29] - 会话上下文详情浮层展示
 - [修改] 更新 `composeApp/src/commonMain/kotlin/org/onion/agro/ui/screen/ChatScreen.kt`，将 `ConversationContextHeader` 的 system instruction 展开内容从主 `Column` 布局流中移出，避免挤占 `ChatMessagesList` 的 `weight(1f)` 空间。
 - [新增] 新增 `ConversationContextDetailsOverlay` 根级浮层，复用原有复制、选择、滚动和展开动画，并与 `ChatHistoryPanel` 保持互斥展示。

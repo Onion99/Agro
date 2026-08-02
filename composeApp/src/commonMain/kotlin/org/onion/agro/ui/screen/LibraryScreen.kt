@@ -155,7 +155,7 @@ fun LibraryScreen(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)
                     ) {
-                        LogicVesselCard(
+                        LottieAnimationCard(
                             onClick = {
                                 chatViewModel.startLottieAnimationConversation()
                                 onOpenChat()
@@ -213,7 +213,7 @@ fun LibraryScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.md)
                     ) {
-                        LogicVesselCard(
+                        LottieAnimationCard(
                             onClick = {
                                 chatViewModel.startLottieAnimationConversation()
                                 onOpenChat()
@@ -507,7 +507,7 @@ private fun formatLibraryHistoryTime(updatedAtMillis: Long): String {
 }
 
 @Composable
-fun LogicVesselCard(
+fun LottieAnimationCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {}
 ) {
@@ -667,6 +667,11 @@ fun EightBitBgmCard(
         blobHoverAlpha = 0.32f,
         onClick = onClick
     ) { isHovered ->
+        val equalizerProgress by animateFloatAsState(
+            targetValue = if (isHovered) 1f else 0f,
+            animationSpec = tween(durationMillis = 360)
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -728,10 +733,22 @@ fun EightBitBgmCard(
                     val columns = 12
                     val step = size.width / columns
                     for (index in 0 until columns) {
-                        val heightFraction = if (index % 3 == 0) 0.68f else if (index % 2 == 0) 0.42f else 0.28f
+                        val idleHeightFraction = if (index % 3 == 0) 0.68f else if (index % 2 == 0) 0.42f else 0.28f
+                        val hoverHeightFraction = when (index % 4) {
+                            0 -> 0.86f
+                            1 -> 0.48f
+                            2 -> 0.72f
+                            else -> 0.58f
+                        }
+                        val heightFraction = idleHeightFraction +
+                            (hoverHeightFraction - idleHeightFraction) * equalizerProgress
                         val x = step * index + step * 0.5f
                         drawLine(
-                            color = if (index % 2 == 0) primaryColor.copy(alpha = 0.72f) else secondaryColor.copy(alpha = 0.62f),
+                            color = if (index % 2 == 0) {
+                                primaryColor.copy(alpha = 0.72f + 0.12f * equalizerProgress)
+                            } else {
+                                secondaryColor.copy(alpha = 0.62f + 0.12f * equalizerProgress)
+                            },
                             start = Offset(x, size.height * (1f - heightFraction)),
                             end = Offset(x, size.height * 0.76f),
                             strokeWidth = strokeWidth
@@ -789,6 +806,11 @@ fun SvgImageCard(
         blobHoverAlpha = 0.3f,
         onClick = onClick
     ) { isHovered ->
+        val illustrationProgress by animateFloatAsState(
+            targetValue = if (isHovered) 1f else 0f,
+            animationSpec = tween(durationMillis = 360)
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -846,27 +868,37 @@ fun SvgImageCard(
             ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val strokeWidth = 1.4.dp.toPx()
-                    drawCircle(
-                        color = surfaceColor.copy(alpha = 0.72f),
-                        radius = size.minDimension * 0.3f,
-                        center = Offset(size.width * 0.26f, size.height * 0.52f)
+                    val circleCenter = Offset(size.width * 0.26f, size.height * 0.52f)
+                    val previewRadius = size.minDimension * (0.3f + 0.035f * illustrationProgress)
+                    val ringRadius = size.minDimension * (0.22f + 0.035f * illustrationProgress)
+                    val mountainPeak = Offset(
+                        size.width * (0.62f + 0.02f * illustrationProgress),
+                        size.height * (0.28f - 0.06f * illustrationProgress)
                     )
                     drawCircle(
-                        color = primaryColor.copy(alpha = 0.62f),
-                        radius = size.minDimension * 0.22f,
-                        center = Offset(size.width * 0.26f, size.height * 0.52f),
+                        color = surfaceColor.copy(alpha = 0.72f),
+                        radius = previewRadius,
+                        center = circleCenter
+                    )
+                    drawCircle(
+                        color = primaryColor.copy(alpha = 0.62f + 0.12f * illustrationProgress),
+                        radius = ringRadius,
+                        center = circleCenter,
                         style = Stroke(width = strokeWidth)
                     )
                     drawLine(
-                        color = secondaryColor.copy(alpha = 0.72f),
+                        color = secondaryColor.copy(alpha = 0.72f + 0.12f * illustrationProgress),
                         start = Offset(size.width * 0.46f, size.height * 0.62f),
-                        end = Offset(size.width * 0.62f, size.height * 0.28f),
+                        end = mountainPeak,
                         strokeWidth = strokeWidth
                     )
                     drawLine(
-                        color = primaryColor.copy(alpha = 0.68f),
-                        start = Offset(size.width * 0.62f, size.height * 0.28f),
-                        end = Offset(size.width * 0.78f, size.height * 0.6f),
+                        color = primaryColor.copy(alpha = 0.68f + 0.12f * illustrationProgress),
+                        start = mountainPeak,
+                        end = Offset(
+                            size.width * (0.78f + 0.04f * illustrationProgress),
+                            size.height * (0.6f + 0.03f * illustrationProgress)
+                        ),
                         strokeWidth = strokeWidth
                     )
                 }
