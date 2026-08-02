@@ -27,7 +27,7 @@ composeApp/src/commonMain/kotlin/org/onion/agro/native/llm/
 4. 定位 `AnySectionDataType.LlmMetadataProto` section；
 5. 随机读取该 section，并解析 protobuf 字段 5 `max_num_tokens`。
 
-模型权重和其他 section 不会被加载到内存。文件访问使用 Okio `FileHandle`，因此 Android、Desktop 与 iOS 共用相同的 commonMain 实现。
+模型权重和其他 section 不会被加载到内存。随机读取使用 Okio `FileHandle`，解析器由 Android、Desktop 与 iOS 共用。系统文件系统实例通过 `org.onion.agro.io.systemFileSystem` 的 expect/actual 边界注入；`commonMain` 不直接引用 Okio 在 Native/JVM source set 中细化的 `FileSystem.SYSTEM`，从而保证 common metadata 与 iOS Kotlin/Native 都能解析该 API。
 
 ## 状态与回退
 
@@ -50,4 +50,3 @@ composeApp/src/commonMain/kotlin/org/onion/agro/native/llm/
 - 正确读取 `max_num_tokens = 8192`；
 - 字段缺失时返回 `null`；
 - 非 LiteRT-LM magic 被拒绝。
-

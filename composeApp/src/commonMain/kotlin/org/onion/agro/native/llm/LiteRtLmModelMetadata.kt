@@ -1,8 +1,9 @@
 package org.onion.agro.native.llm
 
 import okio.FileHandle
-import okio.FileSystem
 import okio.Path.Companion.toPath
+import okio.use
+import org.onion.agro.io.systemFileSystem
 
 /**
  * Reads the LiteRT-LM model context limit without loading the model payload.
@@ -21,7 +22,7 @@ internal object LiteRtLmModelMetadata {
     fun getLmMaxNumTokens(modelPath: String): Int? {
         if (modelPath.isBlank()) return null
 
-        return FileSystem.SYSTEM.openReadOnly(modelPath.toPath()).use { file ->
+        return systemFileSystem.openReadOnly(modelPath.toPath()).use { file ->
             parseLmMaxNumTokens { offset, byteCount ->
                 file.readExactly(offset, byteCount)
             }

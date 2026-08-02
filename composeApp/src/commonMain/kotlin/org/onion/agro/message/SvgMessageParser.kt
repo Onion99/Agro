@@ -179,15 +179,14 @@ object SvgMessageParser {
         option = RegexOption.IGNORE_CASE
     )
     private val HREF_REGEX = Regex(
-        pattern = "\\s+(href|xlink:href)\\s*=\\s*(['\"])(.*?)\\2",
-        options = setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+        pattern = "\\s+(href|xlink:href)\\s*=\\s*(['\"])([\\s\\S]*?)\\2",
+        option = RegexOption.IGNORE_CASE
     )
     private val CSS_URL_REGEX = Regex(
-        pattern = "url\\(\\s*(['\"]?)(.*?)\\1\\s*\\)",
-        options = setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+        pattern = "url\\(\\s*(['\"]?)([\\s\\S]*?)\\1\\s*\\)",
+        option = RegexOption.IGNORE_CASE
     )
     private val TAG_REGEX = Regex(
-        pattern = "<\\s*(/?)\\s*([A-Za-z_][A-Za-z0-9_.:-]*)\\b([^>]*)>",
-        option = RegexOption.DOT_MATCHES_ALL
+        pattern = "<\\s*(/?)\\s*([A-Za-z_][A-Za-z0-9_.:-]*)\\b([^>]*)>"
     )
 }

@@ -3,8 +3,8 @@ package org.onion.agro.audio
 import io.github.vinceglb.filekit.FileKit
 import io.github.vinceglb.filekit.cacheDir
 import io.github.vinceglb.filekit.path
-import okio.FileSystem
 import okio.Path.Companion.toPath
+import org.onion.agro.io.systemFileSystem
 
 object BgmAudioFileStore {
     fun write(title: String, sourceSpecJson: String, wavBytes: ByteArray): String {
@@ -12,7 +12,7 @@ object BgmAudioFileStore {
             .takeIf { it.isNotBlank() }
             ?: throw IllegalStateException("bgm_cache_directory_unavailable")
         val directory = cacheRoot.toPath() / "generated-bgm"
-        FileSystem.SYSTEM.createDirectories(directory)
+        systemFileSystem.createDirectories(directory)
         val safeTitle = title
             .trim()
             .replace(INVALID_FILE_NAME_CHARS, "_")
@@ -21,14 +21,14 @@ object BgmAudioFileStore {
             .ifBlank { "chiptune" }
         val fingerprint = sourceSpecJson.hashCode().toUInt().toString(16)
         val path = directory / "$safeTitle-$fingerprint.wav"
-        FileSystem.SYSTEM.write(path) {
+        systemFileSystem.write(path) {
             write(wavBytes)
         }
         return path.toString()
     }
 
     fun read(path: String): ByteArray {
-        return FileSystem.SYSTEM.read(path.toPath()) {
+        return systemFileSystem.read(path.toPath()) {
             readByteArray()
         }
     }

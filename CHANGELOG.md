@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-02] - iOS Kotlin/Native 构建稳定性修复
+- [修复] 新增 `systemFileSystem` expect/actual 平台边界，移除 `commonMain` 对 Okio 平台细化 `FileSystem.SYSTEM` 的直接引用，并显式使用跨平台 `okio.use` 关闭 `FileHandle`，修复模型元数据与 BGM 文件访问在 iOS Kotlin/Native 编译中的符号解析错误。
+- [修复] 将 SVG 多行匹配改为跨平台字符类表达式，避免 common metadata 依赖平台专属 `RegexOption.DOT_MATCHES_ALL`，并补充多行外链/CSS URL 拒绝测试。
+- [修改] iOS framework 链接仅构建对应 device/simulator LiteRT LM archive，并在归档复制后关闭 Bazel server，降低 cinterop 与 Kotlin/Native 链接阶段的资源压力。
+- [修改] GitHub Actions 为移动端构建保留完整日志，并在失败时上传 Gradle problems report 与构建日志诊断包。
+- [文档] 更新 `docs/specs/ios-litertlm-platform.md` 与 `docs/designs/litertlm-model-context-limit.md`，记录目标级任务依赖、Bazel 生命周期和系统文件边界。
+
 ## [2026-08-02] - AppIcon 主题化创意启动页
 - [修改] 重构 `SplashScreen.kt` 并新增 `SplashArtwork.kt`，移除宇航员图片，以“玻璃容器中的本地智能种子”为叙事，结合主题水彩潮汐、GRIS 风格线稿地景、AppIcon 分层生长动画、毛玻璃容器和单栏/双栏响应式构图。
 - [文档] 新增 `docs/designs/app-icon-theme-splash-screen.md`，记录品牌叙事、主题 token 落地、动画阶段与跨平台边界。

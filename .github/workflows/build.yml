@@ -294,7 +294,7 @@ jobs:
       matrix:
         include:
           - name: ios
-            task: ./gradlew buildReleaseIpa
+            task: ./gradlew buildReleaseIpa --stacktrace --console=plain
             path: composeApp/build/archives/release/*.ipa
           - name: android
             task: ./gradlew assembleRelease
@@ -422,7 +422,21 @@ jobs:
           RELEASE_KEY_EXISTS: ${{ steps.sign.outputs.release_key_exists }}
           RELEASE_KEY_STORE_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: ${{ matrix.task }}
+        shell: bash
+        run: |
+          set -o pipefail
+          ${{ matrix.task }} 2>&1 | tee "${RUNNER_TEMP}/build-${{ matrix.name }}.log"
+
+      - name: Upload build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ matrix.name }}-build-diagnostics
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/build-${{ matrix.name }}.log
+            build/reports/problems
+            composeApp/build/reports
 
       - name: Upload artifact
         if: success()
