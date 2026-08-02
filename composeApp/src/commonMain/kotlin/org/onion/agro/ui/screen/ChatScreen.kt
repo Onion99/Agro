@@ -108,6 +108,7 @@ import com.onion.theme.style.MediumOutlinedTextField
 import com.onion.theme.style.glassSurface
 import com.onion.theme.style.watercolorGradient
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import io.github.vinceglb.filekit.FileKit
@@ -118,9 +119,6 @@ import io.github.alexzhirkevich.compottie.LottieCompositionSpec
 import io.github.alexzhirkevich.compottie.animateLottieCompositionAsState
 import io.github.alexzhirkevich.compottie.rememberLottieComposition
 import io.github.alexzhirkevich.compottie.rememberLottiePainter
-import io.github.kdroidfilter.composemediaplayer.audio.AudioPlayerState
-import io.github.kdroidfilter.composemediaplayer.audio.ErrorListener
-import io.github.kdroidfilter.composemediaplayer.audio.rememberAudioPlayerLiveState
 import agro.composeapp.generated.resources.Res
 import agro.composeapp.generated.resources.ai_image
 import agro.composeapp.generated.resources.attachment
@@ -194,6 +192,7 @@ import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 import org.onion.agro.BuildConfig
 import org.onion.agro.audio.BgmAudioFileStore
+import org.onion.agro.audio.BgmAudioPlayer
 import org.onion.agro.database.ChatSessionEntity
 import org.onion.agro.utils.Animations
 import org.onion.agro.viewmodel.ChatViewModel
@@ -1859,18 +1858,28 @@ private fun AudioMessageContent(
     onSaveAudio: ((ChatMessageContent.Audio) -> Unit)?,
     onCopyText: ((String) -> Unit)?
 ) {
-    val audioState = rememberAudioPlayerLiveState()
+    val audioPlayer = remember { BgmAudioPlayer() }
     var loadedSource by remember(content.path) { mutableStateOf(false) }
     var errorMessage by remember(content.path) { mutableStateOf<String?>(null) }
+    var playerDurationMs by remember(content.path) { mutableStateOf(0L) }
+    var playerPositionMs by remember(content.path) { mutableStateOf(0L) }
+    var isPlaying by remember(content.path) { mutableStateOf(false) }
+    LaunchedEffect(audioPlayer, content.path) {
+        while (true) {
+            playerDurationMs = audioPlayer.currentDurationMs()
+            playerPositionMs = audioPlayer.currentPositionMs()
+            isPlaying = audioPlayer.isPlaying()
+            delay(AUDIO_PLAYER_POLL_INTERVAL_MS)
+        }
+    }
     val fallbackDurationMs = content.durationMs.coerceAtLeast(0L)
-    val durationMs = audioState.duration.takeIf { it > 0L } ?: fallbackDurationMs
-    val positionMs = audioState.position.coerceIn(0L, durationMs.coerceAtLeast(0L))
+    val durationMs = playerDurationMs.takeIf { it > 0L } ?: fallbackDurationMs
+    val positionMs = playerPositionMs.coerceIn(0L, durationMs.coerceAtLeast(0L))
     val progress = if (durationMs > 0L) {
         (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
     } else {
         0f
     }
-    val isPlaying = audioState.state == AudioPlayerState.PLAYING
     val title = content.title.ifBlank {
         stringResource(Res.string.bgm_audio_default_title)
     }
@@ -1882,16 +1891,18 @@ private fun AudioMessageContent(
         durationText
     )
 
-    DisposableEffect(audioState.player, content.path) {
-        audioState.player.setOnErrorListener(
-            object : ErrorListener {
-                override fun onError(message: String?) {
-                    errorMessage = message.orEmpty()
-                }
-            }
-        )
+    DisposableEffect(audioPlayer, content.path) {
+        audioPlayer.setOnErrorListener { message ->
+            errorMessage = message.orEmpty()
+            loadedSource = false
+        }
         onDispose {
-            audioState.player.stop()
+            audioPlayer.stop()
+        }
+    }
+    DisposableEffect(audioPlayer) {
+        onDispose {
+            audioPlayer.release()
         }
     }
 
@@ -1923,15 +1934,15 @@ private fun AudioMessageContent(
             IconButton(
                 onClick = {
                     if (isPlaying) {
-                        audioState.player.pause()
+                        audioPlayer.pause()
                     } else {
                         errorMessage = null
                         val isAtEnd = durationMs > 0L && positionMs >= durationMs
-                        if (!loadedSource || audioState.state == AudioPlayerState.IDLE || isAtEnd) {
-                            audioState.player.play(content.path)
+                        if (!loadedSource || isAtEnd) {
+                            audioPlayer.play(content.path)
                             loadedSource = true
                         } else {
-                            audioState.player.play()
+                            audioPlayer.resume()
                         }
                     }
                 },
@@ -2035,6 +2046,8 @@ private fun AudioMessageContent(
         }
     }
 }
+
+private const val AUDIO_PLAYER_POLL_INTERVAL_MS = 250L
 
 @Composable
 private fun bgmDurationText(durationMs: Long): String {

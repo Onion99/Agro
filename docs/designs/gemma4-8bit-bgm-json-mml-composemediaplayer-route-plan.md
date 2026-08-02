@@ -337,22 +337,30 @@ data class RenderedBgmAudio(
 
 `uri` 优先使用 `file://` URI。ComposeMediaPlayer README_AUDIO 同时支持本地路径和文件 URI，但跨平台调用建议统一 URI，避免 Windows 路径分隔符差异。
 
+### 9.4 本地缓存 URI 边界
+
+`ChatMessageContent.Audio.path` 持久化裸文件系统路径，便于 FileKit 和 Okio 重读、导出
+WAV。`BgmAudioPlayer` 是播放平台边界：Android Media3 与 JVM Rodio 通过
+`BgmAudioFileStore.playbackUri()` 接收 percent-encoded `file://` URI；iOS 直接使用
+`NSURL.fileURLWithPath()` 创建本地文件 URL，再交给 `AVAudioPlayer`。这样避免
+ComposeMediaPlayer `0.11.3` iOS 后端以 `AVPlayer` 加载本地 8-bit PCM WAV 时触发
+`FigFile -17913`，且不改变生成文件的 8-bit PCM 格式。
+
 UI 层可使用:
 
 ```kotlin
 @Composable
 fun ChiptuneBgmAudioBubble(audio: ChatMessageContent.Audio) {
-    val audioState = rememberAudioPlayerLiveState()
-    val source = audio.path.toLocalFileUri()
+    val audioPlayer = remember { BgmAudioPlayer() }
 
-    DisposableEffect(source) {
-        onDispose { audioState.player.stop() }
+    DisposableEffect(audioPlayer) {
+        onDispose { audioPlayer.release() }
     }
 
-    Button(onClick = { audioState.player.play(source) }) {
+    Button(onClick = { audioPlayer.play(audio.path) }) {
         Text("Play")
     }
-    Button(onClick = { audioState.player.pause() }) {
+    Button(onClick = { audioPlayer.pause() }) {
         Text("Pause")
     }
 }
@@ -360,7 +368,7 @@ fun ChiptuneBgmAudioBubble(audio: ChatMessageContent.Audio) {
 
 实际 UI 应继续遵守项目 Compose 主题与 i18n 约束，上方示例只说明播放调用边界。
 
-### 9.4 保存与文件选择
+### 9.5 保存与文件选择
 
 - renderer 先写入平台 cache 或 documents 下的 `.wav`。
 - 播放时直接传入生成文件 URI。

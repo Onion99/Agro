@@ -62,6 +62,24 @@ class ChiptuneBgmMmlParserTest {
         assertContentEquals(first.wavBytes, second.wavBytes)
     }
 
+    @Test
+    fun createsEncodedFileUriForLocalPlayback() {
+        assertEquals(
+            "file:///var/mobile/Library/Caches/generated-bgm/loop%20%231.wav",
+            BgmAudioFileStore.playbackUri(
+                "/var/mobile/Library/Caches/generated-bgm/loop #1.wav"
+            )
+        )
+        assertEquals(
+            "file:///C:/Users/Test%20User/bgm.wav",
+            BgmAudioFileStore.playbackUri("C:\\Users\\Test User\\bgm.wav")
+        )
+        assertEquals(
+            "file:///tmp/%E4%BD%9C%E5%93%81.wav",
+            BgmAudioFileStore.playbackUri("/tmp/作品.wav")
+        )
+    }
+
     private fun validScoreJson(): String {
         return """
             {

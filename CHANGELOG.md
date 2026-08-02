@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-02] - iOS 8-bit BGM 本地播放修复
+- [修复] `ChatScreen` 通过 `BgmAudioFileStore.playbackUri()` 将缓存 WAV 的裸文件路径转换为 percent-encoded `file://` URI，再交给 ComposeMediaPlayer，修复 iOS AVFoundation 将 `/var/...` 识别为 unsupported URL 并报 `-1002` 的问题。
+- [修复] 新增 `BgmAudioPlayer` 平台播放边界；iOS 改用 `AVAudioPlayer` 直接加载本地 WAV，绕过 ComposeMediaPlayer `AVPlayer` 路径对 8-bit PCM 触发的 `FigFile -17913`，Android/Desktop 保持 ComposeMediaPlayer 后端。
+- [测试] 扩展 `ChiptuneBgmMmlParserTest`，覆盖 POSIX、Windows 和 Unicode 本地路径到播放 URI 的转换。
+- [文档] 更新 `docs/designs/gemma4-8bit-bgm-json-mml-composemediaplayer-route-plan.md`，记录聊天持久化路径与播放器 URI 的边界。
+
 ## [2026-08-02] - iOS LiteRT LM 会话重建兼容修复
 - [修复] `ChatViewModel` 在 iOS 静态 archive 构建中创建 LiteRT LM 会话时禁用 constrained decoding，避免 SVG、8-bit BGM、Lottie 和应用会话设置重建路径请求已由 `LITERT_LM_FST_CONSTRAINTS_DISABLED` 禁用的 FST provider 而失败。
 - [文档] 更新 `docs/specs/ios-litertlm-platform.md`，说明 iOS 结构化模式保留 prompt 和 parser 校验，但不启用原生 constrained decoding 的运行时边界。

@@ -33,6 +33,40 @@ object BgmAudioFileStore {
         }
     }
 
+    internal fun playbackUri(path: String): String {
+        if (path.startsWith(FILE_URI_PREFIX, ignoreCase = true)) return path
+
+        val normalizedPath = path.replace('\\', '/')
+        val prefix = if (normalizedPath.startsWith('/')) FILE_URI_PREFIX else "file:///"
+        return buildString(prefix.length + normalizedPath.length) {
+            append(prefix)
+            normalizedPath.encodeToByteArray().forEach { byte ->
+                val value = byte.toInt() and 0xFF
+                if (value.isUnreservedFileUriByte()) {
+                    append(value.toChar())
+                } else {
+                    append('%')
+                    append(HEX[value ushr 4])
+                    append(HEX[value and 0x0F])
+                }
+            }
+        }
+    }
+
     private const val MAX_FILE_NAME_LENGTH = 32
+    private const val FILE_URI_PREFIX = "file://"
+    private const val HEX = "0123456789ABCDEF"
     private val INVALID_FILE_NAME_CHARS = Regex("[^A-Za-z0-9._-]")
+
+    private fun Int.isUnreservedFileUriByte(): Boolean {
+        return this in 'a'.code..'z'.code ||
+            this in 'A'.code..'Z'.code ||
+            this in '0'.code..'9'.code ||
+            this == '-'.code ||
+            this == '.'.code ||
+            this == '_'.code ||
+            this == '~'.code ||
+            this == '/'.code ||
+            this == ':'.code
+    }
 }
