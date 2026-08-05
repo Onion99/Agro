@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-05] - LiteRT-LM iOS Native 库嵌入
+- [修改] 更新 `composeApp/build.gradle.kts` 的 iOS Kotlin/Native 链接配置，按 `cpp/lite-rt-lm/prebuilt/ios_arm64` 与 `ios_sim_arm64` 同步 `libLiteRt.dylib`、Metal accelerator、TopKMetal sampler 和 Gemma 约束库。
+- [修改] 新增 Xcode 构建期 dylib 嵌入任务，将匹配 SDK 的 LiteRT-LM iOS prebuilt 动态库复制到 App `Frameworks` 目录并在允许时执行 codesign，补齐 iOS GPU/Metal 后端运行时依赖。
+- [文档] 更新 `docs/agents/native-cpp.md`，记录 iOS 不走 `System.loadLibrary`，而是在 Kotlin/Native 链接与 Xcode 嵌入阶段处理平台库。
+
+## [2026-08-05] - LiteRT-LM 多平台 Native 库加载
+- [修改] 将 `composeApp/src/jvmMain/kotlin/org/onion/agro/utils/NativeLibraryLoader.kt` 扩展为按当前 OS/arch 选择 `cpp/lite-rt-lm/prebuilt` 平台库清单，覆盖 Windows、Linux x64/arm64 与 macOS arm64 的 LiteRT runtime、Gemma 约束库和 GPU 插件加载顺序。
+- [修改] 简化 `composeApp/src/desktopMain/kotlin/com/google/ai/edge/litertlm/LiteRtLmJni.desktop.kt` 初始化逻辑，由 JVM loader 统一处理平台库计划，Windows actual 仅保留 DLL 搜索目录注册。
+- [修改] 更新 `composeApp/src/androidMain/kotlin/com/google/ai/edge/litertlm/LiteRtLmJni.android.kt`，按 Android prebuilt GPU/OpenCL/WebGPU 插件做可选加载，缺失时保持 CPU/JNI 路径可用。
+- [修改] 更新 `composeApp/build.gradle.kts` 的 native 构建产物同步逻辑，根据平台复制 `prebuilt/<platform>` 运行时库到 `cpp/libs`，再同步到 JVM resources 或 Android `jniLibs`。
+- [文档] 更新 `docs/agents/native-cpp.md`，记录多平台 native 库加载边界与 `prebuilt` 目录映射。
+
 ## [2026-08-05] - LiteRT-LM Native ABI 签名对齐
 - [修复] 对齐 `composeApp/src/desktopMain/kotlin/com/google/ai/edge/litertlm/LiteRtLmJni.desktop.kt` 与当前 `litertlm.cc` 的 `nativeCreateConversation`、`nativeSendMessage`、`nativeSendMessageAsync` 参数表，避免 Windows JNI 短符号绑定后因参数漂移读取栈垃圾并触发 JVM `EXCEPTION_ACCESS_VIOLATION`。
 - [修复] 同步更新 `composeApp/src/androidMain/kotlin/com/google/ai/edge/litertlm/LiteRtLmJni.android.kt` 的私有 external 声明与默认禁用参数，保持 Android/desktop actual 层和 native ABI 一致。

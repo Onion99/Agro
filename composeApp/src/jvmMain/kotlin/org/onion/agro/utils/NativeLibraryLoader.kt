@@ -24,6 +24,14 @@ object NativeLibraryLoader {
         get() = tempDir.absolutePath
 
     @Synchronized
+    fun loadLiteRtLmDesktopLibraries() {
+        val plan = LiteRtLmDesktopLibraryPlan.current()
+        plan.prepareOnly.forEach(::extractOptionalFromResources)
+        plan.loadBeforeJni.forEach(::loadOptionalFromResources)
+        loadFromResources("litertlm_jni")
+    }
+
+    @Synchronized
     fun extractFromResources(baseName: String): File {
         extractedLibraries[baseName]?.let { return it }
 
@@ -96,6 +104,23 @@ object NativeLibraryLoader {
         }
     }
 
+    private fun extractOptionalFromResources(baseName: String) {
+        try {
+            val file = extractFromResources(baseName)
+            println("Prepared optional native library '$baseName' at: ${file.absolutePath}")
+        } catch (e: UnsatisfiedLinkError) {
+            println("Optional native library '$baseName' is not available for this platform: ${e.message}")
+        }
+    }
+
+    private fun loadOptionalFromResources(baseName: String) {
+        try {
+            loadFromResources(baseName)
+        } catch (e: UnsatisfiedLinkError) {
+            println("Optional native library '$baseName' could not be loaded for this platform: ${e.message}")
+        }
+    }
+
     private fun resolveNativeLibrary(baseName: String): NativeLibraryResource {
         val osName = System.getProperty("os.name").lowercase()
         val libFileName = when {
@@ -114,4 +139,65 @@ object NativeLibraryLoader {
         val fileName: String,
         val resourcePath: String
     )
+
+    private data class LiteRtLmDesktopLibraryPlan(
+        val prepareOnly: List<String>,
+        val loadBeforeJni: List<String>
+    ) {
+        companion object {
+            fun current(): LiteRtLmDesktopLibraryPlan {
+                val osName = System.getProperty("os.name").lowercase()
+                val arch = System.getProperty("os.arch").lowercase()
+                return when {
+                    osName.contains("win") && arch.isX64() -> LiteRtLmDesktopLibraryPlan(
+                        prepareOnly = listOf(
+                            "dxil",
+                            "dxcompiler",
+                            "webgpu_dawn",
+                            "LiteRtWebGpuAccelerator",
+                            "LiteRtTopKWebGpuSampler"
+                        ),
+                        loadBeforeJni = listOf(
+                            "LiteRt",
+                            "GemmaModelConstraintProvider"
+                        )
+                    )
+                    osName.contains("linux") && (arch.isX64() || arch.isArm64()) -> LiteRtLmDesktopLibraryPlan(
+                        prepareOnly = emptyList(),
+                        loadBeforeJni = listOf(
+                            "webgpu_dawn",
+                            "LiteRt",
+                            "LiteRtWebGpuAccelerator",
+                            "LiteRtTopKWebGpuSampler",
+                            "GemmaModelConstraintProvider"
+                        )
+                    )
+                    osName.contains("mac") && arch.isArm64() -> LiteRtLmDesktopLibraryPlan(
+                        prepareOnly = emptyList(),
+                        loadBeforeJni = listOf(
+                            "webgpu_dawn",
+                            "LiteRt",
+                            "LiteRtMetalAccelerator",
+                            "LiteRtTopKMetalSampler",
+                            "LiteRtWebGpuAccelerator",
+                            "LiteRtTopKWebGpuSampler",
+                            "GemmaModelConstraintProvider"
+                        )
+                    )
+                    else -> LiteRtLmDesktopLibraryPlan(
+                        prepareOnly = emptyList(),
+                        loadBeforeJni = listOf("GemmaModelConstraintProvider")
+                    )
+                }
+            }
+
+            private fun String.isX64(): Boolean {
+                return this == "x86_64" || this == "amd64"
+            }
+
+            private fun String.isArm64(): Boolean {
+                return this == "aarch64" || this == "arm64"
+            }
+        }
+    }
 }

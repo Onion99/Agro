@@ -28,18 +28,8 @@ internal actual object LiteRtLmJni {
         val osName = System.getProperty("os.name").lowercase()
         if (osName.contains("win")) {
             configureWindowsDllSearchPath()
-            extractOptionalWindowsLibrary("dxil")
-            extractOptionalWindowsLibrary("dxcompiler")
-            extractOptionalWindowsLibrary("webgpu_dawn")
-            extractOptionalWindowsLibrary("LiteRtWebGpuAccelerator")
-            extractOptionalWindowsLibrary("LiteRtTopKWebGpuSampler")
-            NativeLibraryLoader.loadFromResources("LiteRt")
-            NativeLibraryLoader.loadFromResources("GemmaModelConstraintProvider")
-            NativeLibraryLoader.loadFromResources("litertlm_jni")
-        } else {
-            NativeLibraryLoader.loadFromResources("GemmaModelConstraintProvider")
-            NativeLibraryLoader.loadFromResources("litertlm_jni")
         }
+        NativeLibraryLoader.loadLiteRtLmDesktopLibraries()
     }
 
     private fun configureWindowsDllSearchPath() {
@@ -54,15 +44,6 @@ internal actual object LiteRtLmJni {
             Kernel32.INSTANCE.SetDllDirectoryW(wTempDir)
         } catch (e: Exception) {
             println("Failed to set DLL directory via JNA: $e")
-        }
-    }
-
-    private fun extractOptionalWindowsLibrary(baseName: String) {
-        try {
-            val file = NativeLibraryLoader.extractFromResources(baseName)
-            println("Prepared Windows native dependency '$baseName' at: ${file.absolutePath}")
-        } catch (e: Exception) {
-            println("Failed to prepare optional Windows native dependency '$baseName': $e")
         }
     }
 

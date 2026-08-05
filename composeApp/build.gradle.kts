@@ -23,6 +23,12 @@ val liteRtLmCHeadersDir = liteRtLmNativeRoot.resolve("c")
 val liteRtLmCInteropDefFile = project.file("src/nativeInterop/cinterop/litertlm.def")
 val liteRtLmIosNativePatchFile = rootProject.file("cpp/patches/lite-rt-lm-ios-native-link.patch")
 val iosLiteRtLmLibraryName = "litertlm_c_api"
+val iosLiteRtLmPrebuiltDylibNames = listOf(
+    "GemmaModelConstraintProvider",
+    "LiteRt",
+    "LiteRtMetalAccelerator",
+    "LiteRtTopKMetalSampler"
+)
 val iosLiteRtLmBazelTarget = providers.gradleProperty("ios.litertlm.bazelTarget").orElse("//c:engine_fully_linked")
 val iosLiteRtLmBazelOutputPath = providers.gradleProperty("ios.litertlm.bazelOutputPath").orElse("bazel-bin/c/engine_fully_linked_lipo.a")
 val bazeliskExecutableProvider = providers.gradleProperty("bazelisk.path")
@@ -80,15 +86,20 @@ kotlin {
         val nativeArchive = rootProject.file(
             "cpp/libs/$nativeLibDir/lib$iosLiteRtLmLibraryName.a"
         )
+        val nativeDylibDir = rootProject.file("cpp/libs/$nativeLibDir")
         iosTarget.binaries.all {
             linkerOpts += listOf(
                 "-force_load",
                 nativeArchive.absolutePath,
+                "-L${nativeDylibDir.absolutePath}",
+                "-rpath",
+                "@executable_path/Frameworks",
                 "-framework", "Foundation",
                 "-framework", "Accelerate",
                 "-framework", "Metal",
                 "-framework", "MetalPerformanceShaders",
             )
+            linkerOpts += iosLiteRtLmPrebuiltDylibNames.map { "-l$it" }
             linkTaskProvider.configure { dependsOn("validateIosLiteRtLmNativeLibs") }
         }
         iosTarget.binaries.framework {
@@ -473,16 +484,23 @@ abstract class BuildNativeLibTask : DefaultTask() {
             println("警告: Bazel 产物目录不存在: $bazelBinDir")
         }
 
-        // 如果是 Windows 平台，自动拷贝预编译的依赖库以及 DXC 库到 cpp/libs
-        if (platform == "windows") {
-            val prebuiltDir = File(workDir, "prebuilt/windows_x86_64")
-            if (prebuiltDir.exists() && prebuiltDir.isDirectory) {
-                prebuiltDir.listFiles { _, name -> name.endsWith(".dll") }?.forEach { f ->
-                    val destName = if (f.name.startsWith("lib")) f.name else "lib${f.name}"
-                    f.copyTo(File(cppLibsDir, destName), overwrite = true)
-                    println("预编译库拷贝: ${f.name} -> ${cppLibsDir}/$destName")
+        val currentPrebuiltDir = prebuiltDirectory(workDir, platform)
+        if (currentPrebuiltDir != null && currentPrebuiltDir.exists() && currentPrebuiltDir.isDirectory) {
+            val suffix = nativeLibrarySuffix(platform)
+            currentPrebuiltDir.listFiles { _, name -> name.endsWith(suffix) }?.forEach { f ->
+                val destName = if (f.name.startsWith("lib")) f.name else "lib${f.name}"
+                val destFile = File(cppLibsDir, destName)
+                if (!destFile.exists() || destFile.length() == 0L) {
+                    f.copyTo(destFile, overwrite = true)
+                    println("prebuilt 运行时库拷贝: ${f.name} -> ${destFile.absolutePath}")
+                } else {
+                    println("prebuilt 运行时库跳过: ${destFile.absolutePath} 已由 Bazel 产出")
                 }
             }
+        }
+
+        // 如果是 Windows 平台，自动拷贝预编译的依赖库以及 DXC 库到 cpp/libs
+        if (platform == "windows") {
             val pythonBazelBinDir = File(workDir, "bazel-bin/python/litert_lm")
             if (pythonBazelBinDir.exists() && pythonBazelBinDir.isDirectory) {
                 pythonBazelBinDir.listFiles { _, name -> name.endsWith(".dll") }?.forEach { f ->
@@ -506,6 +524,26 @@ abstract class BuildNativeLibTask : DefaultTask() {
                     println("次要产物拷贝: ${f.name} -> ${destDir.absolutePath}")
                 }
             }
+        }
+    }
+
+    private fun prebuiltDirectory(workDir: File, platform: String): File? {
+        val arch = System.getProperty("os.arch").lowercase(Locale.getDefault())
+        val dirName = when (platform) {
+            "windows" -> "windows_x86_64"
+            "macos" -> "macos_arm64"
+            "linux" -> if (arch == "aarch64" || arch == "arm64") "linux_arm64" else "linux_x86_64"
+            "android" -> "android_arm64"
+            else -> return null
+        }
+        return File(workDir, "prebuilt/$dirName")
+    }
+
+    private fun nativeLibrarySuffix(platform: String): String {
+        return when (platform) {
+            "windows" -> ".dll"
+            "macos" -> ".dylib"
+            else -> ".so"
         }
     }
 
@@ -672,23 +710,100 @@ abstract class ValidateIosLiteRtLmNativeLibsTask : DefaultTask() {
     abstract val libraryName: Property<String>
 
     @get:Input
+    abstract val dylibNames: ListProperty<String>
+
+    @get:Input
     abstract val requiredDirectories: ListProperty<String>
 
     @TaskAction
     fun execute() {
         val name = libraryName.get()
-        val missing = requiredDirectories.get().map { File(it) }.filter { dir ->
+        val requiredDirs = requiredDirectories.get().map { File(it) }
+        val missing = mutableListOf<String>()
+        requiredDirs.filter { dir ->
             listOf(
                 dir.resolve("lib$name.a"),
                 dir.resolve("lib$name.dylib")
             ).none { it.exists() }
+        }.forEach { dir ->
+            missing += "lib$name.a/.dylib in ${dir.path}"
         }
+
+        requiredDirs.forEach { dir ->
+            dylibNames.get().forEach { dylibName ->
+                val dylib = dir.resolve("lib$dylibName.dylib")
+                if (!dylib.isFile) {
+                    missing += dylib.path
+                }
+            }
+        }
+
         if (missing.isNotEmpty()) {
             throw GradleException(
-                "Missing iOS LiteRT LM native library `$name` in: ${
-                    missing.joinToString { it.path }
-                }. Build or copy lib$name.a/.dylib before linking iOS targets."
+                "Missing iOS LiteRT LM native libraries: ${missing.joinToString()}. " +
+                    "Build or sync the iOS archive and prebuilt dylibs before linking iOS targets."
             )
+        }
+    }
+}
+
+abstract class EmbedIosLiteRtLmPrebuiltDylibsForXcodeTask : DefaultTask() {
+    @get:Inject
+    abstract val fs: FileSystemOperations
+
+    @get:Inject
+    abstract val execOps: ExecOperations
+
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val deviceDylibDir: DirectoryProperty
+
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val simulatorDylibDir: DirectoryProperty
+
+    @TaskAction
+    fun execute() {
+        val sdkName = getenv("SDK_NAME").orEmpty()
+        val targetBuildDir = getenv("TARGET_BUILD_DIR").orEmpty()
+        val frameworksFolderPath = getenv("FRAMEWORKS_FOLDER_PATH").orEmpty()
+        if (sdkName.isBlank() || targetBuildDir.isBlank() || frameworksFolderPath.isBlank()) {
+            println("Skipping iOS LiteRT LM dylib embedding because this task is not running from Xcode.")
+            return
+        }
+
+        val sourceDir = if (sdkName.contains("simulator", ignoreCase = true)) {
+            simulatorDylibDir.get().asFile
+        } else {
+            deviceDylibDir.get().asFile
+        }
+        val dylibs = sourceDir.listFiles { _, name -> name.endsWith(".dylib") }?.toList().orEmpty()
+        if (dylibs.isEmpty()) {
+            throw GradleException("No iOS LiteRT LM dylibs found in ${sourceDir.absolutePath}.")
+        }
+
+        val destination = File(targetBuildDir, frameworksFolderPath)
+        fs.copy {
+            from(dylibs)
+            into(destination)
+        }
+        println("Embedded iOS LiteRT LM dylibs from ${sourceDir.absolutePath} into ${destination.absolutePath}")
+        signEmbeddedDylibs(destination, dylibs.map { it.name }.toSet())
+    }
+
+    private fun signEmbeddedDylibs(destination: File, dylibNames: Set<String>) {
+        val signingAllowed = getenv("CODE_SIGNING_ALLOWED") == "YES"
+        val identity = getenv("EXPANDED_CODE_SIGN_IDENTITY").orEmpty()
+        if (!signingAllowed || identity.isBlank() || identity == "-") {
+            return
+        }
+
+        dylibNames.forEach { dylibName ->
+            val dylib = destination.resolve(dylibName)
+            execOps.exec {
+                commandLine("/usr/bin/codesign", "--force", "--sign", identity, dylib.absolutePath)
+                isIgnoreExitValue = false
+            }
         }
     }
 }
@@ -762,6 +877,20 @@ desktopPlatforms.forEach { platform ->
 val cppLibsDirVal = rootProject.extra["cppLibsDir"].toString()
 val jvmResourceLibDirVal = rootProject.extra["jvmResourceLibDir"].toString()
 
+val syncIosLiteRtLmPrebuiltDylibs by tasks.registering(Copy::class) {
+    group = "build"
+    description = "Syncs iOS LiteRT LM prebuilt dylibs into cpp/libs for device and simulator targets."
+    from(liteRtLmNativeRoot.resolve("prebuilt/ios_arm64")) {
+        include("*.dylib")
+        into("ios-device")
+    }
+    from(liteRtLmNativeRoot.resolve("prebuilt/ios_sim_arm64")) {
+        include("*.dylib")
+        into("ios-simulator")
+    }
+    into(rootProject.layout.projectDirectory.dir("cpp/libs"))
+}
+
 val buildIosLiteRtLmNativeLibDevice by tasks.registering(BuildIosLiteRtLmNativeArchiveTask::class) {
     group = "build"
     description = "Builds the LiteRT LM C API archive for iOS device arm64 via Bazel."
@@ -805,7 +934,7 @@ val buildIosLiteRtLmNativeLibSimulatorArm64 by tasks.registering(BuildIosLiteRtL
 tasks.register("buildIosLiteRtLmNativeLibs") {
     group = "build"
     description = "Builds all iOS LiteRT LM C API native archives required by Kotlin/Native."
-    dependsOn(buildIosLiteRtLmNativeLibDevice, buildIosLiteRtLmNativeLibSimulatorArm64)
+    dependsOn(syncIosLiteRtLmPrebuiltDylibs, buildIosLiteRtLmNativeLibDevice, buildIosLiteRtLmNativeLibSimulatorArm64)
 }
 
 // ------------------------------------------------------------------------
@@ -911,6 +1040,7 @@ tasks.matching { it.name.contains("desktopProcessResources") }.configureEach {
 tasks.register<ValidateIosLiteRtLmNativeLibsTask>("validateIosLiteRtLmNativeLibs") {
     dependsOn("buildIosLiteRtLmNativeLibs")
     libraryName.set(iosLiteRtLmLibraryName)
+    dylibNames.set(iosLiteRtLmPrebuiltDylibNames)
     requiredDirectories.set(
         listOf(
             rootProject.layout.projectDirectory.dir("cpp/libs/ios-device").asFile.absolutePath,
@@ -920,6 +1050,18 @@ tasks.register<ValidateIosLiteRtLmNativeLibsTask>("validateIosLiteRtLmNativeLibs
     onlyIf {
         System.getProperty("os.name").lowercase(Locale.getDefault()).contains("mac")
     }
+}
+
+val embedIosLiteRtLmPrebuiltDylibsForXcode by tasks.registering(EmbedIosLiteRtLmPrebuiltDylibsForXcodeTask::class) {
+    group = "build"
+    description = "Embeds the matching iOS LiteRT LM prebuilt dylibs into the Xcode app bundle."
+    dependsOn(syncIosLiteRtLmPrebuiltDylibs)
+    deviceDylibDir.set(rootProject.layout.projectDirectory.dir("cpp/libs/ios-device"))
+    simulatorDylibDir.set(rootProject.layout.projectDirectory.dir("cpp/libs/ios-simulator"))
+}
+
+tasks.matching { it.name == "embedAndSignAppleFrameworkForXcode" }.configureEach {
+    finalizedBy(embedIosLiteRtLmPrebuiltDylibsForXcode)
 }
 
 @CacheableTask

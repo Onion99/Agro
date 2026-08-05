@@ -13,8 +13,22 @@ import java.io.FileOutputStream
 internal actual object LiteRtLmJni {
 
     init {
+        loadOptionalAndroidLibrary("webgpu_dawn")
+        loadOptionalAndroidLibrary("LiteRtGpuAccelerator")
+        loadOptionalAndroidLibrary("LiteRtOpenClAccelerator")
+        loadOptionalAndroidLibrary("LiteRtWebGpuAccelerator")
+        loadOptionalAndroidLibrary("LiteRtTopKOpenClSampler")
+        loadOptionalAndroidLibrary("LiteRtTopKWebGpuSampler")
         System.loadLibrary("GemmaModelConstraintProvider")
         System.loadLibrary("litertlm_jni")
+    }
+
+    private fun loadOptionalAndroidLibrary(libraryName: String) {
+        try {
+            System.loadLibrary(libraryName)
+        } catch (e: UnsatisfiedLinkError) {
+            println("Optional Android native library '$libraryName' is not available: ${e.message}")
+        }
     }
 
     actual suspend fun getModelFilePath(): String {
