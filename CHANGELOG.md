@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-05] - Windows LiteRT-LM GPU 加速加载修复
+- [修复] 调整 `composeApp/src/desktopMain/kotlin/com/google/ai/edge/litertlm/LiteRtLmJni.desktop.kt` 的 Windows native 初始化顺序，先注册 DLL 搜索目录并准备 WebGPU/DXC/Dawn 依赖，再加载动态 `libLiteRt.dll`、约束库和 `liblitertlm_jni.dll`，避免 GPU 后端初始化时混用静态/动态 LiteRT runtime。
+- [修改] 扩展 `composeApp/src/jvmMain/kotlin/org/onion/agro/utils/NativeLibraryLoader.kt`，支持只从资源解压 native 库而不立即 `System.load`，让 LiteRT native 侧按需加载 WebGPU accelerator 与 sampler。
+- [修改] 为 `composeApp/build.gradle.kts` 的 Windows Bazel native 构建追加 `litert_runtime_link_mode=dynamic` 与 `resolve_symbols_in_exec=false`，使 JNI 与 WebGPU 组件使用同一动态 LiteRT runtime。
+- [文档] 更新 `docs/agents/native-cpp.md`，记录 Windows GPU/WebGPU JNI 加载边界与库顺序。
+
 ## [2026-08-02] - SVG 图像背景层级修复
 - [修复] 更新 `ChatViewModel` 的 SVG 图像生成指令，明确 SVG painter's order、背景位置及响应前覆盖检查，避免模型将不透明全画布背景追加到前景后导致预览只显示背景色。
 - [文档] 更新 `docs/specs/svg-image-library-card.md`，记录 SVG 背景与前景的绘制顺序约束。

@@ -26,27 +26,43 @@ internal actual object LiteRtLmJni {
 
     init {
         val osName = System.getProperty("os.name").lowercase()
-        NativeLibraryLoader.loadFromResources("GemmaModelConstraintProvider")
-        NativeLibraryLoader.loadFromResources("litertlm_jni")
         if (osName.contains("win")) {
-            try {
-                val tempDir = NativeLibraryLoader.tempDirectoryPath
-                println("Setting DLL directory to: $tempDir")
-                val wTempDir = WString(tempDir)
-                Kernel32.INSTANCE.SetDllDirectoryW(wTempDir)
-                Kernel32.INSTANCE.SetDefaultDllDirectories(Kernel32.LOAD_LIBRARY_SEARCH_DEFAULT_DIRS or Kernel32.LOAD_LIBRARY_SEARCH_USER_DIRS)
-                Kernel32.INSTANCE.AddDllDirectory(wTempDir)
-            } catch (e: Exception) {
-                println("Failed to set DLL directory via JNA: $e")
-            }
-            try { NativeLibraryLoader.loadFromResources("dxil") } catch (e: Exception) { println(e) }
-            try { NativeLibraryLoader.loadFromResources("dxcompiler") } catch (e: Exception) { println(e) }
-            try { NativeLibraryLoader.loadFromResources("LiteRt") } catch (e: Exception) { println(e) }
-            // Note: Avoid loading prebuilt WebGPU accelerator DLL directly due to ABI mismatch in tflite::Subgraph 
-            // between source-built JNI and prebuilt DLL. This allows the runtime to gracefully catch the unsupported 
-            // status and trigger our automatic CPU fallback mechanism without causing EXCEPTION_ACCESS_VIOLATION.
-            // try { NativeLibraryLoader.loadFromResources("LiteRtWebGpuAccelerator") } catch (e: Exception) { println(e) }
-            // try { NativeLibraryLoader.loadFromResources("LiteRtTopKWebGpuSampler") } catch (e: Exception) { println(e) }
+            configureWindowsDllSearchPath()
+            extractOptionalWindowsLibrary("dxil")
+            extractOptionalWindowsLibrary("dxcompiler")
+            extractOptionalWindowsLibrary("webgpu_dawn")
+            extractOptionalWindowsLibrary("LiteRtWebGpuAccelerator")
+            extractOptionalWindowsLibrary("LiteRtTopKWebGpuSampler")
+            NativeLibraryLoader.loadFromResources("LiteRt")
+            NativeLibraryLoader.loadFromResources("GemmaModelConstraintProvider")
+            NativeLibraryLoader.loadFromResources("litertlm_jni")
+        } else {
+            NativeLibraryLoader.loadFromResources("GemmaModelConstraintProvider")
+            NativeLibraryLoader.loadFromResources("litertlm_jni")
+        }
+    }
+
+    private fun configureWindowsDllSearchPath() {
+        try {
+            val tempDir = NativeLibraryLoader.tempDirectoryPath
+            println("Setting DLL directory to: $tempDir")
+            val wTempDir = WString(tempDir)
+            Kernel32.INSTANCE.SetDefaultDllDirectories(
+                Kernel32.LOAD_LIBRARY_SEARCH_DEFAULT_DIRS or Kernel32.LOAD_LIBRARY_SEARCH_USER_DIRS
+            )
+            Kernel32.INSTANCE.AddDllDirectory(wTempDir)
+            Kernel32.INSTANCE.SetDllDirectoryW(wTempDir)
+        } catch (e: Exception) {
+            println("Failed to set DLL directory via JNA: $e")
+        }
+    }
+
+    private fun extractOptionalWindowsLibrary(baseName: String) {
+        try {
+            val file = NativeLibraryLoader.extractFromResources(baseName)
+            println("Prepared Windows native dependency '$baseName' at: ${file.absolutePath}")
+        } catch (e: Exception) {
+            println("Failed to prepare optional Windows native dependency '$baseName': $e")
         }
     }
 

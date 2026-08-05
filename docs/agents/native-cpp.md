@@ -9,3 +9,8 @@
 - **消息传递机制**：
     - **禁止**直接跨 JNI 传递裸指针或裸原生 JSON 字符串，应在 Kotlin 侧将对象（`Message`, `Content`, `ToolCall`）转换为规范的 `kotlinx.serialization.json` 结构后再行操作。
     - 流式应答（Stream Response）：原生回调应转化为 Kotlin `Flow` 的异步数据流抛出，提供平滑非阻塞的 UI 消费方案。
+
+- **Windows GPU/WebGPU 加载边界**：
+    - 桌面端使用 LiteRT-LM GPU 后端时，JNI 库必须与 `libLiteRt.dll` 采用动态 runtime 链接，避免 JNI 内静态 LiteRT runtime 与 WebGPU sampler/accelerator 依赖的动态 LiteRT runtime 混用。
+    - Windows 启动阶段必须先创建并注册 native 临时目录到 DLL 搜索路径，再将 `dxil.dll`、`dxcompiler.dll`、`libwebgpu_dawn.dll`、`libLiteRtWebGpuAccelerator.dll`、`libLiteRtTopKWebGpuSampler.dll` 解压到该目录。
+    - `libLiteRt.dll`、`libGemmaModelConstraintProvider.dll` 应在 `liblitertlm_jni.dll` 之前加载；WebGPU accelerator 和 sampler 只需提前解压，由 LiteRT native 侧按需 `LoadLibrary`，避免 Java 侧重复接管插件生命周期。

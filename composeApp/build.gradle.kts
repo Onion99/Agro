@@ -723,6 +723,8 @@ desktopPlatforms.forEach { platform ->
                 "--host_features=static_link_msvcrt",
                 "--copt=/MT",
                 "--host_copt=/MT",
+                "--define=litert_runtime_link_mode=dynamic",
+                "--define=resolve_symbols_in_exec=false",
                 "//python/litert_lm:copy_dxcompiler_dll",
                 "//python/litert_lm:copy_dxil_dll"
             )
