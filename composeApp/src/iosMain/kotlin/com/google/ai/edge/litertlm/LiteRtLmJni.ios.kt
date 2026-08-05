@@ -1,8 +1,10 @@
 package com.google.ai.edge.litertlm
 
 import cnames.structs.LiteRtLmConversation
+import cnames.structs.LiteRtLmConversationOptionalArgs
 import cnames.structs.LiteRtLmEngine
 import cnames.structs.LiteRtLmSessionConfig
+import cnames.structs.LiteRtLmStreamChunk
 import com.google.ai.edge.litertlm.cinterop.LiteRtLmSamplerParams
 import com.google.ai.edge.litertlm.cinterop.kLiteRtLmSamplerTypeTopP
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_cancel_process
@@ -12,10 +14,14 @@ import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_config_set_en
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_config_set_extra_context
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_config_set_filter_channel_content_from_kv_cache
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_config_set_messages
+import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_config_set_prompt_template
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_config_set_session_config
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_config_set_tools
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_create
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_delete
+import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_optional_args_create
+import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_optional_args_delete
+import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_optional_args_set_visual_token_budget
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_send_message
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_send_message_stream
 import com.google.ai.edge.litertlm.cinterop.litert_lm_engine_create
@@ -33,11 +39,13 @@ import com.google.ai.edge.litertlm.cinterop.litert_lm_json_response_get_string
 import com.google.ai.edge.litertlm.cinterop.litert_lm_session_config_create
 import com.google.ai.edge.litertlm.cinterop.litert_lm_session_config_delete
 import com.google.ai.edge.litertlm.cinterop.litert_lm_session_config_set_sampler_params
+import com.google.ai.edge.litertlm.cinterop.litert_lm_stream_chunk_get_error
+import com.google.ai.edge.litertlm.cinterop.litert_lm_stream_chunk_get_text
+import com.google.ai.edge.litertlm.cinterop.litert_lm_stream_chunk_is_final
 import io.github.vinceglb.filekit.FileKit
 import io.github.vinceglb.filekit.dialogs.FileKitType
 import io.github.vinceglb.filekit.dialogs.openFilePicker
 import io.github.vinceglb.filekit.path
-import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CPointed
 import kotlinx.cinterop.CPointer
@@ -156,6 +164,9 @@ internal actual object LiteRtLmJni {
                 config,
                 filterChannelContentFromKvCache
             )
+            overwritePromptTemplate?.takeIf { it.isNotBlank() }?.let { promptTemplate ->
+                litert_lm_conversation_config_set_prompt_template(config, promptTemplate)
+            }
 
             litert_lm_conversation_create(engine, config)
                 .toHandle("LiteRT LM conversation")
@@ -174,7 +185,8 @@ internal actual object LiteRtLmJni {
         val response = litert_lm_conversation_send_message(
             conversation,
             messageJsonString,
-            extraContextJsonString.ifBlank { "{}" }
+            extraContextJsonString.ifBlank { "{}" },
+            null
         ) ?: throw LiteRtLmJniException("LiteRT LM message send failed.")
         try {
             litert_lm_json_response_get_string(response)?.toKString()
@@ -194,6 +206,7 @@ internal actual object LiteRtLmJni {
         visualTokenBudget: Int?
     ) {
         val conversation = conversationPointer.toNativePointer<LiteRtLmConversation>("LiteRT LM conversation")
+        val optionalArgs = createOptionalArgs(visualTokenBudget)
         val callbackState = StableRef.create(
             StreamCallbackState(
                 onMessage = onMessage,
@@ -202,14 +215,19 @@ internal actual object LiteRtLmJni {
             )
         )
 
-        val status = memScoped {
-            litert_lm_conversation_send_message_stream(
-                conversation,
-                messageJsonString,
-                extraContextJsonString.ifBlank { "{}" },
-                streamCallback,
-                callbackState.asCPointer()
-            )
+        val status = try {
+            memScoped {
+                litert_lm_conversation_send_message_stream(
+                    conversation,
+                    messageJsonString,
+                    extraContextJsonString.ifBlank { "{}" },
+                    optionalArgs,
+                    streamCallback,
+                    callbackState.asCPointer()
+                )
+            }
+        } finally {
+            optionalArgs?.let { litert_lm_conversation_optional_args_delete(it) }
         }
 
         if (status != 0) {
@@ -301,6 +319,19 @@ internal actual object LiteRtLmJni {
         return sessionConfig
     }
 
+    private fun createOptionalArgs(
+        visualTokenBudget: Int?
+    ): CPointer<LiteRtLmConversationOptionalArgs>? {
+        visualTokenBudget ?: return null
+        val optionalArgs = litert_lm_conversation_optional_args_create()
+            ?: throw LiteRtLmJniException("Failed to create LiteRT LM conversation optional args.")
+        litert_lm_conversation_optional_args_set_visual_token_budget(
+            optionalArgs,
+            visualTokenBudget
+        )
+        return optionalArgs
+    }
+
     private fun firstNonBlank(vararg values: String): String? {
         return values.firstOrNull { it.isNotBlank() }
     }
@@ -326,17 +357,17 @@ internal actual object LiteRtLmJni {
 
     private val streamCallback = staticCFunction {
             callbackData: COpaquePointer?,
-            chunk: CPointer<ByteVar>?,
-            isFinal: Boolean,
-            errorMessage: CPointer<ByteVar>? ->
+            chunk: CPointer<LiteRtLmStreamChunk>? ->
         val ref = callbackData?.asStableRef<StreamCallbackState>() ?: return@staticCFunction
         val state = ref.get()
         try {
-            val error = errorMessage?.toKString()
+            val error = chunk?.let { litert_lm_stream_chunk_get_error(it)?.toKString() }
+            val isFinal = chunk?.let { litert_lm_stream_chunk_is_final(it) } ?: true
+            val text = chunk?.let { litert_lm_stream_chunk_get_text(it)?.toKString() }
             when {
                 error != null -> state.onError(STREAM_ERROR_CODE, error)
                 isFinal -> state.onDone()
-                chunk != null -> state.onMessage(chunk.toKString())
+                text != null -> state.onMessage(text)
             }
         } catch (throwable: Throwable) {
             runCatching {
@@ -346,7 +377,10 @@ internal actual object LiteRtLmJni {
                 )
             }
         } finally {
-            if (isFinal || errorMessage != null) {
+            val isTerminal = chunk == null ||
+                litert_lm_stream_chunk_is_final(chunk) ||
+                litert_lm_stream_chunk_get_error(chunk) != null
+            if (isTerminal) {
                 ref.dispose()
             }
         }

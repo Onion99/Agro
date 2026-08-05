@@ -100,13 +100,41 @@ internal actual object LiteRtLmJni {
         channelsJsonString: String?, extraContextJsonString: String, enableConversationConstrainedDecoding: Boolean,
         filterChannelContentFromKvCache: Boolean, overwritePromptTemplate: String?
     ): Long {
-        return nativeCreateConversation(enginePointer, samplerConfig, messageJsonString, toolsDescriptionJsonString, channelsJsonString, extraContextJsonString, enableConversationConstrainedDecoding, filterChannelContentFromKvCache, overwritePromptTemplate)
+        return nativeCreateConversation(
+            enginePointer = enginePointer,
+            samplerConfig = samplerConfig,
+            messageJsonString = messageJsonString,
+            toolsDescriptionJsonString = toolsDescriptionJsonString,
+            channelsJsonString = channelsJsonString,
+            extraContextJsonString = extraContextJsonString,
+            enableConversationConstrainedDecoding = enableConversationConstrainedDecoding,
+            filterChannelContentFromKvCache = filterChannelContentFromKvCache,
+            overwritePromptTemplate = overwritePromptTemplate,
+            loraPath = null,
+            audioLoraPath = null,
+            prefillPrefaceOnInit = false,
+            maxOutputToken = -1,
+            thinkingConfig = null,
+            enableResponseFormat = false
+        )
     }
 
     actual fun sendLmMessage(
         conversationPointer: Long, messageJsonString: String, extraContextJsonString: String
     ): String {
-        return nativeSendMessage(conversationPointer, messageJsonString, extraContextJsonString, null)
+        return nativeSendMessage(
+            conversationPointer = conversationPointer,
+            messageJsonString = messageJsonString,
+            extraContextJsonString = extraContextJsonString,
+            visualTokenBudget = null,
+            repetitionPenaltyConfig = null,
+            noRepeatNgramConfig = null,
+            suppressTokensConfig = null,
+            maxOutputToken = -1,
+            thinkingConfig = null,
+            constraintType = 0,
+            constraintString = null
+        )
     }
 
     interface JniMessageCallback {
@@ -120,11 +148,24 @@ internal actual object LiteRtLmJni {
         onMessage: (String) -> Unit, onDone: () -> Unit, onError: (Int, String) -> Unit,
         visualTokenBudget: Int?
     ) {
-        nativeSendMessageAsync(conversationPointer, messageJsonString, extraContextJsonString, object : JniMessageCallback {
-            override fun onMessage(messageJsonString: String) = onMessage(messageJsonString)
-            override fun onDone() = onDone()
-            override fun onError(statusCode: Int, message: String) = onError(statusCode, message)
-        }, visualTokenBudget)
+        nativeSendMessageAsync(
+            conversationPointer = conversationPointer,
+            messageJsonString = messageJsonString,
+            extraContextJsonString = extraContextJsonString,
+            callback = object : JniMessageCallback {
+                override fun onMessage(messageJsonString: String) = onMessage(messageJsonString)
+                override fun onDone() = onDone()
+                override fun onError(statusCode: Int, message: String) = onError(statusCode, message)
+            },
+            visualTokenBudget = visualTokenBudget,
+            repetitionPenaltyConfig = null,
+            noRepeatNgramConfig = null,
+            suppressTokensConfig = null,
+            maxOutputToken = -1,
+            thinkingConfig = null,
+            constraintType = 0,
+            constraintString = null
+        )
     }
 
     actual fun cancelLmConversation(conversationPointer: Long) {
@@ -150,17 +191,23 @@ internal actual object LiteRtLmJni {
     private external fun nativeCreateConversation(
         enginePointer: Long, samplerConfig: Any?, messageJsonString: String, toolsDescriptionJsonString: String,
         channelsJsonString: String?, extraContextJsonString: String, enableConversationConstrainedDecoding: Boolean,
-        filterChannelContentFromKvCache: Boolean, overwritePromptTemplate: String?
+        filterChannelContentFromKvCache: Boolean?, overwritePromptTemplate: String?,
+        loraPath: String?, audioLoraPath: String?, prefillPrefaceOnInit: Boolean,
+        maxOutputToken: Int, thinkingConfig: Any?, enableResponseFormat: Boolean
     ): Long
 
     private external fun nativeSendMessage(
         conversationPointer: Long, messageJsonString: String, extraContextJsonString: String,
-        visualTokenBudget: Int?
+        visualTokenBudget: Int?, repetitionPenaltyConfig: Any?, noRepeatNgramConfig: Any?,
+        suppressTokensConfig: Any?, maxOutputToken: Int, thinkingConfig: Any?,
+        constraintType: Int, constraintString: String?
     ): String
 
     private external fun nativeSendMessageAsync(
         conversationPointer: Long, messageJsonString: String, extraContextJsonString: String,
-        callback: JniMessageCallback, visualTokenBudget: Int?
+        callback: JniMessageCallback, visualTokenBudget: Int?, repetitionPenaltyConfig: Any?,
+        noRepeatNgramConfig: Any?, suppressTokensConfig: Any?, maxOutputToken: Int,
+        thinkingConfig: Any?, constraintType: Int, constraintString: String?
     )
 
     private external fun nativeConversationCancelProcess(conversationPointer: Long)

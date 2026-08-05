@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-05] - LiteRT-LM Native ABI 签名对齐
+- [修复] 对齐 `composeApp/src/desktopMain/kotlin/com/google/ai/edge/litertlm/LiteRtLmJni.desktop.kt` 与当前 `litertlm.cc` 的 `nativeCreateConversation`、`nativeSendMessage`、`nativeSendMessageAsync` 参数表，避免 Windows JNI 短符号绑定后因参数漂移读取栈垃圾并触发 JVM `EXCEPTION_ACCESS_VIOLATION`。
+- [修复] 同步更新 `composeApp/src/androidMain/kotlin/com/google/ai/edge/litertlm/LiteRtLmJni.android.kt` 的私有 external 声明与默认禁用参数，保持 Android/desktop actual 层和 native ABI 一致。
+- [修复] 更新 `composeApp/src/iosMain/kotlin/com/google/ai/edge/litertlm/LiteRtLmJni.ios.kt`，对齐 LiteRT-LM C API 新增的 `LiteRtLmConversationOptionalArgs*` 参数和 `LiteRtLmStreamChunk` 流式回调形态，并补充 `overwritePromptTemplate` 到 iOS prompt template 配置的映射。
+- [修复] 更新 `composeApp/src/nativeInterop/cinterop/litertlm.def` 与 `composeApp/build.gradle.kts` 的 iOS cinterop 配置，同时导入 `engine.h`、`conversation.h` 并补齐 native root include 路径，确保 Kotlin/Native 生成当前 C API 符号。
+- [文档] 更新 `docs/agents/native-cpp.md`，补充 Kotlin external 与 C++ JNI 导出函数的 ABI 对齐要求。
+- [文档] 更新 `docs/specs/ios-litertlm-platform.md`，记录 iOS C API optional args、stream chunk 生命周期和仍未暴露的 per-turn 能力边界。
+
 ## [2026-08-05] - Windows LiteRT-LM GPU 加速加载修复
 - [修复] 调整 `composeApp/src/desktopMain/kotlin/com/google/ai/edge/litertlm/LiteRtLmJni.desktop.kt` 的 Windows native 初始化顺序，先注册 DLL 搜索目录并准备 WebGPU/DXC/Dawn 依赖，再加载动态 `libLiteRt.dll`、约束库和 `liblitertlm_jni.dll`，避免 GPU 后端初始化时混用静态/动态 LiteRT runtime。
 - [修改] 扩展 `composeApp/src/jvmMain/kotlin/org/onion/agro/utils/NativeLibraryLoader.kt`，支持只从资源解压 native 库而不立即 `System.load`，让 LiteRT native 侧按需加载 WebGPU accelerator 与 sampler。

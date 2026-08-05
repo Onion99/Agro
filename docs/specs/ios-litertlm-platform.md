@@ -10,8 +10,8 @@ This note records the iOS native bridge for `LiteRtLmJni`.
 
 - `composeApp` no longer registers the old Kotlin/Native cinterop for `sdloader.def`.
 - iOS framework builds no longer link the legacy `stable-diffusion.cpp` static libraries from Gradle.
-- `composeApp/src/nativeInterop/cinterop/litertlm.def` maps the LiteRT LM C API from `cpp/lite-rt-lm/c/engine.h`.
-- Kotlin/Native cinterop must include `cpp/lite-rt-lm/c` directly because `litertlm.def` declares `headers = engine.h`. Including only `cpp/lite-rt-lm` makes CI/Xcode cinterop fail with `fatal error: 'engine.h' file not found`.
+- `composeApp/src/nativeInterop/cinterop/litertlm.def` maps the LiteRT LM C API from `cpp/lite-rt-lm/c/engine.h` and `cpp/lite-rt-lm/c/conversation.h`.
+- Kotlin/Native cinterop must include both `cpp/lite-rt-lm/c` and `cpp/lite-rt-lm`: the direct `c` include keeps `headers = engine.h conversation.h` resolvable, while the native root include resolves `conversation.h`'s internal `#include "c/engine.h"`.
 - iOS framework linking expects a native library named `liblitertlm_c_api.a` or `liblitertlm_c_api.dylib` in both `cpp/libs/ios-device` and `cpp/libs/ios-simulator`.
 - The active iOS target matrix is `iosArm64` and `iosSimulatorArm64`; `iosX64` is intentionally not registered.
 - The Kotlin `2.4.0`, Compose Multiplatform `1.11.1`, Compose Hot Reload `1.1.1`, and Coil `3.5.0` versions form a single iOS KLIB toolchain. FileKit `0.14.2` and Compose Media Player `0.11.3` both publish iOS KLIB ABI `2.4.0`; FileKit `0.14.2` also requires Coil `3.5.0`, which uses the Compose-aligned Skiko `0.144.6`. They must not be used with Kotlin `2.3.x`, whose Kotlin/Native compiler accepts ABI `2.3.0` at most.
@@ -34,17 +34,22 @@ This note records the iOS native bridge for `LiteRtLmJni`.
 - `LiteRtLmJni` now has an iOS `actual` implementation that calls the LiteRT LM C API for engine creation, conversation creation, synchronous message sending, streaming message sending, cancellation, and release.
 - iOS model selection uses FileKit and returns the selected `.litertlm` path.
 - `sendLmMessageAsync` uses a Kotlin/Native `StableRef` as callback state and disposes it on final/error stream callbacks.
+- iOS streaming now consumes the C API `LiteRtLmStreamChunk` callback shape. Text and error strings are copied to Kotlin strings inside the callback because the native chunk is only valid for the callback duration.
+- iOS synchronous and streaming message sends pass the C API `LiteRtLmConversationOptionalArgs*` argument. The current common API maps only `visualTokenBudget` into optional args for streaming; unsupported optional capabilities are passed as `NULL`/disabled defaults.
+- iOS conversation creation maps `overwritePromptTemplate` to `litert_lm_conversation_config_set_prompt_template` when a non-blank prompt template is provided.
 
 ## Native Contract
 
-- The native library must export the `litert_lm_*` symbols declared by `cpp/lite-rt-lm/c/engine.h`.
+- The native library must export the `litert_lm_*` symbols declared by `cpp/lite-rt-lm/c/engine.h` and `cpp/lite-rt-lm/c/conversation.h`.
 - `LiteRtLmJni.ios.kt` stores native pointers as `Long` handles to keep the common API aligned with Android and Desktop.
 - `LmEngine` remains responsible for deleting engine handles through `deleteLmEngine`.
 - `LmConversation` remains responsible for deleting conversation handles through `deleteLmConversation`.
 - `SamplerConfig` is mapped to the C API `LiteRtLmSamplerParams` using `kLiteRtLmSamplerTypeTopP`, matching the JNI implementation.
+- Kotlin/Native C interop calls must stay aligned with `cpp/lite-rt-lm/c/engine.h` and `cpp/lite-rt-lm/c/conversation.h`, including added trailing parameters such as `LiteRtLmConversationOptionalArgs*`.
 
 ## Current Limitations
 
-- The LiteRT LM C API does not expose the common API's `mainBackendNumThreads`, `audioBackendNumThreads`, `channelsJsonString`, `overwritePromptTemplate`, or `visualTokenBudget` inputs. The iOS bridge currently ignores those fields.
+- The LiteRT LM C API does not expose the common API's `mainBackendNumThreads`, `audioBackendNumThreads`, or `channelsJsonString` inputs. The iOS bridge currently ignores those fields.
+- The iOS bridge does not yet expose repetition penalty, no-repeat-ngram, suppress-token, max-output-token, thinking-config, LoRA, per-turn constraint, or response-format controls through the common API.
 - Gemma FST constrained decoding through `LiteRtLmGemmaModelConstraintProvider` is disabled for iOS static archive builds. `ChatViewModel` therefore creates iOS conversations with constrained decoding disabled, including structured SVG, chiptune, and Lottie modes; their prompt-level JSON contracts and post-generation parsers remain active. Direct C API callers must likewise pass `false` until the provider dylib is bundled and linked.
 - Intel iOS Simulator is not supported by the current target matrix. Reintroducing it requires adding `iosX64`, an `ios_x86_64` Bazel build, and an explicit simulator archive merge step.

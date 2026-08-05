@@ -14,3 +14,13 @@
     - 桌面端使用 LiteRT-LM GPU 后端时，JNI 库必须与 `libLiteRt.dll` 采用动态 runtime 链接，避免 JNI 内静态 LiteRT runtime 与 WebGPU sampler/accelerator 依赖的动态 LiteRT runtime 混用。
     - Windows 启动阶段必须先创建并注册 native 临时目录到 DLL 搜索路径，再将 `dxil.dll`、`dxcompiler.dll`、`libwebgpu_dawn.dll`、`libLiteRtWebGpuAccelerator.dll`、`libLiteRtTopKWebGpuSampler.dll` 解压到该目录。
     - `libLiteRt.dll`、`libGemmaModelConstraintProvider.dll` 应在 `liblitertlm_jni.dll` 之前加载；WebGPU accelerator 和 sampler 只需提前解压，由 LiteRT native 侧按需 `LoadLibrary`，避免 Java 侧重复接管插件生命周期。
+
+- **JNI ABI 对齐**：
+    - Kotlin `external fun` 的参数数量、顺序、可空装箱类型必须与 `cpp/lite-rt-lm/kotlin/java/com/google/ai/edge/litertlm/jni/litertlm.cc` 的 `JNI_METHOD(...)` 导出函数逐项一致。
+    - 当上游 native 函数新增可选能力参数时，平台 actual 层可以维持公共 expect API 不变，但私有 external 声明必须补齐参数，并显式传入 `null`、`false`、`-1` 或 `0` 等禁用默认值。
+    - 特别注意 Windows JNI 短符号名绑定不会校验 Kotlin 声明与 C++ 函数的完整 ABI；签名漂移会在 `nativeCreateConversation`、`nativeSendMessage` 等调用中表现为 JVM `EXCEPTION_ACCESS_VIOLATION`。
+
+- **Kotlin/Native C API 对齐**：
+    - iOS `LiteRtLmJni.ios.kt` 通过 cinterop 调用 `cpp/lite-rt-lm/c/engine.h` 与 `cpp/lite-rt-lm/c/conversation.h`，必须随 C 头文件新增参数同步更新调用点。
+    - C API 引入 `LiteRtLmConversationOptionalArgs*` 后，未启用的 per-turn 选项应显式传 `NULL`；启用 `visualTokenBudget` 时必须创建 optional args，调用返回后用 `litert_lm_conversation_optional_args_delete` 释放。
+    - C API 流式回调中的 `LiteRtLmStreamChunk` 只在回调期间有效，Kotlin/Native 层必须在 callback 内立即复制 text/error 字符串，禁止保存 native chunk 或内部字符串指针。

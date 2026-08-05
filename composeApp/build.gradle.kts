@@ -105,7 +105,7 @@ kotlin {
         iosTarget.compilations["main"].cinterops {
             create("litertlm") {
                 defFile(liteRtLmCInteropDefFile)
-                includeDirs(liteRtLmCHeadersDir)
+                includeDirs(liteRtLmCHeadersDir, liteRtLmNativeRoot)
             }
         }
     }
