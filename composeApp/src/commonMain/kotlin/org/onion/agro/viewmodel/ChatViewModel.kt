@@ -16,8 +16,10 @@ import com.onion.model.PersistentToolCall
 import com.onion.model.PersistentToolResponse
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import com.google.ai.edge.litertlm.LiteRtLmJni
@@ -38,6 +40,7 @@ import org.onion.agro.native.llm.LmConversation
 import org.onion.agro.native.llm.LmEngine
 import agro.composeapp.generated.resources.Res
 import agro.composeapp.generated.resources.*
+import kotlinx.coroutines.Job
 import org.jetbrains.compose.resources.getString
 import org.onion.agro.BuildConfig
 import org.onion.agro.database.ChatHistoryRepository
@@ -72,6 +75,15 @@ class ChatViewModel(
         }
     }
 
+
+    private val _toastEvent = MutableSharedFlow<String>(extraBufferCapacity = 64)
+    val toastEvent: SharedFlow<String> = _toastEvent.asSharedFlow()
+
+    fun showToast(message: String) {
+        viewModelScope.launch {
+            _toastEvent.emit(message)
+        }
+    }
 
     var diffusionModelPath = mutableStateOf("")
     var vaePath = mutableStateOf("")
@@ -1252,6 +1264,7 @@ class ChatViewModel(
                             "ChatViewModel: GPU decode failed with ${e.message}. " +
                                 "Switching LiteRT LM backend to CPU and retrying once."
                         )
+                        showToast(getString(Res.string.chat_gpu_decode_failed_fallback_cpu))
                         val cpuConversation = runCatching {
                             switchLmBackendAndRecreateConversation(LM_BACKEND_CPU)
                         }.getOrElse { fallbackError ->

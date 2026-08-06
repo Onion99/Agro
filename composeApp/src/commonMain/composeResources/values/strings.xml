@@ -170,6 +170,7 @@
     <string name="chat_system_engine_not_initialized">System: LM Engine not initialized or model not loaded yet. Please wait or check the model path.</string>
     <string name="chat_system_error_prefix">Error: %1$s</string>
     <string name="chat_system_error_token_limit_exceeded">The input prompt is too long. Emojis, files, or message history may have exceeded the model\'s Context Limits. Please go to the Setting page to adjust Context Limits or clear the chat history.</string>
+    <string name="chat_gpu_decode_failed_fallback_cpu">GPU mode error: switching to CPU mode.</string>
     <string name="chat_thinking_prefix">> *Thinking...*\n</string>
 
     <!-- Library Screen -->

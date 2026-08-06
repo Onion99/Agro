@@ -224,6 +224,13 @@ fun ChatScreen(
         val clipboardManager = LocalClipboardManager.current
         val snackbarHostState = remember { SnackbarHostState() }
         val coroutineScope = rememberCoroutineScope()
+
+        LaunchedEffect(chatViewModel) {
+            chatViewModel.toastEvent.collect { message ->
+                snackbarHostState.showSnackbar(message)
+            }
+        }
+
         val copyContextInstruction: (String) -> Unit = { instruction ->
             clipboardManager.setText(AnnotatedString(instruction))
             coroutineScope.launch {

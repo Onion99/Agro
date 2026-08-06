@@ -169,6 +169,7 @@
     <string name="chat_system_engine_not_initialized">系统：神经网络引擎未初始化或模型尚未加载。请稍候或检查模型路径。</string>
     <string name="chat_system_error_prefix">错误：%1$s</string>
     <string name="chat_system_error_token_limit_exceeded">输入内容过长。你的输入、附带的附件或历史记录已超出模型的「上下文限制」。请前往「设置」页面调高「上下文限制 (Context Limits)」或清除对话历史记录后重试。</string>
+    <string name="chat_gpu_decode_failed_fallback_cpu">GPU 模式错误，已自动切换为 CPU 模式</string>
     <string name="chat_thinking_prefix">> *正在思考...*\n</string>
     <string name="chat_running_tool">\n`[正在运行工具: %1$s...]`\n</string>
     <string name="chat_tool_completed">\n`[工具 \'%1$s\' 已完成]`\n</string>

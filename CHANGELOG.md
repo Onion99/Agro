@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-06] - GPU 模式错误 Toast 提示
+- [新增] 在 `ChatViewModel` 中新增 `toastEvent` SharedFlow 与 `showToast()` 触发逻辑，当 GPU decode 失败并回退至 CPU 模式时，触发 Toast/Snackbar 提示用户。
+- [新增] 在 `strings.xml` 与 `values-zh/strings.xml` 中补齐 `chat_gpu_decode_failed_fallback_cpu` 多语言资源。
+- [修改] 在 `ChatScreen.kt` 中监听 `chatViewModel.toastEvent` 并通过 `SnackbarHost` 展示 Toast 提示。
+
 ## [2026-08-06] - LiteRT-LM GPU Decode 错误恢复
 - [修复] 更新 `LmConversation` 与 `LmEngine`，保留 LiteRT-LM native status code，并在引擎或会话创建返回空指针时立即失败，避免继续使用无效 native 句柄。
 - [修复] 更新 `ChatViewModel` 的 LLM 生成流错误处理，GPU decode 返回 `INTERNAL` 时重建 CPU 引擎/会话并仅重试一次，同时避免 `.catch` 吞错后继续执行成功收尾覆盖错误消息。
