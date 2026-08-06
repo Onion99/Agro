@@ -24,7 +24,6 @@ import com.google.ai.edge.litertlm.LiteRtLmJni
 import io.github.vinceglb.filekit.FileKit
 import io.github.vinceglb.filekit.cacheDir
 import io.github.vinceglb.filekit.path
-import kotlinx.coroutines.flow.catch
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.math.roundToInt
@@ -34,6 +33,9 @@ import org.onion.agro.native.llm.AgentLoopEvent
 import org.onion.agro.native.llm.AgentLoopRunner
 import org.onion.agro.native.llm.AgentTools
 import org.onion.agro.native.llm.LiteRtLmModelMetadata
+import org.onion.agro.native.llm.LiteRtLmInferenceException
+import org.onion.agro.native.llm.LmConversation
+import org.onion.agro.native.llm.LmEngine
 import agro.composeapp.generated.resources.Res
 import agro.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.getString
@@ -192,8 +194,9 @@ class ChatViewModel(
         }
     }
 
-    private var lmEngine: org.onion.agro.native.llm.LmEngine? = null
-    private var lmConversation: org.onion.agro.native.llm.LmConversation? = null
+    private var lmEngine: LmEngine? = null
+    private var lmConversation: LmConversation? = null
+    private var activeBackend: String? = null
     private var activeEnableSpeculativeDecoding: Boolean? = null
     private var activeMaxNumTokens: Int? = null
     private val agentTools = AgentTools()
@@ -303,7 +306,13 @@ class ChatViewModel(
 
     fun initLLM() {
         if (isInitializing) return
-        if (lmEngine != null && llmPath.value == activeModelPath) {
+        if (
+            lmEngine != null &&
+            llmPath.value == activeModelPath &&
+            isSameLmBackend(activeBackend, lmBackend.value) &&
+            activeEnableSpeculativeDecoding == enableSpeculativeDecoding.value &&
+            activeMaxNumTokens == lmMaxNumTokens.value
+        ) {
             return
         }
         isInitializing = true
@@ -325,6 +334,7 @@ class ChatViewModel(
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
+                clearActiveLmEngineState()
 
                 println("=== Model Path ===")
                 println("Model Path: ${diffusionModelPath.value}")
@@ -337,7 +347,7 @@ class ChatViewModel(
                 isLlmModelLoading.value = true
                 val currentLlmPath = llmPath.value
                 resolveLmMaxNumTokens(currentLlmPath)
-                lmEngine = org.onion.agro.native.llm.LmEngine(
+                lmEngine = LmEngine(
                     modelPath = currentLlmPath,
                     backend = lmBackend.value,
                     visionBackend = lmVisionBackend.value,
@@ -370,11 +380,25 @@ class ChatViewModel(
                 markConversationContextApplied(lmConversation != null)
                 persistAppliedConversationContext()
                 activeModelPath = currentLlmPath
+                activeBackend = normalizeLmBackend(lmBackend.value)
                 activeEnableSpeculativeDecoding = enableSpeculativeDecoding.value
                 activeMaxNumTokens = lmMaxNumTokens.value
             } catch (e: Exception) {
                 e.printStackTrace()
-                activeModelPath = null
+                try {
+                    lmConversation?.close()
+                } catch (closeError: Exception) {
+                    closeError.printStackTrace()
+                }
+                lmConversation = null
+                try {
+                    lmEngine?.close()
+                } catch (closeError: Exception) {
+                    closeError.printStackTrace()
+                }
+                lmEngine = null
+                clearActiveLmEngineState()
+                markConversationContextApplied(false)
             } finally {
                 isInitializing = false
                 isLlmModelLoading.value = false
@@ -397,6 +421,7 @@ class ChatViewModel(
                 
                 val needsEngineReinit = lmEngine == null ||
                         activeModelPath != currentLlmPath ||
+                        !isSameLmBackend(activeBackend, lmBackend.value) ||
                         activeEnableSpeculativeDecoding != enableSpeculativeDecoding.value ||
                         activeMaxNumTokens != lmMaxNumTokens.value
                 
@@ -413,8 +438,9 @@ class ChatViewModel(
                     } catch (e: Exception) {
                         e.printStackTrace()
                     }
+                    clearActiveLmEngineState()
                     
-                    lmEngine = org.onion.agro.native.llm.LmEngine(
+                    lmEngine = LmEngine(
                         modelPath = currentLlmPath,
                         backend = lmBackend.value,
                         visionBackend = lmVisionBackend.value,
@@ -432,6 +458,7 @@ class ChatViewModel(
                     )
                     lmEngine?.initialize()
                     activeModelPath = currentLlmPath
+                    activeBackend = normalizeLmBackend(lmBackend.value)
                     activeEnableSpeculativeDecoding = enableSpeculativeDecoding.value
                     activeMaxNumTokens = lmMaxNumTokens.value
                 } else {
@@ -474,6 +501,19 @@ class ChatViewModel(
                 chatHistoryRepository.saveMessage(sessionId, message)
             } catch (e: Exception) {
                 e.printStackTrace()
+                try {
+                    lmConversation?.close()
+                } catch (closeError: Exception) {
+                    closeError.printStackTrace()
+                }
+                lmConversation = null
+                try {
+                    lmEngine?.close()
+                } catch (closeError: Exception) {
+                    closeError.printStackTrace()
+                }
+                lmEngine = null
+                clearActiveLmEngineState()
                 markConversationContextApplied(false)
                 _currentChatMessages.clear()
                 val text = getString(Res.string.chat_system_parameters_apply_failed, e.message ?: "")
@@ -845,6 +885,107 @@ class ChatViewModel(
         return requested && !getPlatform().isIOS
     }
 
+    private fun normalizeLmBackend(backend: String): String {
+        return backend.trim().uppercase()
+    }
+
+    private fun isGpuBackend(backend: String?): Boolean {
+        return backend.equals(LM_BACKEND_GPU, ignoreCase = true)
+    }
+
+    private fun isSameLmBackend(left: String?, right: String): Boolean {
+        return left.equals(normalizeLmBackend(right), ignoreCase = true)
+    }
+
+    private fun clearActiveLmEngineState() {
+        activeModelPath = null
+        activeBackend = null
+        activeEnableSpeculativeDecoding = null
+        activeMaxNumTokens = null
+    }
+
+    private fun isTokenLimitErrorMessage(message: String): Boolean {
+        return message.contains("kv-cache", ignoreCase = true) ||
+                message.contains("too long", ignoreCase = true) ||
+                message.contains("exceeding", ignoreCase = true) ||
+                message.contains("token", ignoreCase = true)
+    }
+
+    private fun shouldRetryWithCpuAfterGpuDecodeError(
+        error: Throwable,
+        attemptedBackend: String
+    ): Boolean {
+        val lmError = error as? LiteRtLmInferenceException ?: return false
+        return lmError.statusCode == ABSEIL_STATUS_INTERNAL &&
+                isGpuBackend(attemptedBackend) &&
+                !isTokenLimitErrorMessage(lmError.nativeMessage)
+    }
+
+    private suspend fun switchLmBackendAndRecreateConversation(
+        backend: String
+    ): LmConversation {
+        val currentLlmPath = llmPath.value
+        check(currentLlmPath.isNotBlank()) { "LM model path is empty." }
+        resolveLmMaxNumTokens(currentLlmPath)
+
+        try {
+            lmConversation?.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        lmConversation = null
+        try {
+            lmEngine?.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        lmEngine = null
+        clearActiveLmEngineState()
+
+        val normalizedBackend = normalizeLmBackend(backend)
+        val engine = LmEngine(
+            modelPath = currentLlmPath,
+            backend = normalizedBackend,
+            visionBackend = lmVisionBackend.value,
+            audioBackend = lmAudioBackend.value,
+            maxNumTokens = lmMaxNumTokens.value,
+            maxNumImages = lmMaxNumImages.value,
+            cacheDir = FileKit.cacheDir.path ?: "",
+            enableBenchmark = false,
+            enableSpeculativeDecoding = enableSpeculativeDecoding.value,
+            mainNpuNativeLibraryDir = "",
+            visionNpuNativeLibraryDir = "",
+            audioNpuNativeLibraryDir = "",
+            mainBackendNumThreads = lmMainBackendNumThreads.value,
+            audioBackendNumThreads = lmAudioBackendNumThreads.value
+        )
+        try {
+            engine.initialize()
+            lmEngine = engine
+            activeModelPath = currentLlmPath
+            activeBackend = normalizedBackend
+            activeEnableSpeculativeDecoding = enableSpeculativeDecoding.value
+            activeMaxNumTokens = lmMaxNumTokens.value
+            recreateLmConversation()
+            persistAppliedConversationContext()
+            lmBackend.value = normalizedBackend
+            return checkNotNull(lmConversation) {
+                "Failed to recreate LiteRT LM conversation."
+            }
+        } catch (e: Throwable) {
+            try {
+                engine.close()
+            } catch (closeError: Exception) {
+                closeError.printStackTrace()
+            }
+            lmEngine = null
+            lmConversation = null
+            clearActiveLmEngineState()
+            markConversationContextApplied(false)
+            throw e
+        }
+    }
+
     private suspend fun recreateLmConversation(
         systemInstruction: String = currentSystemInstruction(),
         enableConstrainedDecoding: Boolean =
@@ -945,152 +1086,209 @@ class ChatViewModel(
                 }
             }
 
-            val runner = AgentLoopRunner(
-                session = activeConversation,
-                toolExecutor = agentTools,
-                config = AgentLoopConfig(maxToolTurns = 10)
-            )
-
-            runner.run(
-                initialMessage = org.onion.agro.native.llm.Message.user(promptContent),
-                extraContextProvider = {
-                    if (enableThinking.value) mapOf(KEY_THINK_MODE to "true") else emptyMap()
+            suspend fun showGenerationError(error: Throwable) {
+                val messageIndex = _currentChatMessages.indexOfFirst {
+                    it.id.toString() == assistantMessageId
                 }
-            ).catch { e ->
-                terminalTransition = "ERROR"
-                terminalTurnCount = 0
-                isGenerating.value = false
-                isInferenceOn = false
-                if (e is CancellationException) {
-                    onCancelled()
-                    throw e
-                } else {
-                    val messageIndex = _currentChatMessages.indexOfFirst {
-                        it.id.toString() == assistantMessageId
-                    }
-                    if (messageIndex >= 0) {
-                        val meta = mapOf("is_generating" to "false")
-                        val errMsg = e.message ?: ""
-                        val isTokenLimit = errMsg.contains("too long", ignoreCase = true) ||
-                                errMsg.contains("exceeding", ignoreCase = true) ||
-                                errMsg.contains("token", ignoreCase = true)
-                        val displayMsg = if (isTokenLimit) {
-                            getString(Res.string.chat_system_error_token_limit_exceeded)
-                        } else {
-                            getString(Res.string.chat_system_error_prefix, errMsg.ifEmpty { getString(Res.string.unknown_error) })
-                        }
-                        val updated = _currentChatMessages[messageIndex].copy(
-                            contents = listOf(ChatMessageContent.Text(displayMsg)),
-                            metadata = meta
+                if (messageIndex >= 0) {
+                    val meta = mapOf("is_generating" to "false")
+                    val errMsg = error.message.orEmpty()
+                    val displayMsg = if (isTokenLimitErrorMessage(errMsg)) {
+                        getString(Res.string.chat_system_error_token_limit_exceeded)
+                    } else {
+                        getString(
+                            Res.string.chat_system_error_prefix,
+                            errMsg.ifEmpty { getString(Res.string.unknown_error) }
                         )
-                        _currentChatMessages[messageIndex] = updated
-                        sessionId?.let { chatHistoryRepository.saveMessage(it, updated) }
                     }
+                    val updated = _currentChatMessages[messageIndex].copy(
+                        contents = listOf(ChatMessageContent.Text(displayMsg)),
+                        metadata = meta
+                    )
+                    _currentChatMessages[messageIndex] = updated
+                    sessionId?.let { chatHistoryRepository.saveMessage(it, updated) }
+                }
+            }
+
+            var runnerConversation: LmConversation = activeConversation
+            var attemptedBackend = activeBackend ?: normalizeLmBackend(lmBackend.value)
+            var retriedOnCpuAfterGpuFailure = false
+
+            while (true) {
+                val runner = AgentLoopRunner(
+                    session = runnerConversation,
+                    toolExecutor = agentTools,
+                    config = AgentLoopConfig(maxToolTurns = 10)
+                )
+
+                try {
+                    runner.run(
+                        initialMessage = org.onion.agro.native.llm.Message.user(promptContent),
+                        extraContextProvider = {
+                            if (enableThinking.value) mapOf(KEY_THINK_MODE to "true") else emptyMap()
+                        }
+                    ).collect { event ->
+                        terminalTransition = event.state.transition.name
+                        terminalTurnCount = event.state.turnCount
+
+                        when (event) {
+                            is AgentLoopEvent.TextDelta -> {
+                                generatedResult += event.text
+                                updateAssistantMessage(isGeneratingNow = true)
+                            }
+                            is AgentLoopEvent.ThoughtDelta -> {
+                                generatedThought += event.text
+                                updateAssistantMessage(isGeneratingNow = true)
+                            }
+                            is AgentLoopEvent.ToolCallsReceived -> {
+                                println("ChatViewModel: Received ${event.toolCalls.size} tool calls.")
+                            }
+                            is AgentLoopEvent.ToolStarted -> {
+                                println("ChatViewModel: Executing tool '${event.toolCall.name}' with args: ${event.toolCall.arguments}")
+                                val toolStartedAt = Clock.System.now().toEpochMilliseconds()
+                                val toolLogId = ChatHistoryRepository.newId("tool")
+                                val toolArguments = event.toolCall.arguments.toString()
+                                val toolKey = "${event.turnIndex}:${event.callIndex}"
+                                toolLogIds[toolKey] = toolLogId
+
+                                persistentToolCalls.add(
+                                    PersistentToolCall(
+                                        name = event.toolCall.name,
+                                        arguments = toolArguments,
+                                        createdAtMillis = toolStartedAt
+                                    )
+                                )
+
+                                if (sessionId != null && assistantMessageId.isNotBlank()) {
+                                    chatHistoryRepository.upsertToolLog(
+                                        ChatToolLogEntity(
+                                            id = toolLogId,
+                                            sessionId = sessionId,
+                                            messageId = assistantMessageId,
+                                            toolName = event.toolCall.name,
+                                            arguments = toolArguments,
+                                            response = "",
+                                            status = "running",
+                                            startedAtMillis = toolStartedAt,
+                                            completedAtMillis = null
+                                        )
+                                    )
+                                }
+
+                                if (!sessionMode.isStructuredGenerationMode()) {
+                                    generatedResult += getString(
+                                        Res.string.chat_running_tool,
+                                        event.toolCall.name
+                                    )
+                                }
+                                updateAssistantMessage(isGeneratingNow = true)
+                            }
+                            is AgentLoopEvent.ToolFinished -> {
+                                val toolKey = "${event.turnIndex}:${event.callIndex}"
+                                val toolLogId = toolLogIds[toolKey] ?: ChatHistoryRepository.newId("tool")
+                                val resultStr = event.response.response
+                                val toolArguments = event.toolCall.arguments.toString()
+                                val toolStatus = if (event.result.success) "completed" else "failed"
+
+                                persistentToolResponses.add(
+                                    PersistentToolResponse(
+                                        name = event.toolCall.name,
+                                        response = resultStr,
+                                        createdAtMillis = event.result.completedAtMillis
+                                    )
+                                )
+
+                                if (sessionId != null && assistantMessageId.isNotBlank()) {
+                                    chatHistoryRepository.upsertToolLog(
+                                        ChatToolLogEntity(
+                                            id = toolLogId,
+                                            sessionId = sessionId,
+                                            messageId = assistantMessageId,
+                                            toolName = event.toolCall.name,
+                                            arguments = toolArguments,
+                                            response = resultStr,
+                                            status = toolStatus,
+                                            startedAtMillis = event.result.startedAtMillis,
+                                            completedAtMillis = event.result.completedAtMillis
+                                        )
+                                    )
+                                }
+
+                                if (!sessionMode.isStructuredGenerationMode()) {
+                                    generatedResult += getString(
+                                        Res.string.chat_tool_completed,
+                                        event.toolCall.name
+                                    )
+                                }
+                                updateAssistantMessage(isGeneratingNow = true)
+                            }
+                            is AgentLoopEvent.Completed -> {
+                                terminalTransition = event.state.transition.name
+                                terminalTurnCount = event.state.turnCount
+                            }
+                            is AgentLoopEvent.MaxTurnsReached -> {
+                                terminalTransition = event.state.transition.name
+                                terminalTurnCount = event.state.turnCount
+                            }
+                        }
+                    }
+                    break
+                } catch (e: Throwable) {
+                    terminalTransition = "ERROR"
+                    terminalTurnCount = 0
+                    isGenerating.value = false
+                    isInferenceOn = false
+
+                    if (e is CancellationException) {
+                        onCancelled()
+                        return@launch
+                    }
+
+                    if (
+                        !retriedOnCpuAfterGpuFailure &&
+                        shouldRetryWithCpuAfterGpuDecodeError(e, attemptedBackend)
+                    ) {
+                        println(
+                            "ChatViewModel: GPU decode failed with ${e.message}. " +
+                                "Switching LiteRT LM backend to CPU and retrying once."
+                        )
+                        val cpuConversation = runCatching {
+                            switchLmBackendAndRecreateConversation(LM_BACKEND_CPU)
+                        }.getOrElse { fallbackError ->
+                            if (fallbackError is CancellationException) {
+                                onCancelled()
+                                return@launch
+                            }
+                            val combinedError = RuntimeException(
+                                "GPU decode failed and CPU fallback failed. " +
+                                    "GPU error: ${e.message}. " +
+                                    "CPU error: ${fallbackError.message}",
+                                fallbackError
+                            )
+                            showGenerationError(combinedError)
+                            onError(combinedError)
+                            return@launch
+                        }
+
+                        generatedResult = ""
+                        generatedThought = ""
+                        persistentToolCalls.clear()
+                        persistentToolResponses.clear()
+                        toolLogIds.clear()
+                        terminalTransition = "GPU_DECODE_CPU_RETRY"
+                        terminalTurnCount = 0
+                        runnerConversation = cpuConversation
+                        attemptedBackend = LM_BACKEND_CPU
+                        retriedOnCpuAfterGpuFailure = true
+                        isGenerating.value = true
+                        isInferenceOn = true
+                        updateAssistantMessage(isGeneratingNow = true)
+                        continue
+                    }
+
+                    showGenerationError(e)
                     onError(e)
-                }
-            }.collect { event ->
-                terminalTransition = event.state.transition.name
-                terminalTurnCount = event.state.turnCount
-
-                when (event) {
-                    is AgentLoopEvent.TextDelta -> {
-                        generatedResult += event.text
-                        updateAssistantMessage(isGeneratingNow = true)
-                    }
-                    is AgentLoopEvent.ThoughtDelta -> {
-                        generatedThought += event.text
-                        updateAssistantMessage(isGeneratingNow = true)
-                    }
-                    is AgentLoopEvent.ToolCallsReceived -> {
-                        println("ChatViewModel: Received ${event.toolCalls.size} tool calls.")
-                    }
-                    is AgentLoopEvent.ToolStarted -> {
-                        println("ChatViewModel: Executing tool '${event.toolCall.name}' with args: ${event.toolCall.arguments}")
-                        val toolStartedAt = Clock.System.now().toEpochMilliseconds()
-                        val toolLogId = ChatHistoryRepository.newId("tool")
-                        val toolArguments = event.toolCall.arguments.toString()
-                        val toolKey = "${event.turnIndex}:${event.callIndex}"
-                        toolLogIds[toolKey] = toolLogId
-
-                        persistentToolCalls.add(
-                            PersistentToolCall(
-                                name = event.toolCall.name,
-                                arguments = toolArguments,
-                                createdAtMillis = toolStartedAt
-                            )
-                        )
-
-                        if (sessionId != null && assistantMessageId.isNotBlank()) {
-                            chatHistoryRepository.upsertToolLog(
-                                ChatToolLogEntity(
-                                    id = toolLogId,
-                                    sessionId = sessionId,
-                                    messageId = assistantMessageId,
-                                    toolName = event.toolCall.name,
-                                    arguments = toolArguments,
-                                    response = "",
-                                    status = "running",
-                                    startedAtMillis = toolStartedAt,
-                                    completedAtMillis = null
-                                )
-                            )
-                        }
-
-                        if (!sessionMode.isStructuredGenerationMode()) {
-                            generatedResult += getString(
-                                Res.string.chat_running_tool,
-                                event.toolCall.name
-                            )
-                        }
-                        updateAssistantMessage(isGeneratingNow = true)
-                    }
-                    is AgentLoopEvent.ToolFinished -> {
-                        val toolKey = "${event.turnIndex}:${event.callIndex}"
-                        val toolLogId = toolLogIds[toolKey] ?: ChatHistoryRepository.newId("tool")
-                        val resultStr = event.response.response
-                        val toolArguments = event.toolCall.arguments.toString()
-                        val toolStatus = if (event.result.success) "completed" else "failed"
-
-                        persistentToolResponses.add(
-                            PersistentToolResponse(
-                                name = event.toolCall.name,
-                                response = resultStr,
-                                createdAtMillis = event.result.completedAtMillis
-                            )
-                        )
-
-                        if (sessionId != null && assistantMessageId.isNotBlank()) {
-                            chatHistoryRepository.upsertToolLog(
-                                ChatToolLogEntity(
-                                    id = toolLogId,
-                                    sessionId = sessionId,
-                                    messageId = assistantMessageId,
-                                    toolName = event.toolCall.name,
-                                    arguments = toolArguments,
-                                    response = resultStr,
-                                    status = toolStatus,
-                                    startedAtMillis = event.result.startedAtMillis,
-                                    completedAtMillis = event.result.completedAtMillis
-                                )
-                            )
-                        }
-
-                        if (!sessionMode.isStructuredGenerationMode()) {
-                            generatedResult += getString(
-                                Res.string.chat_tool_completed,
-                                event.toolCall.name
-                            )
-                        }
-                        updateAssistantMessage(isGeneratingNow = true)
-                    }
-                    is AgentLoopEvent.Completed -> {
-                        terminalTransition = event.state.transition.name
-                        terminalTurnCount = event.state.turnCount
-                    }
-                    is AgentLoopEvent.MaxTurnsReached -> {
-                        terminalTransition = event.state.transition.name
-                        terminalTurnCount = event.state.turnCount
-                    }
+                    return@launch
                 }
             }
             
@@ -1100,13 +1298,17 @@ class ChatViewModel(
                 it.id.toString() == assistantMessageId
             }
             if (messageIndex >= 0) {
-                val meta = mapOf(
+                val meta = mutableMapOf(
                     "prompt" to promptContent,
                     "time_taken" to formatDuration(generationDuration),
                     "is_generating" to "false",
                     "agent_turn_count" to terminalTurnCount.toString(),
-                    "agent_transition" to terminalTransition
+                    "agent_transition" to terminalTransition,
+                    "lm_backend" to attemptedBackend
                 )
+                if (retriedOnCpuAfterGpuFailure) {
+                    meta["gpu_decode_cpu_retry"] = "true"
+                }
                 val finalContents = when (sessionMode) {
                     ChatSessionMode.SVG_IMAGE -> {
                         listOf(SvgMessageParser.parseCompletedResponse(generatedResult.trim()))
@@ -1159,6 +1361,9 @@ class ChatViewModel(
     }
 
     private companion object {
+        const val ABSEIL_STATUS_INTERNAL = 13
+        const val LM_BACKEND_CPU = "CPU"
+        const val LM_BACKEND_GPU = "GPU"
         const val DEFAULT_LM_MAX_NUM_TOKENS = 8192
         const val MIN_LM_MAX_NUM_TOKENS = 128
         const val LM_MAX_NUM_TOKENS_STEP = 128

@@ -1,6 +1,7 @@
 package org.onion.agro.native.llm
 
 import com.google.ai.edge.litertlm.LiteRtLmJni
+import com.google.ai.edge.litertlm.LiteRtLmJniException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.buildJsonArray
@@ -32,7 +33,7 @@ class LmEngine(
     suspend fun initialize() {
         mutex.withLock {
             check(!isInitialized()) { "Engine is already initialized." }
-            handle = LiteRtLmJni.loadLmEngine(
+            val nativeHandle = LiteRtLmJni.loadLmEngine(
                 modelPath = modelPath,
                 backend = backend,
                 visionBackend = visionBackend,
@@ -48,6 +49,12 @@ class LmEngine(
                 mainBackendNumThreads = mainBackendNumThreads,
                 audioBackendNumThreads = audioBackendNumThreads
             )
+            if (nativeHandle == 0L) {
+                throw LiteRtLmJniException(
+                    "Failed to initialize LiteRT LM engine for backend '$backend'."
+                )
+            }
+            handle = nativeHandle
         }
     }
 
@@ -90,6 +97,9 @@ class LmEngine(
                 filterChannelContentFromKvCache = false,
                 overwritePromptTemplate = null
             )
+            if (ptr == 0L) {
+                throw LiteRtLmJniException("Failed to create LiteRT LM conversation.")
+            }
             return LmConversation(ptr)
         }
     }

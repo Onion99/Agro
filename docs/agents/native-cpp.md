@@ -9,6 +9,8 @@
 - **消息传递机制**：
     - **禁止**直接跨 JNI 传递裸指针或裸原生 JSON 字符串，应在 Kotlin 侧将对象（`Message`, `Content`, `ToolCall`）转换为规范的 `kotlinx.serialization.json` 结构后再行操作。
     - 流式应答（Stream Response）：原生回调应转化为 Kotlin `Flow` 的异步数据流抛出，提供平滑非阻塞的 UI 消费方案。
+    - JNI 回调向 Kotlin 传递 `absl::Status` 错误时必须使用 `Status::ToString()` 或显式拷贝 `string_view` 长度，禁止直接把 `status.message().data()` 当作以 NUL 结尾的 C 字符串传入 JVM；Kotlin 侧必须保留 native status code，便于区分取消、token 上限和 GPU decode 内部错误。
+    - Desktop GPU decode 阶段返回 `INTERNAL` 时，当前 `Conversation` 视为不可继续复用；应用层只能重建引擎/会话后重试，若转入 CPU 恢复，必须同步更新 `lmBackend` 与 active backend 状态，禁止静默伪装为 GPU。
 
 - **平台 Native 库加载边界**：
     - 运行时库清单必须以 `cpp/lite-rt-lm/prebuilt/<platform>` 为准。Desktop JVM 当前支持 `windows_x86_64`、`linux_x86_64`、`linux_arm64`、`macos_arm64`；Android 当前同步 `android_arm64` 到 `jniLibs/arm64-v8a`；iOS 当前同步 `ios_arm64` 到 `cpp/libs/ios-device`，同步 `ios_sim_arm64` 到 `cpp/libs/ios-simulator`。

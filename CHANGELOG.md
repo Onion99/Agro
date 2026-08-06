@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-06] - LiteRT-LM GPU Decode 错误恢复
+- [修复] 更新 `LmConversation` 与 `LmEngine`，保留 LiteRT-LM native status code，并在引擎或会话创建返回空指针时立即失败，避免继续使用无效 native 句柄。
+- [修复] 更新 `ChatViewModel` 的 LLM 生成流错误处理，GPU decode 返回 `INTERNAL` 时重建 CPU 引擎/会话并仅重试一次，同时避免 `.catch` 吞错后继续执行成功收尾覆盖错误消息。
+- [修改] 更新 `LiteRtLmJni.desktop.kt`，移除 desktop native 层静默 CPU fallback，避免 UI 显示 GPU 但实际后端已切换。
+- [修复] 更新 `litertlm.cc`，通过 `Status::ToString()` 将完整 native 错误和 source trace 传回 Kotlin。
+- [文档] 更新 `docs/agents/native-cpp.md`，记录 JNI status 透传与 desktop GPU decode 失败后的会话重建边界。
+
 ## [2026-08-06] - Windows LiteRT-LM GPU 运行时一致性修复
 - [修复] 更新 `composeApp/build.gradle.kts` 的 desktop native 产物同步逻辑，始终用 `cpp/lite-rt-lm/prebuilt/<platform>` 覆盖 `cpp/libs` 中的 LiteRT/GPU 运行时库，避免 `liblitertlm_jni.dll` 构建产物旁混入不同版本的 `libLiteRt.dll` 后触发 Windows WebGPU 初始化崩溃。
 - [文档] 更新 `docs/agents/native-cpp.md`，记录 desktop GPU 运行时库必须以 prebuilt 集合为准，Bazel 产物只提供 JNI 桥接库。

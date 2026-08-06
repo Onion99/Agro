@@ -8,6 +8,11 @@ import com.google.ai.edge.litertlm.LiteRtLmJni
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
+class LiteRtLmInferenceException(
+    val statusCode: Int,
+    val nativeMessage: String
+) : RuntimeException("LiteRT LM error $statusCode: $nativeMessage")
+
 class LmConversation(
     private val handle: Long
 ) : AutoCloseable, LmChatSession {
@@ -63,7 +68,12 @@ class LmConversation(
                 if (code == 1) { // Cancelled
                     this@callbackFlow.close(CancellationException(errorMsg))
                 } else {
-                    this@callbackFlow.close(RuntimeException("Error $code: $errorMsg"))
+                    this@callbackFlow.close(
+                        LiteRtLmInferenceException(
+                            statusCode = code,
+                            nativeMessage = errorMsg
+                        )
+                    )
                 }
             }
         )
