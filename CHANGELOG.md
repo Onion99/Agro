@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-06] - Windows LiteRT-LM GPU 运行时一致性修复
+- [修复] 更新 `composeApp/build.gradle.kts` 的 desktop native 产物同步逻辑，始终用 `cpp/lite-rt-lm/prebuilt/<platform>` 覆盖 `cpp/libs` 中的 LiteRT/GPU 运行时库，避免 `liblitertlm_jni.dll` 构建产物旁混入不同版本的 `libLiteRt.dll` 后触发 Windows WebGPU 初始化崩溃。
+- [文档] 更新 `docs/agents/native-cpp.md`，记录 desktop GPU 运行时库必须以 prebuilt 集合为准，Bazel 产物只提供 JNI 桥接库。
+
 ## [2026-08-05] - LiteRT-LM iOS Native 库嵌入
 - [修改] 更新 `composeApp/build.gradle.kts` 的 iOS Kotlin/Native 链接配置，按 `cpp/lite-rt-lm/prebuilt/ios_arm64` 与 `ios_sim_arm64` 同步 `libLiteRt.dylib`、Metal accelerator、TopKMetal sampler 和 Gemma 约束库。
 - [修改] 新增 Xcode 构建期 dylib 嵌入任务，将匹配 SDK 的 LiteRT-LM iOS prebuilt 动态库复制到 App `Frameworks` 目录并在允许时执行 codesign，补齐 iOS GPU/Metal 后端运行时依赖。

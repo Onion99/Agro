@@ -490,12 +490,8 @@ abstract class BuildNativeLibTask : DefaultTask() {
             currentPrebuiltDir.listFiles { _, name -> name.endsWith(suffix) }?.forEach { f ->
                 val destName = if (f.name.startsWith("lib")) f.name else "lib${f.name}"
                 val destFile = File(cppLibsDir, destName)
-                if (!destFile.exists() || destFile.length() == 0L) {
-                    f.copyTo(destFile, overwrite = true)
-                    println("prebuilt 运行时库拷贝: ${f.name} -> ${destFile.absolutePath}")
-                } else {
-                    println("prebuilt 运行时库跳过: ${destFile.absolutePath} 已由 Bazel 产出")
-                }
+                f.copyTo(destFile, overwrite = true)
+                println("prebuilt runtime library copied: ${f.name} -> ${destFile.absolutePath}")
             }
         }
 
