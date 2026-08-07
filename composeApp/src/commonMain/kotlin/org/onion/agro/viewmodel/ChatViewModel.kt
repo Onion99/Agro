@@ -16,6 +16,7 @@ import com.onion.model.PersistentToolCall
 import com.onion.model.PersistentToolResponse
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -597,13 +598,16 @@ class ChatViewModel(
             val instruction = session.systemInstruction.ifBlank {
                 instructionForMode(mode)
             }
-            selectConversationContext(mode, instruction)
-            activeSessionId.value = sessionId
-            _currentChatMessages.clear()
-            _currentChatMessages.addAll(chatHistoryRepository.loadMessages(sessionId))
+            val loadedMessages = chatHistoryRepository.loadMessages(sessionId)
+            withContext(Dispatchers.Main) {
+                selectConversationContext(mode, instruction)
+                activeSessionId.value = sessionId
+                _currentChatMessages.clear()
+                _currentChatMessages.addAll(loadedMessages)
+                isHistoryVisible.value = false
+            }
             recreateLmConversation()
             persistAppliedConversationContext()
-            isHistoryVisible.value = false
         }
     }
 
@@ -617,8 +621,10 @@ class ChatViewModel(
         viewModelScope.launch(Dispatchers.Default) {
             chatHistoryRepository.deleteSession(sessionId)
             if (activeSessionId.value == sessionId) {
-                activeSessionId.value = null
-                _currentChatMessages.clear()
+                withContext(Dispatchers.Main) {
+                    activeSessionId.value = null
+                    _currentChatMessages.clear()
+                }
                 restoreMostRecentSession()
             }
         }
@@ -670,19 +676,27 @@ class ChatViewModel(
                     mode = ChatSessionMode.DEFAULT,
                     systemInstruction = systemPrompt.value
                 )
-                recreateLmConversation()
-                activeSessionId.value = chatHistoryRepository.createSession(
+                val newSessionId = chatHistoryRepository.createSession(
                     mode = ChatSessionMode.DEFAULT,
                     systemInstruction = appliedSystemInstructionOrEmpty()
                 )
+                recreateLmConversation()
+                withContext(Dispatchers.Main) {
+                    activeSessionId.value = newSessionId
+                    _currentChatMessages.clear()
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
                 lmConversation = null
                 markConversationContextApplied(false)
+                withContext(Dispatchers.Main) {
+                    _currentChatMessages.clear()
+                }
             } finally {
-                _currentChatMessages.clear()
-                isGenerating.value = false
-                isInferenceOn = false
+                withContext(Dispatchers.Main) {
+                    isGenerating.value = false
+                    isInferenceOn = false
+                }
             }
         }
     }
@@ -697,23 +711,31 @@ class ChatViewModel(
                     mode = ChatSessionMode.SVG_IMAGE,
                     systemInstruction = SVG_IMAGE_SYSTEM_INSTRUCTION
                 )
-                recreateLmConversation(
-                    systemInstruction = SVG_IMAGE_SYSTEM_INSTRUCTION,
-                    enableConstrainedDecoding = true
-                )
-                activeSessionId.value = chatHistoryRepository.createSession(
+                val newSessionId = chatHistoryRepository.createSession(
                     title = getString(Res.string.library_svg_image),
                     mode = ChatSessionMode.SVG_IMAGE,
                     systemInstruction = appliedSystemInstructionOrEmpty()
                 )
+                recreateLmConversation(
+                    systemInstruction = SVG_IMAGE_SYSTEM_INSTRUCTION,
+                    enableConstrainedDecoding = true
+                )
+                withContext(Dispatchers.Main) {
+                    activeSessionId.value = newSessionId
+                    _currentChatMessages.clear()
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
                 lmConversation = null
                 markConversationContextApplied(false)
+                withContext(Dispatchers.Main) {
+                    _currentChatMessages.clear()
+                }
             } finally {
-                _currentChatMessages.clear()
-                isGenerating.value = false
-                isInferenceOn = false
+                withContext(Dispatchers.Main) {
+                    isGenerating.value = false
+                    isInferenceOn = false
+                }
             }
         }
     }
@@ -728,23 +750,31 @@ class ChatViewModel(
                     mode = ChatSessionMode.CHIPTUNE_BGM_MML,
                     systemInstruction = CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION
                 )
-                recreateLmConversation(
-                    systemInstruction = CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION,
-                    enableConstrainedDecoding = true
-                )
-                activeSessionId.value = chatHistoryRepository.createSession(
+                val newSessionId = chatHistoryRepository.createSession(
                     title = getString(Res.string.library_chiptune_bgm),
                     mode = ChatSessionMode.CHIPTUNE_BGM_MML,
                     systemInstruction = appliedSystemInstructionOrEmpty()
                 )
+                recreateLmConversation(
+                    systemInstruction = CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION,
+                    enableConstrainedDecoding = true
+                )
+                withContext(Dispatchers.Main) {
+                    activeSessionId.value = newSessionId
+                    _currentChatMessages.clear()
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
                 lmConversation = null
                 markConversationContextApplied(false)
+                withContext(Dispatchers.Main) {
+                    _currentChatMessages.clear()
+                }
             } finally {
-                _currentChatMessages.clear()
-                isGenerating.value = false
-                isInferenceOn = false
+                withContext(Dispatchers.Main) {
+                    isGenerating.value = false
+                    isInferenceOn = false
+                }
             }
         }
     }
@@ -759,23 +789,31 @@ class ChatViewModel(
                     mode = ChatSessionMode.LOTTIE_ANIMATION,
                     systemInstruction = LOTTIE_ANIMATION_SYSTEM_INSTRUCTION
                 )
-                recreateLmConversation(
-                    systemInstruction = LOTTIE_ANIMATION_SYSTEM_INSTRUCTION,
-                    enableConstrainedDecoding = true
-                )
-                activeSessionId.value = chatHistoryRepository.createSession(
+                val newSessionId = chatHistoryRepository.createSession(
                     title = getString(Res.string.library_lottie_animation),
                     mode = ChatSessionMode.LOTTIE_ANIMATION,
                     systemInstruction = appliedSystemInstructionOrEmpty()
                 )
+                recreateLmConversation(
+                    systemInstruction = LOTTIE_ANIMATION_SYSTEM_INSTRUCTION,
+                    enableConstrainedDecoding = true
+                )
+                withContext(Dispatchers.Main) {
+                    activeSessionId.value = newSessionId
+                    _currentChatMessages.clear()
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
                 lmConversation = null
                 markConversationContextApplied(false)
+                withContext(Dispatchers.Main) {
+                    _currentChatMessages.clear()
+                }
             } finally {
-                _currentChatMessages.clear()
-                isGenerating.value = false
-                isInferenceOn = false
+                withContext(Dispatchers.Main) {
+                    isGenerating.value = false
+                    isInferenceOn = false
+                }
             }
         }
     }
@@ -801,8 +839,10 @@ class ChatViewModel(
         sessionCollectionJob?.cancel()
         sessionCollectionJob = viewModelScope.launch(Dispatchers.Default) {
             chatHistoryRepository.observeSessions(query).collectLatest { sessions ->
-                _chatSessions.clear()
-                _chatSessions.addAll(sessions)
+                withContext(Dispatchers.Main) {
+                    _chatSessions.clear()
+                    _chatSessions.addAll(sessions)
+                }
             }
         }
     }
@@ -815,9 +855,12 @@ class ChatViewModel(
                 instructionForMode(mode)
             }
             selectConversationContext(mode, instruction)
-            activeSessionId.value = session.id
-            _currentChatMessages.clear()
-            _currentChatMessages.addAll(chatHistoryRepository.loadMessages(session.id))
+            val loadedMessages = chatHistoryRepository.loadMessages(session.id)
+            withContext(Dispatchers.Main) {
+                activeSessionId.value = session.id
+                _currentChatMessages.clear()
+                _currentChatMessages.addAll(loadedMessages)
+            }
             if (lmEngine != null) {
                 recreateLmConversation()
                 persistAppliedConversationContext()
