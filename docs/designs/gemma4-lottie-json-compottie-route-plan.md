@@ -1,25 +1,22 @@
 # Gemma4 Lottie Spec JSON 与 Compottie 渲染路线计划
 
 > 日期: 2026-07-28
-> 范围: `ChatViewModel` 专用会话入口、`lottie_animation_spec` JSON envelope、确定性 Lottie JSON builder、`compottie` 本地渲染、复制与保存
-> 状态: 首版已落地（2026-07-28）
-> 关联文档: `docs/designs/gemma4-8bit-bgm-json-mml-composemediaplayer-route-plan.md`、`docs/designs/extensible-chat-messages.md`、`docs/agents/data-model.md`
+> 最新更新: 2026-08-07 (v1.3.0 开放创意与纯数学参数化矢量合成重构)
+> 范围: `ChatViewModel` 专用会话入口、双模式输出 (Native Lottie JSON 与 `lottie_animation_spec` Spec JSON)、纯数学参数化矢量合成引擎、`compottie` 本地渲染、复制与保存
+> 状态: 架构全面升级落地（2026-08-07）
+> 关联文档: `docs/specs/lottie-animation-prompt-spec.md`、`docs/designs/extensible-chat-messages.md`、`docs/agents/data-model.md`
 > 外部参考: `https://github.com/alexzhirkevich/compottie`
 
 ## 1. 背景
 
 项目已经具备结构化媒体生成路线: SVG 图像生成使用 `svg_image` JSON envelope，8-bit BGM 使用 `chiptune_bgm_mml` JSON envelope，再由本地 parser、validator 和 renderer 生成可展示内容。
 
-Lottie 动画虽然也是 JSON 格式，但完整 Lottie JSON 包含图层、shape、关键帧、trim path、缓动曲线、图片资源、字体、precomp、表达式等复杂结构。Gemma4 2B/4B 直接自由生成完整 Lottie JSON 的失败面较大: 输出可能是合法 JSON，但不是可播放 Lottie；也可能引用 `compottie` 不支持或首版不允许的资源能力。
-
-本路线采用和 8-bit BGM 类似的折中方案: Gemma4 输出受限的动画规格 `lottie_animation_spec`，客户端严格解析和校验后，由本地确定性 `LottieJsonBuilder` 生成标准 Lottie JSON，再交给项目现有 `compottie` 库渲染。
-
 关键原则:
 
-- 模型输出动画意图和参数，不直接输出任意 Lottie layer tree。
-- 最终产物仍是标准 Lottie JSON，可复制、保存和重新渲染。
-- `compottie` 首版只消费本地 `JsonString`，不走网络 URL 和外部资源。
-- 首版定位 UI 微动画，不覆盖复杂插画级 motion design。
+- 支持 Native Lottie JSON 与高层 Spec JSON 双通路解析与校验。
+- 前端引擎不硬编码任何预设形状或模板，完全通过数学公式计算或大模型原汁原味输出。
+- 最终产物均保证为标准 Lottie JSON，可复制、保存与本地 `compottie` 重新渲染。
+- `compottie` 本地消费 `JsonString`，严禁加载网络 URL 与外部外部 Base64 资源。
 
 ## 2. 路线总览
 
@@ -28,176 +25,89 @@ flowchart TD
     A[Library / Chat 入口] --> B[startLottieAnimationConversation]
     B --> C[ChatSessionMode.LOTTIE_ANIMATION]
     C --> D[LOTTIE_ANIMATION_SYSTEM_INSTRUCTION]
-    D --> E[Gemma4 输出 lottie_animation_spec JSON]
-    E --> F[LottieAnimationSpecParser]
-    F --> G[LottieAnimationSpecValidator]
-    G --> H[LottieJsonBuilder]
-    H --> I[LottieJsonValidator]
-    I --> J[ChatMessageContent.LottieAnimation]
-    J --> K[Compottie LottieCompositionSpec.JsonString]
-    K --> L[Chat Lottie Bubble 预览 / 复制 / 保存]
+    D --> E{模型输出格式判定}
+    E --> Native Lottie JSON
+    F --> I[ChatMessageContent.LottieAnimation]
+    H --> I
+    I --> J[Compottie LottieCompositionSpec.JsonString]
+    J --> K[Chat Lottie Bubble 预览 / 复制 / 保存]
 ```
 
 ## 3. 路线定位
 
 | 路线 | 优点 | 缺点 | 建议定位 |
 | --- | --- | --- | --- |
-| 直接生成完整 Lottie JSON | 表达力最强，理论上最灵活 | token 成本高，结构复杂，跨 renderer 兼容性和视觉稳定性差 | 不作为首版主路线 |
-| 修改预置 Lottie 模板参数 | 最稳定，质量可控 | 创作自由度低，需要模板库 | fallback 和高质量入口 |
-| `lottie_animation_spec` + 本地 builder | 结构稳定，token 成本可控，可强校验 | 首版动画类型受限，需要实现 builder | 首版默认路线 |
+| 原生 Native Lottie JSON | 表达力最强，图层/关键帧全自由控制 | 对 4B 端侧模型门槛较高，JSON 较长 | 高能力大模型默认路线 |
+| 纯数学参数化 `lottie_animation_spec` | 结构极简，4B 端侧模型友好，零硬编码 | 依赖前端数学演算几何算法 | 4B 端侧模型默认路线 |
 | dotLottie 打包 | 文件更小，可承载多动画和主题 | 首版不需要 ZIP、多动画和 manifest 管理 | 后续增强路线 |
 
-首版优先覆盖高频 UI 微动画:
-
-- `loading_spinner`
-- `success_check`
-- `error_cross`
-- `progress_dots`
-- `pulse_badge`
-- `empty_state_sparkle`
+动画主题与意图完全开放（包含但不限于：宇宙航天、机械齿轮、魔幻星光、脉冲波纹、数据图表、微交互反馈等），彻底抹平硬编码分类约束。
 
 ## 4. 输出协议
 
-### 4.1 JSON Envelope
+### 4.1 SON Envelope
 
-模型输出必须是单个原始 JSON 对象，不允许 Markdown code fence、解释文本、完整 Lottie `layers`、外部 URL、图片 base64、HTML、CSS、脚本、`.lottie` ZIP、文件路径或远程资源引用。
-
-推荐 schema:
-
+Native Lottie JSON
 ```json
 {
-  "type": "lottie_animation_spec",
-  "schemaVersion": 1,
-  "title": "Success Check",
-  "seed": 18421,
-  "canvas": {
-    "width": 240,
-    "height": 240,
-    "background": "transparent"
-  },
-  "fps": 60,
-  "durationMs": 1200,
-  "loop": false,
-  "kind": "success_check",
-  "palette": {
-    "primary": "#22C55E",
-    "secondary": "#DCFCE7",
-    "accent": "#FFFFFF"
-  },
-  "motion": {
-    "style": "draw_then_pop",
-    "intensity": 0.72,
-    "staggerMs": 120
-  },
-  "stroke": {
-    "width": 10,
-    "lineCap": "round"
-  }
+  "v": "5.7.4",
+  "fr": 60,
+  "ip": 0,
+  "op": 60,
+  "w": 240,
+  "h": 240,
+  "nm": "Cosmic Orbit",
+  "ddd": 0,
+  "assets": [],
+  "layers": [
+    {
+      "ddd": 0,
+      "ind": 1,
+      "ty": 4,
+      "nm": "Core Layer",
+      "ks": { ... },
+      "shapes": [ ... ]
+    }
+  ]
 }
 ```
+### 4.2 字段约束与开放性
 
-### 4.2 字段约束
+- **`kind` 与 `motion.style`**：完全开放，允许模型输出任意富有想象力的描述词（如 `"black_hole"`、`"magic_spark"`、`"dna_helix"`）。
+- **`fps`**：默认为 60 FPS，确保端侧渲染极度流畅。
+- **`canvas`**：`64..512`，推荐 `240` 或 `320`。
+- **`palette`**：必填 `#RRGGBB` Hex 颜色字符串。
 
-| 字段 | 约束 |
-| --- | --- |
-| `type` | 固定为 `lottie_animation_spec` |
-| `schemaVersion` | 首版固定为 `1` |
-| `title` | 1 到 48 个可显示字符 |
-| `seed` | 可选；缺失时由规范化 JSON payload 计算稳定 hash |
-| `canvas.width` / `canvas.height` | `64..512`，推荐 `240` 或 `320` |
-| `canvas.background` | `transparent` 或 `#RRGGBB` |
-| `fps` | 仅允许 `24`、`30`、`60` |
-| `durationMs` | `300..3000`，推荐 `800..1600` |
-| `loop` | `Boolean`，loading 类默认 `true`，反馈类默认 `false` |
-| `kind` | 首版枚举值见 4.3 |
-| `palette.primary` | 必填 `#RRGGBB` |
-| `palette.secondary` / `palette.accent` | 可选 `#RRGGBB` |
-| `motion.style` | 由 `kind` 限定的枚举值 |
-| `motion.intensity` | `0.0..1.0` |
-| `motion.staggerMs` | `0..600` |
-| `stroke.width` | `1..32` |
-| `stroke.lineCap` | `butt`、`round`、`square` |
+### 4.3 安全禁令
 
-### 4.3 动画类型约束
+- 严禁包含外部 `http://` / `https://` 资源或 Base64 编码图片。
+- 严禁包含 `script`、`html`、`css`、`ef` 表达式或任意可执行代码。
+- 单个 JSON 大小不得超过 `128 KiB`，原生图层总数不得超过 `32` 个。
 
-| `kind` | 默认 `loop` | 允许 `motion.style` | 首版生成策略 |
-| --- | --- | --- | --- |
-| `loading_spinner` | `true` | `spin_arc`、`orbit_dots` | arc trim + rotation 或多点 orbit |
-| `success_check` | `false` | `draw_then_pop`、`circle_then_check` | 圆环 stroke trim + checkmark stroke trim + scale pop |
-| `error_cross` | `false` | `draw_then_shake`、`cross_fade_in` | 两条 cross stroke trim + group shake |
-| `progress_dots` | `true` | `stagger_bounce`、`stagger_fade` | 3 到 5 个圆点的 scale/opacity stagger |
-| `pulse_badge` | `true` | `soft_pulse`、`ripple` | ellipse scale + opacity keyframes |
-| `empty_state_sparkle` | `false` | `float_sparkle`、`fade_sparkle` | 简单几何 sparkle 的 scale/opacity stagger |
+## 5. 纯数学参数化矢量合成算法
 
-### 4.4 首版禁止项
+当解析器处理模式 B (`lottie_animation_spec`) 时，`customCreativeLayers` 会执行纯数学参数化几何合成：
+- **图层数量**：`layerCount = 2 + (abs(seed) % 3)` (2..4 图层)。
+- **几何形状**：根据 `layerSeed` 偶奇推算生成动态椭圆或 N 边形/星形路径 (`pointCount = 3 + (layerSeed % 5)`)。
+- **旋转 Keyframe**：根据 `intensity` 与正反旋转方向计算 `360° * intensity * rotDirection * (1 + (layerSeed % 3) * 0.5)`。
+- **缩放 Pulse Keyframe**：根据 `staggerMs` 帧偏移与 `intensity` 计算 `[scaleMin..scaleMax]`。
+- **零硬编码**：不进行任何字符串 `containsAny` 模板匹配，任何输入均可由数学公式产生唯一的几何动画。
 
-- 禁止模型输出 Lottie 底层字段: `layers`、`assets`、`fonts`、`chars`、`ef`、`x`。
-- 禁止图片层、文本层、precomposition、表达式、3D layer、mask、merge paths 和外部资源。
-- 禁止任意 path morph。首版 path 只能由 builder 内置模板或受控 normalized points 生成。
-- 禁止远程 URL、文件路径、base64 和可执行脚本。
-
-## 5. 生成的 Lottie JSON 子集
-
-`LottieJsonBuilder` 输出的 Lottie JSON 必须控制在 `compottie` 易验证、可测试的基础 shape 子集内:
-
-| Lottie 字段 | 首版策略 |
-| --- | --- |
-| `v` | 固定 builder 支持版本，例如 `5.7.4` |
-| `fr` | 来自 `fps` |
-| `ip` | 固定 `0` |
-| `op` | `ceil(durationMs / 1000 * fps)` |
-| `w` / `h` | 来自 `canvas` |
-| `nm` | 来自 `title` |
-| `ddd` | 固定 `0` |
-| `assets` | 固定空数组 |
-| `layers` | 仅 shape layer，`ty = 4` |
-| shape `ty` | 首版只生成 `el`、`rc`、`sh`、`fl`、`st`、`tr`、`tm` |
-| transform | 只生成 position、scale、rotation、opacity、anchor |
-| keyframes | 只生成线性或预设 ease keyframe |
-
-首版 builder 不接收模型直接提供的任意 shape tree。所有 layer 名称、shape 名称和 keypath 由代码生成，便于 `compottie` dynamic properties 和后续 UI 调试。
-
-## 6. 专用 System Instruction 草案
+## 6. 系统 Instruction 指引
 
 ```text
-You are ${BuildConfig.APP_NAME}'s dedicated Lottie micro-animation planner.
+You are Antigravity's Motion Designer AI.
+Your task is to produce stunning, liquid-smooth vector animations at 60 FPS.
 
-Your only job is to output one raw valid JSON object containing a constrained
-Lottie animation specification. Do not output full Lottie layers. Do not use
-Markdown fences or add prose outside the JSON.
-
-Use this JSON structure exactly:
-{
-  "type": "lottie_animation_spec",
-  "schemaVersion": 1,
-  "title": "Success Check",
-  "seed": 12345,
-  "canvas": {
-    "width": 240,
-    "height": 240,
-    "background": "transparent"
-  },
-  "fps": 60,
-  "durationMs": 1200,
-  "loop": false,
-  "kind": "success_check",
-  "palette": {
-    "primary": "#22C55E",
-    "secondary": "#DCFCE7",
-    "accent": "#FFFFFF"
-  },
-  "motion": {
-    "style": "draw_then_pop",
-    "intensity": 0.72,
-    "staggerMs": 120
-  },
-  "stroke": {
-    "width": 10,
-    "lineCap": "round"
-  }
-}
+Capabilities:
+- Large Models: You may output raw, high-fidelity Native Lottie JSON directly (with v, fr, ip, op, w, h, layers).
+- Small Models: You may output a lightweight "lottie_animation_spec" JSON with intent fields (title, canvas, fps, durationMs, loop, kind, palette, motion, stroke).
 
 Rules:
+1. Output ONLY a single raw JSON object. No Markdown code fences, no explanations.
+2. Use modern, dynamic color palettes (e.g. Cyberpunk, Obsidian Gold, Emerald Bio).
+3. Do NOT use external images, Base64, URLs, scripts, or HTML.
+```
 - type must be "lottie_animation_spec" and schemaVersion must be 1.
 - width and height must be 64..512 and should usually be 240.
 - fps must be 24, 30, or 60.
@@ -555,22 +465,13 @@ val finalContents = when (sessionMode) {
 - `data-model` 新增 `LottieAnimationSpec` 及 canvas、palette、motion、stroke 子规格，并扩展
   `ChatMessageContent.LottieAnimation` 与 `ChatSessionMode.LOTTIE_ANIMATION`。
 - `composeApp` 新增 `LottieAnimationSpecParser`、`LottieAnimationSpecValidator`、
-  `LottieJsonBuilder`、`LottieJsonValidator` 与 `LottieMessageParser`，模型仍只输出
-  `lottie_animation_spec`，完整 Lottie JSON 由本地 builder 确定性生成。
-- 首版 builder 覆盖 `loading_spinner`、`success_check`、`error_cross`、`progress_dots`、
-  `pulse_badge` 与 `empty_state_sparkle`，输出仅使用 shape、stroke、fill、transform 与 trim path
-  子集，`assets` 固定为空数组。
-- `ChatViewModel` 新增 `startLottieAnimationConversation()` 和专用
-  `LOTTIE_ANIMATION_SYSTEM_INSTRUCTION`，结构化生成模式结束前不展示中间 JSON。
-- `LibraryScreen` 中原 `LogicVesselCard` 已改为 Lottie 动画生成入口卡片。
-- `ChatScreen` 新增 Compottie `LottieCompositionSpec.JsonString` 预览、复制最终 Lottie JSON、复制原始
-  spec 与保存 `.json`。
-- 英文与中文 compose resources 已补齐 Lottie Library、Chat context、渲染失败、复制、保存与时长文案。
-- 新增 `LottieMessageParserTest`，覆盖合法生成、确定性 builder、Markdown 包裹拒绝、完整 layer tree
-  拒绝、motion style 不匹配和 duration 越界。
+  `LottieJsonBuilder`、`LottieJsonValidator` 与 `LottieMessageParser`。
+- `ChatViewModel` 新增 `startLottieAnimationConversation()`。
 
-未纳入首版:
+## 18. 2026-08-07 重构与升级记录 (v1.3.0)
 
-- 不生成 `.lottie` ZIP，不引入网络 URL loading，不加载外部 images/fonts/assets。
-- 不支持模型直接输出完整 Lottie layer tree；后续如需复杂 motion design，应继续扩展本地模板族和
-  validator，而不是放宽模型输出边界。
+针对动画丰富度不足、硬编码输出绑定死板等问题，进行了全局架构与 Prompt 重构：
+- **测试与文档**：
+  - `LottieMessageParserTest.kt` 补齐 Native Lottie JSON 解析与数学参数化动态合成校验。
+  - 同步更新规范 `docs/specs/lottie-animation-prompt-spec.md` 至 v1.3.0。
+

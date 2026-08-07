@@ -10,12 +10,12 @@ object LottieMessageParser {
             val parsed = LottieAnimationSpecParser.parse(response)
             ChatMessageContent.LottieAnimation(
                 json = parsed.json,
-                title = parsed.spec.title.trim(),
-                width = parsed.spec.canvas.width,
-                height = parsed.spec.canvas.height,
-                durationMs = parsed.spec.durationMs,
-                fps = parsed.spec.fps,
-                loop = parsed.spec.loop,
+                title = parsed.title.trim(),
+                width = parsed.width,
+                height = parsed.height,
+                durationMs = parsed.durationMs,
+                fps = parsed.fps,
+                loop = parsed.loop,
                 sourceSpecJson = response
             )
         } catch (error: Exception) {

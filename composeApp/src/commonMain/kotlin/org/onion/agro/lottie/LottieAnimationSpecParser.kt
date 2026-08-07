@@ -19,7 +19,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 object LottieAnimationSpecParser {
-    private const val MAX_SPEC_BYTES = 64 * 1024
+    private const val MAX_SPEC_BYTES = 128 * 1024
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -27,7 +27,8 @@ object LottieAnimationSpecParser {
     }
 
     fun parse(response: String): ParsedLottieAnimation {
-        val trimmed = response.trim()
+        val sanitizedText = LottieJsonSanitizer.sanitize(response)
+        val trimmed = sanitizedText.trim()
         requireLottie(trimmed.isNotEmpty(), "invalid_lottie_spec_json")
         requireLottie(trimmed.encodeToByteArray().size <= MAX_SPEC_BYTES, "lottie_spec_too_large")
 
@@ -38,26 +39,57 @@ object LottieAnimationSpecParser {
         }
 
         val declaredType = root["type"].stringContentOrNull()
-            ?: throw LottieParseException("invalid_lottie_spec_json")
-        if (declaredType != CONTENT_TYPE) {
+        if (declaredType == CONTENT_TYPE) {
+            LottieAnimationSpecValidator.validateRaw(root)
+            val spec = runCatching {
+                json.decodeFromString<LottieAnimationSpec>(trimmed)
+            }.getOrElse {
+                throw LottieParseException("invalid_lottie_spec_json", it)
+            }
+            LottieAnimationSpecValidator.validate(spec)
+
+            val lottieJson = LottieJsonBuilder.build(
+                spec = spec,
+                seed = spec.seed ?: trimmed.hashCode()
+            )
+            LottieJsonValidator.validate(lottieJson)
+            return ParsedLottieAnimation(
+                title = spec.title.trim(),
+                width = spec.canvas.width,
+                height = spec.canvas.height,
+                fps = spec.fps,
+                durationMs = spec.durationMs,
+                loop = spec.loop,
+                json = lottieJson,
+                spec = spec
+            )
+        } else if (root.containsKey("layers") || root.containsKey("v")) {
+            LottieAnimationSpecValidator.validateRaw(root)
+            val finalLottieJson = LottieJsonSanitizer.sanitize(trimmed)
+            LottieJsonValidator.validate(finalLottieJson)
+            val finalRoot = runCatching { json.parseToJsonElement(finalLottieJson).jsonObject }.getOrDefault(root)
+            val width = finalRoot["w"].intOrNull() ?: 240
+            val height = finalRoot["h"].intOrNull() ?: 240
+            val fps = finalRoot["fr"].intOrNull() ?: 60
+            val ip = finalRoot["ip"].intOrNull() ?: 0
+            val op = finalRoot["op"].intOrNull() ?: (fps * 2)
+            val title = finalRoot["nm"].stringContentOrNull() ?: "Lottie Animation"
+            val durationMs = (((op - ip).coerceAtLeast(1).toFloat() / fps.coerceAtLeast(1)) * 1000f).toLong()
+            val loop = finalRoot["loop"].booleanOrNull() ?: true
+
+            return ParsedLottieAnimation(
+                title = title,
+                width = width,
+                height = height,
+                fps = fps,
+                durationMs = durationMs,
+                loop = loop,
+                json = finalLottieJson,
+                spec = null
+            )
+        } else {
             throw LottieParseException("unexpected_content_type")
         }
-
-        LottieAnimationSpecValidator.validateRaw(root)
-
-        val spec = runCatching {
-            json.decodeFromString<LottieAnimationSpec>(trimmed)
-        }.getOrElse {
-            throw LottieParseException("invalid_lottie_spec_json", it)
-        }
-        LottieAnimationSpecValidator.validate(spec)
-
-        val lottieJson = LottieJsonBuilder.build(
-            spec = spec,
-            seed = spec.seed ?: trimmed.hashCode()
-        )
-        LottieJsonValidator.validate(lottieJson)
-        return ParsedLottieAnimation(spec = spec, json = lottieJson)
     }
 
     fun declaredType(response: String): String? {
@@ -83,8 +115,6 @@ object LottieAnimationSpecValidator {
     )
     private val supportedLineCaps = setOf("butt", "round", "square")
     private val forbiddenKeys = setOf(
-        "layers",
-        "assets",
         "fonts",
         "chars",
         "ef",
@@ -111,7 +141,7 @@ object LottieAnimationSpecValidator {
     fun validate(spec: LottieAnimationSpec) {
         requireLottie(spec.type == LottieAnimationSpecParser.CONTENT_TYPE, "unexpected_content_type")
         requireLottie(spec.schemaVersion == 1, "unsupported_schema_version")
-        requireLottie(spec.title.trim().length in 1..48, "invalid_lottie_title")
+        requireLottie(spec.title.trim().length in 1..64, "invalid_lottie_title")
         requireLottie(spec.canvas.width in 64..512, "invalid_lottie_canvas")
         requireLottie(spec.canvas.height in 64..512, "invalid_lottie_canvas")
         requireLottie(
@@ -119,8 +149,8 @@ object LottieAnimationSpecValidator {
             "invalid_lottie_background"
         )
         requireLottie(spec.fps in supportedFps, "invalid_lottie_fps")
-        requireLottie(spec.durationMs in 300L..3_000L, "invalid_lottie_duration")
-        requireLottie(frameCount(spec.durationMs, spec.fps) <= 180, "lottie_frame_count_too_large")
+        requireLottie(spec.durationMs in 300L..5_000L, "invalid_lottie_duration")
+        requireLottie(frameCount(spec.durationMs, spec.fps) <= 300, "lottie_frame_count_too_large")
         requireLottie(spec.palette.primary.isHexColor(), "invalid_lottie_palette")
         spec.palette.secondary?.let {
             requireLottie(it.isHexColor(), "invalid_lottie_palette")
@@ -129,15 +159,15 @@ object LottieAnimationSpecValidator {
             requireLottie(it.isHexColor(), "invalid_lottie_palette")
         }
         requireLottie(spec.motion.intensity.isFinite(), "invalid_lottie_motion")
-        requireLottie(spec.motion.intensity in 0f..1f, "invalid_lottie_motion")
-        requireLottie(spec.motion.staggerMs in 0..600, "invalid_lottie_stagger")
+        requireLottie(spec.motion.staggerMs in 0..1000, "invalid_lottie_stagger")
 
         val allowedStyles = allowedStylesByKind[spec.kind]
-            ?: throw LottieParseException("unsupported_lottie_kind")
-        requireLottie(spec.motion.style in allowedStyles, "unsupported_lottie_motion_style")
+        if (allowedStyles != null) {
+            requireLottie(spec.motion.style in allowedStyles, "unsupported_lottie_motion_style")
+        }
 
         spec.stroke?.let { stroke ->
-            requireLottie(stroke.width in 1..32, "invalid_lottie_stroke_width")
+            requireLottie(stroke.width in 1..48, "invalid_lottie_stroke_width")
             requireLottie(stroke.lineCap in supportedLineCaps, "invalid_lottie_line_cap")
         }
     }
@@ -177,15 +207,15 @@ object LottieJsonBuilder {
         val primary = LottieColor.fromHex(spec.palette.primary)
         val secondary = LottieColor.fromHex(spec.palette.secondary ?: spec.palette.primary)
         val accent = LottieColor.fromHex(spec.palette.accent ?: "#FFFFFF")
-        val stroke = spec.stroke ?: com.onion.model.LottieStrokeSpec()
+        val strokeSpec = spec.stroke ?: com.onion.model.LottieStrokeSpec()
         val layers = when (spec.kind) {
-            "loading_spinner" -> loadingSpinnerLayers(spec, frameCount, primary, secondary, stroke)
-            "success_check" -> successCheckLayers(spec, frameCount, primary, secondary, accent, stroke)
-            "error_cross" -> errorCrossLayers(spec, frameCount, primary, secondary, stroke)
+            "loading_spinner" -> loadingSpinnerLayers(spec, frameCount, primary, secondary, strokeSpec)
+            "success_check" -> successCheckLayers(spec, frameCount, primary, secondary, accent, strokeSpec)
+            "error_cross" -> errorCrossLayers(spec, frameCount, primary, secondary, strokeSpec)
             "progress_dots" -> progressDotsLayers(spec, frameCount, seed, primary, secondary)
-            "pulse_badge" -> pulseBadgeLayers(spec, frameCount, primary, secondary, accent, stroke)
+            "pulse_badge" -> pulseBadgeLayers(spec, frameCount, primary, secondary, accent, strokeSpec)
             "empty_state_sparkle" -> emptyStateSparkleLayers(spec, frameCount, seed, primary, secondary)
-            else -> throw LottieParseException("unsupported_lottie_kind")
+            else -> customCreativeLayers(spec, frameCount, seed, primary, secondary, accent, strokeSpec)
         }
         val background = if (spec.canvas.background == "transparent") {
             ""
@@ -199,6 +229,81 @@ object LottieJsonBuilder {
             append(""","assets":[],"layers":[""")
             append(layers.joinToString(","))
             append("]}")
+        }
+    }
+
+    private fun customCreativeLayers(
+        spec: LottieAnimationSpec,
+        frameCount: Int,
+        seed: Int,
+        primary: LottieColor,
+        secondary: LottieColor,
+        accent: LottieColor,
+        stroke: com.onion.model.LottieStrokeSpec
+    ): List<String> {
+        val width = spec.canvas.width.toFloat()
+        val height = spec.canvas.height.toFloat()
+        val minDim = minOf(width, height)
+        val intensity = spec.motion.intensity.coerceIn(0.1f, 1.0f)
+        val strokeWidth = stroke.width.toFloat()
+        val colors = listOf(primary, secondary, accent)
+
+        // Fully parametric & mathematical: layer count, geometry, rotation, and pulse keyframes derived from seed and motion intensity
+        val layerCount = 2 + (kotlin.math.abs(seed) % 3)
+
+        return (0 until layerCount).map { layerIndex ->
+            val layerSeed = kotlin.math.abs(seed + layerIndex * 1337)
+            val color = colors[layerIndex % colors.size]
+            val radius = minDim * (0.15f + 0.10f * (layerIndex + 1))
+            val isEven = layerIndex % 2 == 0
+
+            val rotDirection = if (isEven) 1f else -1f
+            val rotationAngle = 360f * intensity * rotDirection * (1f + (layerSeed % 3) * 0.5f)
+            val rotation = scalarKeyframes(listOf(0 to 0f, frameCount to rotationAngle))
+
+            val staggerOffset = (layerIndex * spec.motion.staggerMs / 10).coerceAtMost(frameCount / 4)
+            val midFrame = ((frameCount / 2) + staggerOffset).coerceIn(1, frameCount - 1)
+            val scaleMin = 90f - (15f * intensity)
+            val scaleMax = 100f + (25f * intensity * (1f + layerIndex * 0.2f))
+            val scale = vectorKeyframes(listOf(
+                0 to listOf(scaleMin, scaleMin, 100f),
+                midFrame to listOf(scaleMax, scaleMax, 100f),
+                frameCount to listOf(scaleMin, scaleMin, 100f)
+            ))
+
+            val shapeItem = if ((layerSeed % 2) == 0) {
+                ellipse("Path ${layerIndex + 1}", radius, radius)
+            } else {
+                val pointCount = 3 + (layerSeed % 5)
+                val points = (0 until pointCount * 2).map { i ->
+                    val angle = (i * PI / pointCount) - (PI / 2)
+                    val r = if (i % 2 == 0) radius * 0.5f else radius * 0.25f
+                    (r * cos(angle)).toFloat() to (r * sin(angle)).toFloat()
+                }
+                path("Polygon Path ${layerIndex + 1}", points, closed = true)
+            }
+
+            val styleItems = mutableListOf<String>()
+            styleItems.add(shapeItem)
+            if (isEven) {
+                styleItems.add(stroke("Stroke ${layerIndex + 1}", color, (strokeWidth * (1f - layerIndex * 0.15f)).coerceAtLeast(1f), stroke.lineCap))
+            } else {
+                styleItems.add(fill("Fill ${layerIndex + 1}", color, opacity = (40f + (layerIndex * 20f)).coerceAtMost(90f)))
+            }
+
+            val groupName = "Parametric Shape ${layerIndex + 1}"
+            val group = group(groupName, styleItems)
+
+            shapeLayer(
+                name = "Layer ${layerIndex + 1}",
+                index = layerIndex + 1,
+                frameCount = frameCount,
+                positionX = width / 2f,
+                positionY = height / 2f,
+                shapes = listOf(group),
+                rotation = rotation,
+                scale = scale
+            )
         }
     }
 
@@ -705,8 +810,8 @@ object LottieJsonValidator {
         ignoreUnknownKeys = true
         isLenient = false
     }
-    private val requiredTopLevelFields = setOf("v", "fr", "ip", "op", "w", "h", "nm", "ddd", "assets", "layers")
-    private val forbiddenGeneratedKeys = setOf("fonts", "chars", "ef", "x", "masksProperties", "hasMask", "refId")
+    private val requiredTopLevelFields = setOf("fr", "layers")
+    private val forbiddenGeneratedKeys = setOf("fonts", "chars", "ef", "x", "masksProperties", "hasMask")
 
     fun validate(lottieJson: String) {
         requireLottie(lottieJson.encodeToByteArray().size <= MAX_LOTTIE_BYTES, "lottie_json_too_large")
@@ -716,14 +821,18 @@ object LottieJsonValidator {
             throw LottieParseException("invalid_lottie_json", it)
         }
         requireLottie(requiredTopLevelFields.all(root::containsKey), "invalid_lottie_json")
-        requireLottie(root["assets"]?.jsonArray?.isEmpty() == true, "forbidden_lottie_external_resource")
+        val assets = root["assets"]?.jsonArray
+        if (assets != null) {
+            requireLottie(assets.isEmpty(), "forbidden_lottie_external_resource")
+        }
         val layers = root["layers"]?.jsonArray ?: throw LottieParseException("invalid_lottie_json")
         requireLottie(layers.isNotEmpty(), "empty_lottie_layers")
-        requireLottie(layers.size <= 8, "lottie_layer_count_too_large")
+        requireLottie(layers.size <= 32, "lottie_layer_count_too_large")
         layers.forEach { layer ->
             val layerObject = layer.jsonObject
-            requireLottie(layerObject["ty"].intOrNull() == 4, "unsupported_lottie_layer_type")
-            requireLottie(layerObject["ddd"].intOrNull() == 0, "unsupported_lottie_3d_layer")
+            val ty = layerObject["ty"].intOrNull() ?: 4
+            requireLottie(ty in setOf(0, 3, 4), "unsupported_lottie_layer_type")
+            requireLottie(layerObject["ddd"].intOrNull() ?: 0 == 0, "unsupported_lottie_3d_layer")
         }
         requireLottie(!containsForbiddenGeneratedKey(root), "forbidden_lottie_generated_field")
     }
@@ -740,8 +849,14 @@ object LottieJsonValidator {
 }
 
 data class ParsedLottieAnimation(
-    val spec: LottieAnimationSpec,
-    val json: String
+    val title: String,
+    val width: Int,
+    val height: Int,
+    val fps: Int,
+    val durationMs: Long,
+    val loop: Boolean,
+    val json: String,
+    val spec: LottieAnimationSpec? = null
 )
 
 class LottieParseException(

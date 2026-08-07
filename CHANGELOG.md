@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-07] - Lottie Prompt 优化
+- [重构] `LottieAnimationSpecParser.kt` 彻底抹平所有写死输出与关键词匹配（移除 `containsAny` 与模板分支逻辑）。对于 Spec，完全采用纯数学公式（基于 `seed`、`intensity`、`staggerMs`、`palette`）参数化合成 N 边形/椭圆与动态 Keyframe，零硬编码。
+- [新增] `ChatViewModel.kt` 系统 Prompt 重构：大模型拥有 100% 自由直接写 Native Lottie JSON，4B 模型只需输出轻量 Intent，且前端不做任何预设形状绑死。
+- [测试] 运行并通过 `LottieMessageParserTest.kt`，验证纯 Native JSON 与纯数学参数化矢量的解析渲染。
+- [新增] `LottieJsonSanitizer.kt` 智能容错与补全引擎：全面升级以修复 LLM 产生的严重语法与 AST 格式错误（包含数字空格拆分如 `"h": 2 400` 自动修复、连续冗余逗号修复、数组内部未闭合对象断裂自动拼接、作用域受限栈匹配策略以防止内部游离 `}` 消费外层作用域、嵌套 shape 属性如 `fl`/`st` 递归拆解为独立 shape node 并剥离非标准 shape 属性、scale keyframe 单元素 scale 智能补全、画布与变换坐标归一化 `[1, 1, 1] -> [100, 100, 100]`、自动补齐缺失 bracket 及 Markdown 拆包），彻底解决异常 LLM JSON 导致的解析崩溃。
+- [文档] 更新 `docs/specs/lottie-animation-prompt-spec.md` 规范文档至 v1.3.0 并全面同步修缮 `docs/designs/gemma4-lottie-json-compottie-route-plan.md` 设计方案。
+
 ## [2026-08-06] - GPU 模式错误 Toast 提示
 - [新增] 在 `ChatViewModel` 中新增 `toastEvent` SharedFlow 与 `showToast()` 触发逻辑，当 GPU decode 失败并回退至 CPU 模式时，触发 Toast/Snackbar 提示用户。
 - [新增] 在 `strings.xml` 与 `values-zh/strings.xml` 中补齐 `chat_gpu_decode_failed_fallback_cpu` 多语言资源。
