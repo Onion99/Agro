@@ -23,7 +23,8 @@ import kotlinx.serialization.json.jsonPrimitive
  * 5. Out-of-bounds frame counts (clamps op to max 180 frames)
  * 6. Malformed RGBA strings & hex color conversions
  * 7. Opacity clamping (> 100 -> 100)
- * 8. Missing closing brackets & Markdown fences
+ * 8. Missing property quotes/colons, quoted numbers, leading-decimal numbers, and array separators
+ * 9. Missing closing brackets & Markdown fences
  */
 object LottieJsonSanitizer {
 
@@ -36,6 +37,23 @@ object LottieJsonSanitizer {
     private val hexRegex = Regex(""""c"\s*:\s*"#([0-9A-Fa-f]{6})"""", RegexOption.IGNORE_CASE)
     private val spacedNumberRegex = Regex(""""([a-zA-Z0-9_-]+)"\s*:\s*(\d+)\s+(\d+)""")
     private val followedByPropertyKeyRegex = Regex("""^\s*,\s*"[a-zA-Z0-9_]+"\s*:""")
+    private val unquotedKeyRegex = Regex("""([,{\[]\s*)([A-Za-z_][A-Za-z0-9_-]*)"?\s*:""")
+    private val bareKeyBeforeQuotedValueRegex = Regex(
+        """([,{]\s*)([A-Za-z_][A-Za-z0-9_-]*)\s+("(?:\\.|[^"\\])*")(?=\s*[,}\]])"""
+    )
+    private val quotedKeyBeforeQuotedValueRegex = Regex(
+        """([,{]\s*)("[A-Za-z_][A-Za-z0-9_-]*")\s+("(?:\\.|[^"\\])*")(?=\s*[,}\]])"""
+    )
+    private val quotedNumericValueRegex = Regex(
+        """("[A-Za-z_][A-Za-z0-9_-]*"\s*:\s*)(-?(?:\d+(?:\.\d+)?|\.\d+))\s*"(?=\s*[,}\]])"""
+    )
+    private val missingKeyValueRegex = Regex("""([,{]\s*)(["']?a["']?)\s*(?=,)""")
+    private val malformedScaleKeyRegex = Regex("""([,{]\s*)(["']?k["']?)(?=\s*-?(?:\d|\.\d))""")
+    private val unquotedValueRegex = Regex(
+        """(:\s*)([A-Za-z_][A-Za-z0-9_.-]*)(?=\s*[,}\]])"""
+    )
+    private val leadingDecimalRegex = Regex("""([:\[,]\s*)(-?)\.(\d+)""")
+    private val adjacentArrayObjectRegex = Regex("""([}\]])(\s*)(?=\{)""")
 
     fun sanitize(input: String): String {
         var text = input.trim()
@@ -50,6 +68,7 @@ object LottieJsonSanitizer {
         // 2. Repair text-level syntax errors (spaced numbers, malformed colors, stray commas, unenclosed shapes, missing object closures)
         text = repairSpacedNumbers(text)
         text = repairColorSyntax(text)
+        text = repairMalformedPropertySyntax(text)
         text = repairStrayCommas(text)
         text = repairUnenclosedShapePropertiesInArray(text)
         text = repairMissingObjectClosuresInArray(text)
@@ -67,6 +86,50 @@ object LottieJsonSanitizer {
                 text
             }
         }.getOrDefault(text)
+    }
+
+    /**
+     * Repairs token-level omissions before the JSON parser is invoked. These are deliberately
+     * constrained to object delimiters and JSON punctuation so that text inside a quoted name is
+     * never rewritten as a property.
+     */
+    private fun repairMalformedPropertySyntax(raw: String): String {
+        var repaired = raw
+        repeat(2) {
+            repaired = quotedNumericValueRegex.replace(repaired) { match ->
+                "${match.groupValues[1]}${match.groupValues[2]}"
+            }
+            repaired = malformedScaleKeyRegex.replace(repaired) { match ->
+                "${match.groupValues[1]}\"k\": "
+            }
+            repaired = missingKeyValueRegex.replace(repaired) { match ->
+                "${match.groupValues[1]}\"a\": 0"
+            }
+            repaired = bareKeyBeforeQuotedValueRegex.replace(repaired) { match ->
+                "${match.groupValues[1]}\"${match.groupValues[2]}\": ${match.groupValues[3]}"
+            }
+            repaired = quotedKeyBeforeQuotedValueRegex.replace(repaired) { match ->
+                "${match.groupValues[1]}${match.groupValues[2]}: ${match.groupValues[3]}"
+            }
+            repaired = unquotedKeyRegex.replace(repaired) { match ->
+                "${match.groupValues[1]}\"${match.groupValues[2]}\":"
+            }
+            repaired = unquotedValueRegex.replace(repaired) { match ->
+                val value = match.groupValues[2]
+                if (value == "true" || value == "false" || value == "null") {
+                    match.value
+                } else {
+                    "${match.groupValues[1]}\"$value\""
+                }
+            }
+            repaired = leadingDecimalRegex.replace(repaired) { match ->
+                "${match.groupValues[1]}${match.groupValues[2]}0.${match.groupValues[3]}"
+            }
+            repaired = adjacentArrayObjectRegex.replace(repaired) { match ->
+                "${match.groupValues[1]}},${match.groupValues[2]}"
+            }
+        }
+        return repaired
     }
 
     private fun repairSpacedNumbers(raw: String): String {
@@ -428,7 +491,11 @@ object LottieJsonSanitizer {
                     "st" -> if (v is JsonObject) nestedStroke = v
                     "c" -> if (ty == "fl" || ty == "st") put("c", sanitizeColor(v))
                     "o" -> if (ty == "fl" || ty == "st" || ty == "tr" || ty == "gr") put("o", sanitizeOpacity(v))
-                    "s" -> if (ty == "el" || ty == "rc" || ty == "sr" || ty == "tr") put("s", rescaleShapeSize(v, scaleFactorX, scaleFactorY))
+                    "s" -> when (ty) {
+                        "el", "rc", "sr" -> put("s", rescaleShapeSize(v, scaleFactorX, scaleFactorY))
+                        "tr" -> put("s", sanitizeShapeScale(v))
+                        else -> put(k, v)
+                    }
                     "p" -> if (ty == "el" || ty == "rc" || ty == "sr" || ty == "tr" || ty == "sh") put("p", rescaleShapePosition(v, scaleFactorX, scaleFactorY))
                     "tr" -> if (v is JsonObject) put("tr", sanitizeTransform(v, 0, 0, scaleFactorX, scaleFactorY)) else put(k, v)
                     "it" -> {
@@ -448,7 +515,13 @@ object LottieJsonSanitizer {
             put("ty", JsonPrimitive(ty))
         }
 
-        result.add(cleanedProps)
+        result.add(
+            if (ty == "tr") {
+                sanitizeShapeTransform(cleanedProps, scaleFactorX, scaleFactorY)
+            } else {
+                cleanedProps
+            }
+        )
 
         // If shape contained nested fill, extract it as standalone shape item
         nestedFill?.let { fillObj ->
@@ -470,6 +543,115 @@ object LottieJsonSanitizer {
         }
 
         return result
+    }
+
+    private fun sanitizeShapeTransform(
+        transform: JsonObject,
+        scaleFactorX: Float,
+        scaleFactorY: Float
+    ): JsonObject {
+        return buildJsonObject {
+            transform.forEach { (key, value) -> put(key, value) }
+            put("ty", JsonPrimitive("tr"))
+            put("p", normalizeShapeVector(transform["p"], staticVector2(0f, 0f), scaleFactorX, scaleFactorY))
+            put("a", normalizeShapeVector(transform["a"], staticVector2(0f, 0f), 1f, 1f))
+            put("s", sanitizeShapeScale(transform["s"]))
+            put("r", sanitizeProperty(transform["r"], staticScalar(0f)))
+            put("o", sanitizeOpacity(transform["o"]))
+        }
+    }
+
+    private fun normalizeShapeVector(
+        element: JsonElement?,
+        fallback: JsonElement,
+        scaleFactorX: Float,
+        scaleFactorY: Float
+    ): JsonElement {
+        val property = element as? JsonObject ?: return fallback
+        if ((property["a"]?.jsonPrimitive?.intOrNull ?: 0) != 0) return fallback
+        val values = (property["k"] as? JsonArray)
+            ?.mapNotNull { it.jsonPrimitive.floatOrNull }
+            ?: return fallback
+        if (values.size < 2) return fallback
+
+        return buildJsonObject {
+            property.forEach { (key, value) ->
+                if (key == "k") {
+                    put("k", buildJsonArray {
+                        add(formatNumber(values[0] * scaleFactorX))
+                        add(formatNumber(values[1] * scaleFactorY))
+                    })
+                } else {
+                    put(key, value)
+                }
+            }
+        }
+    }
+
+    private fun sanitizeShapeScale(element: JsonElement?): JsonElement {
+        val property = element as? JsonObject ?: return staticVector2(100f, 100f)
+        val animated = property["a"]?.jsonPrimitive?.intOrNull == 1
+        val keyframes = property["k"] as? JsonArray ?: return staticVector2(100f, 100f)
+
+        if (!animated) {
+            val values = keyframes.mapNotNull { it.jsonPrimitive.floatOrNull }
+            return buildJsonObject {
+                property.forEach { (key, value) ->
+                    if (key == "k") {
+                        put("k", normalizedScaleVector(values))
+                    } else {
+                        put(key, value)
+                    }
+                }
+            }
+        }
+
+        if (keyframes.isEmpty() || keyframes.any { it !is JsonObject }) {
+            return staticVector2(100f, 100f)
+        }
+
+        return buildJsonObject {
+            property.forEach { (key, value) ->
+                if (key == "k") {
+                    put("k", buildJsonArray {
+                        keyframes.forEach { keyframe ->
+                            val frame = keyframe.jsonObject
+                            buildJsonObject {
+                                frame.forEach { frameKey, frameValue ->
+                                    when (frameKey) {
+                                        "s", "e" -> {
+                                            val values = (frameValue as? JsonArray)
+                                                ?.mapNotNull { it.jsonPrimitive.floatOrNull }
+                                                .orEmpty()
+                                            put(frameKey, normalizedScaleVector(values))
+                                        }
+                                        else -> put(frameKey, frameValue)
+                                    }
+                                }
+                            }.also(::add)
+                        }
+                    })
+                } else {
+                    put(key, value)
+                }
+            }
+        }
+    }
+
+    private fun normalizedScaleVector(values: List<Float>): JsonArray {
+        if (values.size < 2) return buildJsonArray {
+            add(formatNumber(100f))
+            add(formatNumber(100f))
+        }
+
+        val maxValue = values.maxOrNull() ?: 0f
+        val multiplier = if (maxValue in 0.0001f..10f) 100f else 1f
+        val sx = (values[0] * multiplier).coerceIn(1f, 1000f)
+        val sy = (values[1] * multiplier).coerceIn(1f, 1000f)
+        return buildJsonArray {
+            add(formatNumber(sx))
+            add(formatNumber(sy))
+        }
     }
 
     private fun rescaleShapeSize(element: JsonElement?, scaleFactorX: Float, scaleFactorY: Float): JsonElement {

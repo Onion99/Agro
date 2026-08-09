@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-09] - 增强 Lottie JSON sanitizer
+- [修复] 扩展 LottieJsonSanitizer 对 Gemma4 常见损坏 token 的修复，覆盖未加引号 key/value、缺失冒号、数字误带引号、.2 前导小数、相邻数组对象漏逗号和缺失对象边界。
+- [修复] 规范化 shape transform 的 s/a/p/r/o 属性包装与缩放单位，避免生成裸数组导致 Compottie Invalid vector 渲染失败。
+- [测试] 新增用户提供的 Fire malformed JSON 回归用例，并直接通过 LottieComposition.parse 验证 parser 到 Compottie 的完整链路。
+- [文档] 更新 docs/specs/lottie-animation-prompt-spec.md 与 docs/designs/gemma4-lottie-json-compottie-route-plan.md，记录 sanitizer 修复边界和验证标准。
+
 ## [2026-08-09] - 移除本地 Lottie 固定动画生产
 - [重构] `LottieAnimationSpecParser.kt` 改为只清洗、校验和解析模型直接输出的 Native Lottie JSON，删除 `LottieJsonBuilder` 及所有 `kind/style/seed` 本地模板和数学几何生成逻辑。
 - [修改] 重构 `ChatViewModel.LOTTIE_ANIMATION_SYSTEM_INSTRUCTION`，加入单圆形呼吸动画最小示例、根对象/图层/形状/关键帧参数字典和明确的动画编排步骤。

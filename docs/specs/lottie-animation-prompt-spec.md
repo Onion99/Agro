@@ -1,6 +1,6 @@
 # Gemma4 Native Lottie Prompt Specification
 
-**Version:** 1.4.0  
+**Version:** 1.5.0
 **Updated:** 2026-08-09  
 **Owner:** `ChatViewModel.LOTTIE_ANIMATION_SYSTEM_INSTRUCTION`
 
@@ -67,6 +67,36 @@ Use this one-layer breathing circle as the baseline pattern:
 ```
 
 At 30 FPS, `op - ip = 60` is two seconds. The scale is 90% at frame 0, 100% at frame 30, and 90% at frame 60, so the loop returns to its starting state.
+
+## Sanitizer Repair Boundary
+
+LottieJsonSanitizer repairs syntax damage commonly produced by a small language model before
+the strict parser and Compottie receive the payload. The repair pipeline is ordered as follows:
+
+1. Remove an outer Markdown fence.
+2. Repair token omissions: unquoted keys or enum values, missing colons, numbers accidentally
+   followed by a quote, leading-decimal numbers such as .2, and missing commas/closing braces
+   between adjacent array objects.
+3. Remove duplicate/trailing commas, normalize malformed colors, and close unbalanced brackets.
+4. Parse the repaired object and normalize the Native Lottie structure: canvas/frame bounds,
+   transform vectors, percentage scale, opacity, colors, and nested fill/stroke shape items.
+5. Run LottieJsonValidator, then pass the exact sanitized string to Compottie.
+
+For example, these model fragments are repairable:
+
+~~~text
+"p": { "a": 0,k": [20,2] }
+{t: 1, "s": [1.1,0]          {t:2, "s": [0,0] }
+"c": {a:0,k:[.2,0,0.5,0]}
+~~~
+
+They become valid JSON property wrappers and chronological keyframe objects. The sanitizer does
+not invent a missing subject, choose an animation style, or load external resources. If the
+payload still cannot form a JSON object or violates the safety validator, the message remains
+unsupported and the original payload is preserved for inspection.
+
+The regression test repairsFireAnimationAndCompottieAcceptsSanitizedJson verifies the complete
+path from the malformed payload through LottieMessageParser to LottieComposition.parse.
 
 ## Field Meaning
 

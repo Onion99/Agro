@@ -1,7 +1,7 @@
 # Gemma4 Native Lottie JSON 与 Compottie 渲染路线
 
 > 日期: 2026-07-28
-> 最新更新: 2026-08-09 (v1.4.0 移除本地 Lottie 模板生产)
+> 最新更新: 2026-08-09 (v1.5.0 增强 malformed Native JSON 修复与 Compottie 回归验证)
 > 范围: `ChatViewModel` 专用会话入口、Native Lottie JSON 解析、Compottie 本地渲染、复制与保存
 > 状态: Native JSON 直出路线落地
 > 关联文档: `docs/specs/lottie-animation-prompt-spec.md`、`docs/agents/data-model.md`
@@ -91,7 +91,7 @@ flowchart TD
 
 | 组件 | 职责 |
 | --- | --- |
-| `LottieJsonSanitizer` | 修复模型生成的括号、数字、颜色、尺寸、scale、opacity 和嵌套 shape 格式问题。 |
+| `LottieJsonSanitizer` | 先修复 key/value/冒号/数字/逗号等词法损坏，再修复括号、颜色、尺寸、scale、opacity 和嵌套 shape 格式问题。 |
 | `LottieAnimationSpecParser` | 对 sanitizer 输出做 JSON object 解析并提取渲染元数据；不生成图层。 |
 | `LottieJsonValidator` | 校验大小、layers、layer type、3D 标志、assets 和危险字段/值。 |
 | `LottieMessageParser` | 将成功结果包装为 `ChatMessageContent.LottieAnimation`，失败时保留原始 payload。 |
@@ -122,6 +122,7 @@ Parser 不负责:
 ## 8. 验证标准
 
 - Gemma4 输出最小单圆形 Native JSON 可以被 parser 解析并交给 Compottie。
+- 用户提供的严重 malformed Native JSON 可以被 sanitizer 修复，并通过 `LottieComposition.parse`。
 - 旧 `lottie_animation_spec` 不会再触发本地动画生产，而是被拒绝。
 - 原生 JSON 的 malformed repair 测试继续通过。
 - 同一份 Native JSON 在解析、持久化恢复和复制保存路径中保持语义一致。
@@ -134,3 +135,9 @@ Parser 不负责:
 - 删除 `LottieJsonBuilder` 及所有 `kind/style/seed` 本地模板和数学几何生产逻辑。
 - 删除未使用的 `LottieAnimationSpec` 意图数据模型。
 - 更新 Native JSON parser、消息错误码、测试与数据边界文档。
+
+### 2026-08-09 v1.5.0
+
+- 增强 `LottieJsonSanitizer` 的 token-level JSON 修复，覆盖未加引号 key/value、缺失冒号、误带引号数字、前导小数和相邻数组对象漏逗号。
+- 修复 shape transform 的 `s/a/p/r/o` 属性包装与默认值，确保输出符合 Compottie 的 AnimatedVector2 结构。
+- 新增 `Fire` malformed JSON 回归测试，直接调用 `LottieComposition.parse` 验证渲染输入。
