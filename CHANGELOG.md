@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-09] - 移除本地 Lottie 固定动画生产
+- [重构] `LottieAnimationSpecParser.kt` 改为只清洗、校验和解析模型直接输出的 Native Lottie JSON，删除 `LottieJsonBuilder` 及所有 `kind/style/seed` 本地模板和数学几何生成逻辑。
+- [修改] 重构 `ChatViewModel.LOTTIE_ANIMATION_SYSTEM_INSTRUCTION`，加入单圆形呼吸动画最小示例、根对象/图层/形状/关键帧参数字典和明确的动画编排步骤。
+- [测试] 更新 `LottieMessageParserTest`，验证旧 `lottie_animation_spec` 被拒绝，模型直接生成的最小 Native Lottie JSON 可以解析。
+- [修改] 更新 Lottie 原始 JSON 复制按钮的中英文文案，避免继续显示已移除的“动画规格”概念。
+- [文档] 新增 `docs/specs/lottie-animation-prompt-spec.md`，同步更新 Lottie 路线和 `docs/agents/data-model.md`。
+
+## [2026-08-09] - 强化 Gemma4 Lottie 动画指导
+- [修改] 全面扩充 `ChatViewModel.LOTTIE_ANIMATION_SYSTEM_INSTRUCTION`，明确 `lottie_animation_spec` 默认输出契约、字段参数含义、六类动画样式、分阶段时序、毫秒到帧的换算，以及 Native Lottie 根对象、图层、形状和关键帧字段规则。
+- [修改] 将 Gemma4 的默认 Lottie 输出路径调整为高层 Spec，保留用户明确要求 raw/native JSON 时的原生 Lottie 路径，减少端侧模型直接生成复杂图层 AST 的错误。
+- [文档] 新增 `docs/specs/lottie-animation-prompt-spec.md`，并同步更新 `docs/designs/gemma4-lottie-json-compottie-route-plan.md` 的提示词契约。
+
 ## [2026-08-09] - 修复 macOS LiteRT-LM GPU sampler 初始化
 - [修复] 放宽 `runtime/components/sampler_factory.cc` 对旧版 WebGPU Top-K sampler 的动态符号要求，仅将 Create/Destroy/Sample 作为必需 ABI，避免缺少可选扩展符号时错误回退 CPU sampling。
 - [修改] 新增 `cpp/patches/lite-rt-lm-gpu-sampler-compatibility.patch` 并接入 `composeApp/build.gradle.kts`，桌面 Bazel 构建前自动应用兼容补丁。

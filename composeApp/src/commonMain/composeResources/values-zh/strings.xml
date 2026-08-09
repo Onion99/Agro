@@ -226,7 +226,7 @@
     <string name="lottie_animation_metadata">%1$dx%2$d · %3$d fps · %4$s</string>
     <string name="lottie_render_failed">无法渲染此 Lottie 动画，你仍可复制或保存其 JSON。</string>
     <string name="lottie_copy_json">复制 Lottie JSON</string>
-    <string name="lottie_copy_spec">复制动画规格</string>
+    <string name="lottie_copy_spec">复制原始 JSON</string>
     <string name="lottie_save_json">保存 Lottie JSON</string>
     <string name="lottie_saved">Lottie JSON 保存成功</string>
     <string name="lottie_save_failed">Lottie JSON 保存失败</string>

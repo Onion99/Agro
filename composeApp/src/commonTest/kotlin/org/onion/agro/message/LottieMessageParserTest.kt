@@ -5,54 +5,28 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
-import org.onion.agro.lottie.LottieAnimationSpecParser
-import org.onion.agro.lottie.LottieJsonSanitizer
 
 class LottieMessageParserTest {
     @Test
-    fun parsesSpecAndBuildsRenderableLottieContent() {
-        val result = LottieMessageParser.parseCompletedResponse(validSpecJson())
+    fun rejectsLegacyIntentSpecWithoutLocalBuilder() {
+        val result = LottieMessageParser.parseCompletedResponse(legacyIntentSpecJson())
 
-        val lottie = assertIs<ChatMessageContent.LottieAnimation>(result)
-        assertEquals("Success Check", lottie.title)
-        assertEquals(240, lottie.width)
-        assertEquals(240, lottie.height)
-        assertEquals(60, lottie.fps)
-        assertEquals(1_200L, lottie.durationMs)
-        assertTrue(lottie.json.contains("\"layers\""))
-        assertTrue(lottie.json.contains("\"assets\":[]"))
-        assertTrue(lottie.sourceSpecJson?.contains("lottie_animation_spec") == true)
+        val unsupported = assertIs<ChatMessageContent.Unsupported>(result)
+        assertEquals("unexpected_content_type", unsupported.reason)
     }
 
     @Test
-    fun buildsSupportedKindsDeterministically() {
-        val cases = listOf(
-            "loading_spinner" to "spin_arc",
-            "loading_spinner" to "orbit_dots",
-            "success_check" to "draw_then_pop",
-            "success_check" to "circle_then_check",
-            "error_cross" to "draw_then_shake",
-            "error_cross" to "cross_fade_in",
-            "progress_dots" to "stagger_bounce",
-            "progress_dots" to "stagger_fade",
-            "pulse_badge" to "soft_pulse",
-            "pulse_badge" to "ripple",
-            "empty_state_sparkle" to "float_sparkle",
-            "empty_state_sparkle" to "fade_sparkle"
-        )
+    fun parsesModelProducedMinimalNativeLottieJson() {
+        val result = LottieMessageParser.parseCompletedResponse(minimalNativeLottieJson())
 
-        cases.forEach { (kind, style) ->
-            val source = validSpecJson(
-                kind = kind,
-                style = style,
-                loop = kind != "success_check" && kind != "error_cross"
-            )
-            val first = LottieAnimationSpecParser.parse(source)
-            val second = LottieAnimationSpecParser.parse(source)
-
-            assertEquals(first.json, second.json)
-            assertTrue(first.json.contains("\"ty\":4"))
-        }
+        val lottie = assertIs<ChatMessageContent.LottieAnimation>(result)
+        assertEquals("Breathing Circle", lottie.title)
+        assertEquals(240, lottie.width)
+        assertEquals(240, lottie.height)
+        assertEquals(30, lottie.fps)
+        assertEquals(2_000L, lottie.durationMs)
+        assertTrue(lottie.json.contains("\"ty\":\"el\""), lottie.json)
+        assertTrue(lottie.json.contains("\"ty\":\"fl\""), lottie.json)
     }
 
     @Test
@@ -323,44 +297,28 @@ class LottieMessageParserTest {
         assertTrue(lottie.durationMs in 1000L..4000L)
     }
 
-    @Test
-    fun rejectsOutOfBoundsDuration() {
-        val result = LottieMessageParser.parseCompletedResponse(
-            validSpecJson(durationMs = 5_001)
-        )
-
-        val unsupported = assertIs<ChatMessageContent.Unsupported>(result)
-        assertEquals("invalid_lottie_duration", unsupported.reason)
-    }
-
-    private fun validSpecJson(
-        kind: String = "success_check",
-        style: String = "draw_then_pop",
-        loop: Boolean = false,
-        durationMs: Int = 1_200
-    ): String {
+    private fun legacyIntentSpecJson(): String {
         return """
             {
               "type": "lottie_animation_spec",
               "schemaVersion": 1,
               "title": "Success Check",
-              "seed": 42,
               "canvas": {
                 "width": 240,
                 "height": 240,
                 "background": "transparent"
               },
               "fps": 60,
-              "durationMs": $durationMs,
-              "loop": $loop,
-              "kind": "$kind",
+              "durationMs": 1200,
+              "loop": false,
+              "kind": "success_check",
               "palette": {
                 "primary": "#22C55E",
                 "secondary": "#DCFCE7",
                 "accent": "#FFFFFF"
               },
               "motion": {
-                "style": "$style",
+                "style": "draw_then_pop",
                 "intensity": 0.72,
                 "staggerMs": 120
               },
@@ -368,6 +326,79 @@ class LottieMessageParserTest {
                 "width": 10,
                 "lineCap": "round"
               }
+            }
+        """.trimIndent()
+    }
+
+    private fun minimalNativeLottieJson(): String {
+        return """
+            {
+              "v": "5.7.4",
+              "fr": 30,
+              "ip": 0,
+              "op": 60,
+              "w": 240,
+              "h": 240,
+              "nm": "Breathing Circle",
+              "ddd": 0,
+              "loop": true,
+              "assets": [],
+              "layers": [
+                {
+                  "ddd": 0,
+                  "ind": 1,
+                  "ty": 4,
+                  "nm": "Circle Layer",
+                  "sr": 1,
+                  "ks": {
+                    "o": { "a": 0, "k": 100 },
+                    "r": { "a": 0, "k": 0 },
+                    "p": { "a": 0, "k": [120, 120, 0] },
+                    "a": { "a": 0, "k": [0, 0, 0] },
+                    "s": { "a": 1, "k": [
+                      { "t": 0, "s": [90, 90, 100], "e": [100, 100, 100] },
+                      { "t": 30, "s": [100, 100, 100], "e": [90, 90, 100] },
+                      { "t": 60, "s": [90, 90, 100], "e": [90, 90, 100] }
+                    ]
+                  }
+                },
+                "ao": 0,
+                  "shapes": [
+                    {
+                      "ty": "gr",
+                      "nm": "Circle Group",
+                      "it": [
+                        {
+                          "ty": "el",
+                          "nm": "Circle Path",
+                          "p": { "a": 0, "k": [0, 0] },
+                          "s": { "a": 0, "k": [100, 100] },
+                          "d": 1
+                        },
+                        {
+                          "ty": "fl",
+                          "nm": "Circle Fill",
+                          "c": { "a": 0, "k": [0.12, 0.65, 0.95, 1] },
+                          "o": { "a": 0, "k": 100 },
+                          "r": 1
+                        },
+                        {
+                          "ty": "tr",
+                          "p": { "a": 0, "k": [0, 0] },
+                          "a": { "a": 0, "k": [0, 0] },
+                          "s": { "a": 0, "k": [100, 100] },
+                          "r": { "a": 0, "k": 0 },
+                          "o": { "a": 0, "k": 100 }
+                        }
+                      ]
+                    }
+                  ],
+                  "ip": 0,
+                  "op": 60,
+                  "st": 0,
+                  "bm": 0
+                }
+              ]
             }
         """.trimIndent()
     }

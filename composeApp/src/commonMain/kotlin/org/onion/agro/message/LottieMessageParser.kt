@@ -23,7 +23,7 @@ object LottieMessageParser {
                 declaredType = LottieAnimationSpecParser.declaredType(response)
                     ?: LottieAnimationSpecParser.CONTENT_TYPE,
                 rawPayload = response,
-                reason = (error as? LottieParseException)?.reason ?: "lottie_build_failed"
+                reason = (error as? LottieParseException)?.reason ?: "lottie_parse_failed"
             )
         }
     }

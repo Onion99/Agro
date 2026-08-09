@@ -225,7 +225,7 @@
     <string name="lottie_animation_metadata">%1$dx%2$d · %3$d fps · %4$s</string>
     <string name="lottie_render_failed">Unable to render this Lottie animation. You can still copy or save its JSON.</string>
     <string name="lottie_copy_json">Copy Lottie JSON</string>
-    <string name="lottie_copy_spec">Copy animation spec</string>
+    <string name="lottie_copy_spec">Copy source JSON</string>
     <string name="lottie_save_json">Save Lottie JSON</string>
     <string name="lottie_saved">Lottie JSON saved successfully</string>
     <string name="lottie_save_failed">Failed to save Lottie JSON</string>
