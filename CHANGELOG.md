@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-09] - 修复 macOS Bazel 启动输出根
+- [修复] 更新 `composeApp/build.gradle.kts` 的 Bazel 启动参数，在 macOS/Linux 上覆盖 Windows 的 `G:/_b` 输出根，避免从 `cpp/lite-rt-lm/G:/_b` 加载内嵌 JDK 并修复 `libjimage.dylib` 加载失败。
+- [修改] 保留 Windows 短输出根和 `BAZEL_VC` 配置，并让 CI 通过 `BAZEL_OUTPUT_ROOT` 将绝对输出根传递给 Gradle。
+- [文档] 更新 `docs/specs/bazel-windows-android-rc.md`，记录跨平台 Bazel rc 的启动参数边界，以及 macOS prebuilt LFS pointer 的恢复和校验步骤。
+
 ## [2026-08-07] - Lottie Prompt 优化
 - [重构] `LottieAnimationSpecParser.kt` 彻底抹平所有写死输出与关键词匹配（移除 `containsAny` 与模板分支逻辑）。对于 Spec，完全采用纯数学公式（基于 `seed`、`intensity`、`staggerMs`、`palette`）参数化合成 N 边形/椭圆与动态 Keyframe，零硬编码。
 - [新增] `ChatViewModel.kt` 系统 Prompt 重构：大模型拥有 100% 自由直接写 Native Lottie JSON，4B 模型只需输出轻量 Intent，且前端不做任何预设形状绑死。

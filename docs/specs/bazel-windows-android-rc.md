@@ -10,6 +10,11 @@
 
 Gradle 任务会额外传入仓库根目录的 `.bazelrc.user`，用于设置本机 Bazel 输出目录、Visual Studio 工具链路径，以及 Windows host 编译参数。
 
+`.bazelrc.user` 中的启动参数必须按 Bazel 主机平台隔离。Windows 使用短输出根
+`G:/_b`；Gradle 在 macOS/Linux 上显式覆盖为 `/tmp/agro-bazel`，CI 则通过
+`BAZEL_OUTPUT_ROOT` 传入 runner 的绝对输出根。否则 `G:/_b` 会在 Unix 工作区中
+被解析为相对路径，导致 Bazel 从类似 `cpp/lite-rt-lm/G:/_b/...` 的目录加载内嵌 JDK。
+
 ## 约束
 
 `/utf-8` 是 MSVC 风格编译参数，不能通过全局 `build --copt` 或 `build --cxxopt` 注入。Android 交叉编译使用 NDK `clang.exe`，该驱动不会把 `/utf-8` 当作编码参数处理，而是按输入文件解析，导致如下错误：
@@ -26,9 +31,14 @@ clang: error: no such file or directory: '/utf-8'
 
 ## 当前配置
 
-`.bazelrc.user` 中保留 Visual Studio 路径，并将 UTF-8 参数拆到显式配置：
+`.bazelrc.user` 中保留 Windows Visual Studio 路径，并将 UTF-8 参数拆到显式配置：
 
 ```text
+startup --output_user_root=G:/_b
+build:windows --action_env=BAZEL_VC="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC"
+build:windows --repo_env=BAZEL_VC="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC"
+build:win_host --action_env=BAZEL_VC="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC"
+build:win_host --repo_env=BAZEL_VC="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC"
 build:msvc_target_utf8 --copt=/utf-8
 build:msvc_target_utf8 --cxxopt=/utf-8
 build:msvc_target_utf8 --host_copt=/utf-8
@@ -36,6 +46,11 @@ build:msvc_target_utf8 --host_cxxopt=/utf-8
 build:win_host --host_copt=/utf-8
 build:win_host --host_cxxopt=/utf-8
 ```
+
+Gradle 的 Bazel 任务通过 `-Pbazel.outputUserRoot=...` 或
+`BAZEL_OUTPUT_ROOT` 接收覆盖值；未设置时，macOS/Linux 使用 `/tmp/agro-bazel`。
+CI 会在构建前重写 `.bazelrc.user` 并导出 `BAZEL_OUTPUT_ROOT`，仍使用 runner
+上的绝对输出根。
 
 `composeApp/build.gradle.kts` 的 Windows desktop 原生库任务显式传入 `--config=msvc_target_utf8`。Android 原生库任务在 Windows 主机上只传入 `--config=win_host`，从而只影响 host 工具链，不污染 Android NDK target 编译。
 
@@ -56,6 +71,14 @@ build:win_host --host_cxxopt=/utf-8
 - Windows desktop 仍保留 `msvc_target_utf8` 与 `win_host` 两组 UTF-8 配置，确保 target 与 host 参数边界不回退。
 - 所有会执行 `./gradlew` 的 Unix runner 在 wrapper 校验前都会执行 `chmod +x ./gradlew`；同时仓库中的 `gradlew` 必须保持 Git 可执行位，避免 Linux/macOS checkout 后出现 `Permission denied`。
 - Desktop 和 Android/iOS 构建 job 必须拉取 Git LFS 资源，并对子模块执行 `git lfs pull`。`cpp/lite-rt-lm/prebuilt/*` 下的 `.so`、`.dylib`、`.dll`、`.lib` 均由子模块 Git LFS 管理；如果 CI 只拿到 LFS pointer，macOS 链接会出现 `ld: unknown file type`。
+- macOS 本地构建前可只恢复当前平台的 LFS 对象，并确认文件是 Mach-O 而不是 pointer 文本：
+
+  ```bash
+  git -C cpp/lite-rt-lm lfs pull origin HEAD --include='prebuilt/macos_arm64/*'
+  file cpp/lite-rt-lm/prebuilt/macos_arm64/*.dylib
+  ```
+
+  如果 `file` 输出 `ASCII text`，或文件内容以 `version https://git-lfs.github.com/spec/v1` 开头，必须先完成 LFS 拉取；否则 Bazel 会在最终 dylib 链接阶段报 `ld: unknown file type`。
 - Android release 构建必须在 Gradle 执行前安装 NDK，并写入 `local.properties` 的 `sdk.dir` 与 `ndk.dir`。`composeApp:buildAndroidNativeLib` 在任务创建阶段读取 AGP 的 `ndkDirectory`，未安装 NDK 会直接导致 `NDK is not installed`。
 - CI 安装的 Android NDK 版本必须与 `gradle/libs.versions.toml` 中的 `android-ndk` 完全一致，并通过 Android convention 插件写入 `android.ndkVersion`。如果 `local.properties` 的 `ndk.dir` 指向另一个版本，AGP 会在配置阶段报 `CXX1104` 版本不一致错误。
 

@@ -35,6 +35,15 @@ val bazeliskExecutableProvider = providers.gradleProperty("bazelisk.path")
     .orElse(providers.environmentVariable("BAZELISK"))
     .orElse(providers.environmentVariable("BAZELISK_PATH"))
     .orElse(providers.provider { discoverBazeliskExecutable() })
+val bazelOutputUserRootProvider = providers.gradleProperty("bazel.outputUserRoot")
+    .orElse(providers.environmentVariable("BAZEL_OUTPUT_ROOT"))
+    .orElse(providers.provider {
+        if (System.getProperty("os.name").lowercase(Locale.getDefault()).contains("windows")) {
+            ""
+        } else {
+            "/tmp/agro-bazel"
+        }
+    })
 val macosSdkVersionProvider = providers.gradleProperty("apple.macosSdkVersion")
     .orElse(providers.exec {
         commandLine("xcrun", "--sdk", "macosx", "--show-sdk-version")
@@ -423,6 +432,10 @@ abstract class BuildNativeLibTask : DefaultTask() {
 
     @get:Input
     @get:Optional
+    abstract val bazelOutputUserRoot: Property<String>
+
+    @get:Input
+    @get:Optional
     abstract val secondaryOutputDir: Property<File>
 
     @get:Input
@@ -455,12 +468,18 @@ abstract class BuildNativeLibTask : DefaultTask() {
                 environment("ANDROID_HOME", androidSdkHome.get())
             }
 
-            val cmd = mutableListOf(
-                bazelisk,
-                "--bazelrc=${workDir.parentFile.parentFile.absolutePath}/.bazelrc.user",
-                "build",
-                target,
-                "--config=$config"
+            val cmd = mutableListOf(bazelisk)
+            bazelOutputUserRoot.orNull
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { cmd.add("--output_user_root=$it") }
+            cmd.addAll(
+                listOf(
+                    "--bazelrc=${workDir.parentFile.parentFile.absolutePath}/.bazelrc.user",
+                    "build",
+                    target,
+                    "--config=$config"
+                )
             )
             cmd.addAll(extraArgs)
             commandLine(cmd)
@@ -816,6 +835,7 @@ desktopPlatforms.forEach { platform ->
         this.platformName.set(platform)
         this.bazelTarget.set(rootProject.extra["bazelTarget"].toString())
         this.bazeliskExecutable.set(bazeliskExecutableProvider)
+        this.bazelOutputUserRoot.set(bazelOutputUserRootProvider)
 
         // 平台 → Bazel config 映射（对应 .bazelrc 中定义的 config）
         val config = when(platform) {
@@ -942,6 +962,7 @@ tasks.register<BuildNativeLibTask>("buildAndroidNativeLib") {
     this.platformName.set("android")
     this.bazelTarget.set(rootProject.extra["bazelTarget"].toString())
     this.bazeliskExecutable.set(bazeliskExecutableProvider)
+    this.bazelOutputUserRoot.set(bazelOutputUserRootProvider)
     this.bazelConfig.set("android_arm64")
     
     val osName = System.getProperty("os.name").lowercase(Locale.getDefault())

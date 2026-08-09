@@ -199,6 +199,7 @@ jobs:
           BAZEL_OUTPUT_ROOT="${RUNNER_TEMP}/bazel-output"
           BAZEL_DISK_CACHE="${HOME}/.cache/bazel-disk"
           mkdir -p "$BAZEL_OUTPUT_ROOT" "$BAZEL_DISK_CACHE"
+          echo "BAZEL_OUTPUT_ROOT=$BAZEL_OUTPUT_ROOT" >> "$GITHUB_ENV"
           cat > .bazelrc.user <<EOF
           startup --output_user_root=$BAZEL_OUTPUT_ROOT
           build --disk_cache=$BAZEL_DISK_CACHE
@@ -393,6 +394,7 @@ jobs:
           BAZEL_OUTPUT_ROOT="${RUNNER_TEMP}/bazel-output"
           BAZEL_DISK_CACHE="${HOME}/.cache/bazel-disk"
           mkdir -p "$BAZEL_OUTPUT_ROOT" "$BAZEL_DISK_CACHE"
+          echo "BAZEL_OUTPUT_ROOT=$BAZEL_OUTPUT_ROOT" >> "$GITHUB_ENV"
           cat > .bazelrc.user <<EOF
           startup --output_user_root=$BAZEL_OUTPUT_ROOT
           build --disk_cache=$BAZEL_DISK_CACHE

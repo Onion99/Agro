@@ -1,6 +1,10 @@
+# The Gradle Bazel task overrides this startup option on macOS/Linux. Keep the
+# Windows path here for local Windows builds, where a short output root matters.
 startup --output_user_root=G:/_b
-build --action_env=BAZEL_VC="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC"
-build --repo_env=BAZEL_VC="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC"
+build:windows --action_env=BAZEL_VC="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC"
+build:windows --repo_env=BAZEL_VC="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC"
+build:win_host --action_env=BAZEL_VC="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC"
+build:win_host --repo_env=BAZEL_VC="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC"
 
 # MSVC-only UTF-8 flags. Do not set these as global target copts: Android NDK
 # clang treats /utf-8 as an input file and fails during cross-compilation.
