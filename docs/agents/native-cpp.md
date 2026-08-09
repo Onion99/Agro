@@ -15,6 +15,8 @@
 - **平台 Native 库加载边界**：
     - 运行时库清单必须以 `cpp/lite-rt-lm/prebuilt/<platform>` 为准。Desktop JVM 当前支持 `windows_x86_64`、`linux_x86_64`、`linux_arm64`、`macos_arm64`；Android 当前同步 `android_arm64` 到 `jniLibs/arm64-v8a`；iOS 当前同步 `ios_arm64` 到 `cpp/libs/ios-device`，同步 `ios_sim_arm64` 到 `cpp/libs/ios-simulator`。
     - 桌面端使用 LiteRT-LM GPU 后端时，JNI 库必须与 `libLiteRt.*` 采用动态 runtime 链接，避免 JNI 内静态 LiteRT runtime 与 WebGPU/Metal sampler 或 accelerator 依赖的动态 LiteRT runtime 混用。
+    - macOS desktop 的 LiteRT-LM GPU executor 使用 WebGPU；Dawn 会在 Apple GPU 上选择 Metal adapter。因此 `Created default Metal device` 表示 WebGPU 的底层 Metal 环境已创建，不应改成 iOS 专用的 Metal sampler 路径。
+    - `libLiteRtTopKWebGpuSampler.dylib` 的 Create/Destroy/Sample 三个 C API 符号是运行所需的最小接口；UpdateConfig、CanHandleInput、HandlesInput 和 SetInferenceFuncAndInputTensors 属于可选扩展，sampler factory 不得因旧版 dylib 缺少这些符号而把整个 GPU sampler 判定为不可用。
     - 桌面端 native 构建完成后，`cpp/lite-rt-lm/prebuilt/<platform>` 中的 `libLiteRt.*`、GPU accelerator/sampler、Dawn/Metal 等运行时库必须覆盖同步到 `cpp/libs` 与 JVM resources；Bazel 产出的 `liblitertlm_jni.*` 只能作为 JNI 桥接库，不能用同名 Bazel runtime 覆盖 prebuilt GPU runtime。
     - Windows 启动阶段必须先创建并注册 native 临时目录到 DLL 搜索路径，再将 `dxil.dll`、`dxcompiler.dll`、`libwebgpu_dawn.dll`、`libLiteRtWebGpuAccelerator.dll`、`libLiteRtTopKWebGpuSampler.dll` 解压到该目录。
     - Desktop JVM 必须在 `liblitertlm_jni.*` 前加载或准备平台依赖：`libLiteRt.*`、`libGemmaModelConstraintProvider.*` 以及平台 GPU 插件。Android 侧 GPU/OpenCL/WebGPU 插件为可选加载，缺失时不得阻断 CPU/JNI 路径。

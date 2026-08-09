@@ -62,18 +62,26 @@ internal actual object LiteRtLmJni {
         visionNpuNativeLibraryDir: String, audioNpuNativeLibraryDir: String,
         mainBackendNumThreads: Int, audioBackendNumThreads: Int
     ): Long {
-        return try {
-            val ptr = nativeCreateEngine(modelPath, backend, visionBackend, audioBackend, maxNumTokens, maxNumImages, cacheDir, enableBenchmark, enableSpeculativeDecoding, mainNpuNativeLibraryDir, visionNpuNativeLibraryDir, audioNpuNativeLibraryDir, mainBackendNumThreads, audioBackendNumThreads)
-            if (ptr == 0L && backend.lowercase() != "cpu") {
-                println("Warning: Engine creation returned 0 for backend '$backend'. Falling back to CPU backend...")
-                nativeCreateEngine(modelPath, "cpu", visionBackend, audioBackend, maxNumTokens, maxNumImages, cacheDir, enableBenchmark, enableSpeculativeDecoding, mainNpuNativeLibraryDir, visionNpuNativeLibraryDir, audioNpuNativeLibraryDir, mainBackendNumThreads, audioBackendNumThreads)
-            } else {
-                ptr
-            }
-        } catch (e: Exception) {
-            println("Warning: GPU/NPU environment initialization failed ($e). Falling back to CPU backend...")
-            nativeCreateEngine(modelPath, "cpu", visionBackend, audioBackend, maxNumTokens, maxNumImages, cacheDir, enableBenchmark, enableSpeculativeDecoding, mainNpuNativeLibraryDir, visionNpuNativeLibraryDir, audioNpuNativeLibraryDir, mainBackendNumThreads, audioBackendNumThreads)
+        val pointer = nativeCreateEngine(
+            modelPath,
+            backend,
+            visionBackend,
+            audioBackend,
+            maxNumTokens,
+            maxNumImages,
+            cacheDir,
+            enableBenchmark,
+            enableSpeculativeDecoding,
+            mainNpuNativeLibraryDir,
+            visionNpuNativeLibraryDir,
+            audioNpuNativeLibraryDir,
+            mainBackendNumThreads,
+            audioBackendNumThreads
+        )
+        check(pointer != 0L) {
+            "LiteRT LM engine creation returned a null native handle for backend '$backend'."
         }
+        return pointer
     }
 
     actual fun createLmConversation(

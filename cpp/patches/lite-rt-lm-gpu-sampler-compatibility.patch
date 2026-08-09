@@ -1,0 +1,128 @@
+diff --git a/runtime/components/sampler_factory.cc b/runtime/components/sampler_factory.cc
+index f94dd5f..5c1eeaa 100644
+--- a/runtime/components/sampler_factory.cc
++++ b/runtime/components/sampler_factory.cc
+@@ -170,6 +170,18 @@ absl::Status CreateStatusAndFreeErrorMsg(int error_code, char* error_msg) {
+                          : CreateStatus(error_code, error_msg);
+ }
+ 
++template <typename Symbol>
++void LookupOptionalSymbol(SharedLibrary& lib, const char* symbol_name,
++                          Symbol& symbol) {
++  auto symbol_or = lib.LookupSymbol<Symbol>(symbol_name);
++  if (symbol_or.HasValue()) {
++    symbol = *symbol_or;
++    return;
++  }
++  ABSL_VLOG(1) << "Optional sampler symbol is unavailable: " << symbol_name
++               << ": " << symbol_or.Error();
++}
++
+ // A base wrapper of TopK Sampler C API functions.
+ class TopKCApiSampler : public Sampler {
+  public:
+@@ -255,6 +267,10 @@ class TopKCApiSampler : public Sampler {
+   absl::Status UpdateConfig(
+       const proto::SamplerParameters& sampler_params, int batch_size,
+       std::shared_ptr<std::default_random_engine> rand_gen) override {
++    if (capi_->update_config_func == nullptr) {
++      return absl::UnimplementedError(
++          "The loaded GPU sampler does not expose UpdateConfig.");
++    }
+     char* error_msg = nullptr;
+     int error_code = capi_->update_config_func(
+         sampler_, &sampler_params, batch_size, &rand_gen, &error_msg);
+@@ -329,39 +345,30 @@ class TopKCApiSampler : public Sampler {
+         auto sampler_sample_func,
+         lib.LookupSymbol<LiteRtTopKSampler_SampleToIdAndScoreBuffer>(
+             sample_func_name));
+-    LITERT_ASSIGN_OR_RETURN(auto sampler_update_config_func,
+-                            lib.LookupSymbol<LiteRtTopKSampler_UpdateConfig>(
+-                                update_config_func_name));
+     RET_CHECK_NE(sampler_sample_func, nullptr)
+         << "Failed to load " << sample_func_name;
+ 
++    LiteRtTopKSampler_UpdateConfig sampler_update_config_func = nullptr;
++    if (update_config_func_name != nullptr) {
++      LookupOptionalSymbol(lib, update_config_func_name,
++                           sampler_update_config_func);
++    }
++
+     LiteRtTopKSampler_CanHandleInput sampler_can_handle_input_func = nullptr;
+     if (can_handle_input_func_name != nullptr) {
+-      LITERT_ASSIGN_OR_RETURN(
+-          sampler_can_handle_input_func,
+-          lib.LookupSymbol<LiteRtTopKSampler_CanHandleInput>(
+-              can_handle_input_func_name));
+-      RET_CHECK_NE(sampler_can_handle_input_func, nullptr)
+-          << "Failed to load " << can_handle_input_func_name;
++      LookupOptionalSymbol(lib, can_handle_input_func_name,
++                           sampler_can_handle_input_func);
+     }
+     LiteRtTopKSampler_HandlesInput sampler_handles_input_func = nullptr;
+     if (handles_input_func_name != nullptr) {
+-      LITERT_ASSIGN_OR_RETURN(sampler_handles_input_func,
+-                              lib.LookupSymbol<LiteRtTopKSampler_HandlesInput>(
+-                                  handles_input_func_name));
+-      RET_CHECK_NE(sampler_handles_input_func, nullptr)
+-          << "Failed to load " << handles_input_func_name;
++      LookupOptionalSymbol(lib, handles_input_func_name,
++                           sampler_handles_input_func);
+     }
+     LiteRtTopKSampler_SetInferenceFuncAndInputTensors
+         sampler_set_inference_func_and_input_tensors_func = nullptr;
+     if (set_inference_func_and_input_tensors_func_name != nullptr) {
+-      LITERT_ASSIGN_OR_RETURN(
+-          sampler_set_inference_func_and_input_tensors_func,
+-          lib.LookupSymbol<LiteRtTopKSampler_SetInferenceFuncAndInputTensors>(
+-              set_inference_func_and_input_tensors_func_name));
+-      RET_CHECK_NE(sampler_set_inference_func_and_input_tensors_func, nullptr)
+-          << "Failed to load "
+-          << set_inference_func_and_input_tensors_func_name;
++      LookupOptionalSymbol(lib, set_inference_func_and_input_tensors_func_name,
++                           sampler_set_inference_func_and_input_tensors_func);
+     }
+ 
+     return std::make_unique<TopKSamplerCApi>(
+@@ -431,12 +438,7 @@ class TopKOpenClCApiSampler : public TopKCApiSampler {
+   GetStaticTopKOpenClSamplerCApi() {
+     if (LiteRtTopKOpenClSampler_Create_Static == nullptr ||
+         LiteRtTopKOpenClSampler_Destroy_Static == nullptr ||
+-        LiteRtTopKOpenClSampler_SampleToIdAndScoreBuffer_Static == nullptr ||
+-        LiteRtTopKOpenClSampler_UpdateConfig_Static == nullptr ||
+-        LiteRtTopKOpenClSampler_CanHandleInput_Static == nullptr ||
+-        LiteRtTopKOpenClSampler_HandlesInput_Static == nullptr ||
+-        LiteRtTopKOpenClSampler_SetInferenceFuncAndInputTensors_Static ==
+-            nullptr) {
++        LiteRtTopKOpenClSampler_SampleToIdAndScoreBuffer_Static == nullptr) {
+       return absl::UnavailableError(
+           "Static LiteRtTopKOpenClSampler C API not available.");
+     }
+@@ -514,12 +516,7 @@ class TopKWebGpuCApiSampler : public TopKCApiSampler {
+   GetStaticTopKWebGpuSamplerCApi() {
+     if (LiteRtTopKWebGpuSampler_Create_Static == nullptr ||
+         LiteRtTopKWebGpuSampler_Destroy_Static == nullptr ||
+-        LiteRtTopKWebGpuSampler_SampleToIdAndScoreBuffer_Static == nullptr ||
+-        LiteRtTopKWebGpuSampler_UpdateConfig_Static == nullptr ||
+-        LiteRtTopKWebGpuSampler_CanHandleInput_Static == nullptr ||
+-        LiteRtTopKWebGpuSampler_HandlesInput_Static == nullptr ||
+-        LiteRtTopKWebGpuSampler_SetInferenceFuncAndInputTensors_Static ==
+-            nullptr) {
++        LiteRtTopKWebGpuSampler_SampleToIdAndScoreBuffer_Static == nullptr) {
+       return absl::UnavailableError(
+           "Static LiteRtTopKWebGpuSampler C API not available.");
+     }
+@@ -592,12 +589,7 @@ class TopKMetalCApiSampler : public TopKCApiSampler {
+   GetStaticTopKMetalSamplerCApi() {
+     if (LiteRtTopKMetalSampler_Create_Static == nullptr ||
+         LiteRtTopKMetalSampler_Destroy_Static == nullptr ||
+-        LiteRtTopKMetalSampler_SampleToIdAndScoreBuffer_Static == nullptr ||
+-        LiteRtTopKMetalSampler_UpdateConfig_Static == nullptr ||
+-        LiteRtTopKMetalSampler_CanHandleInput_Static == nullptr ||
+-        LiteRtTopKMetalSampler_HandlesInput_Static == nullptr ||
+-        LiteRtTopKMetalSampler_SetInferenceFuncAndInputTensors_Static ==
+-            nullptr) {
++        LiteRtTopKMetalSampler_SampleToIdAndScoreBuffer_Static == nullptr) {
+       return absl::UnavailableError(
+           "Static LiteRtTopKMetalSampler C API not available.");
+     }

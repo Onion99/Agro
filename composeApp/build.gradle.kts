@@ -22,6 +22,8 @@ val liteRtLmNativeRoot = rootProject.file("cpp/lite-rt-lm")
 val liteRtLmCHeadersDir = liteRtLmNativeRoot.resolve("c")
 val liteRtLmCInteropDefFile = project.file("src/nativeInterop/cinterop/litertlm.def")
 val liteRtLmIosNativePatchFile = rootProject.file("cpp/patches/lite-rt-lm-ios-native-link.patch")
+val liteRtLmGpuSamplerCompatibilityPatchFile =
+    rootProject.file("cpp/patches/lite-rt-lm-gpu-sampler-compatibility.patch")
 val iosLiteRtLmLibraryName = "litertlm_c_api"
 val iosLiteRtLmPrebuiltDylibNames = listOf(
     "GemmaModelConstraintProvider",
@@ -442,6 +444,10 @@ abstract class BuildNativeLibTask : DefaultTask() {
     @get:Optional
     abstract val secondaryOutputSuffix: Property<String>
 
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val gpuSamplerCompatibilityPatchFile: RegularFileProperty
+
     @get:Internal // 标记为 Internal 因为这不是构建的输入/输出文件，而是工作目录
     abstract val targetWorkingDir: Property<File>
 
@@ -455,6 +461,10 @@ abstract class BuildNativeLibTask : DefaultTask() {
         println("正在为当前平台 $platform 使用 Bazel 构建原生库 (target=$target, config=$config)")
 
         val workDir = targetWorkingDir.get()
+        applyGpuSamplerCompatibilityPatch(
+            workDir,
+            gpuSamplerCompatibilityPatchFile.get().asFile,
+        )
 
         // 使用 bazelisk 构建（bazelisk 自动管理 Bazel 版本，见 .bazelversion）
         execOps.exec {
@@ -540,6 +550,28 @@ abstract class BuildNativeLibTask : DefaultTask() {
                 }
             }
         }
+    }
+
+    private fun applyGpuSamplerCompatibilityPatch(workDir: File, patchFile: File) {
+        if (!patchFile.isFile) {
+            throw GradleException("LiteRT LM GPU sampler compatibility patch not found: ${patchFile.absolutePath}")
+        }
+
+        val samplerFactory = File(workDir, "runtime/components/sampler_factory.cc")
+        if (!samplerFactory.isFile) {
+            throw GradleException("LiteRT LM sampler factory not found: ${samplerFactory.absolutePath}")
+        }
+
+        if (samplerFactory.readText().contains("LookupOptionalSymbol")) {
+            println("LiteRT LM GPU sampler compatibility patch already applied")
+            return
+        }
+
+        execOps.exec {
+            workingDir = workDir
+            commandLine("git", "apply", "--whitespace=nowarn", patchFile.absolutePath)
+        }
+        println("Applied LiteRT LM GPU sampler compatibility patch")
     }
 
     private fun prebuiltDirectory(workDir: File, platform: String): File? {
@@ -833,6 +865,7 @@ desktopPlatforms.forEach { platform ->
         // --- 配置阶段 (Configuration Phase) ---
         this.targetWorkingDir.set(file("$rootDirVal/cpp/${rootProject.extra["dirCppName"]}"))
         this.platformName.set(platform)
+        this.gpuSamplerCompatibilityPatchFile.set(liteRtLmGpuSamplerCompatibilityPatchFile)
         this.bazelTarget.set(rootProject.extra["bazelTarget"].toString())
         this.bazeliskExecutable.set(bazeliskExecutableProvider)
         this.bazelOutputUserRoot.set(bazelOutputUserRootProvider)

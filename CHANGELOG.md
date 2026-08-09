@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-09] - 修复 macOS LiteRT-LM GPU sampler 初始化
+- [修复] 放宽 `runtime/components/sampler_factory.cc` 对旧版 WebGPU Top-K sampler 的动态符号要求，仅将 Create/Destroy/Sample 作为必需 ABI，避免缺少可选扩展符号时错误回退 CPU sampling。
+- [修改] 新增 `cpp/patches/lite-rt-lm-gpu-sampler-compatibility.patch` 并接入 `composeApp/build.gradle.kts`，桌面 Bazel 构建前自动应用兼容补丁。
+- [修复] 更新 `LiteRtLmJni.desktop.kt`，GPU native engine 初始化失败时不再静默创建 CPU engine，保持实际 backend 与 UI 状态一致。
+- [文档] 新增 `docs/specs/litertlm-macos-gpu-mode.md`，并更新 `docs/agents/native-cpp.md`，记录 macOS WebGPU-on-Metal 路径与 sampler ABI 边界。
+
 ## [2026-08-09] - 修复 macOS Bazel 启动输出根
 - [修复] 更新 `composeApp/build.gradle.kts` 的 Bazel 启动参数，在 macOS/Linux 上覆盖 Windows 的 `G:/_b` 输出根，避免从 `cpp/lite-rt-lm/G:/_b` 加载内嵌 JDK 并修复 `libjimage.dylib` 加载失败。
 - [修改] 保留 Windows 短输出根和 `BAZEL_VC` 配置，并让 CI 通过 `BAZEL_OUTPUT_ROOT` 将绝对输出根传递给 Gradle。
