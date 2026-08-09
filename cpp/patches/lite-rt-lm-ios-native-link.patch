@@ -1,13 +1,13 @@
 diff --git a/.bazelrc b/.bazelrc
 --- a/.bazelrc
 +++ b/.bazelrc
-@@ -185,6 +185,8 @@ build:macos_arm64 --platforms=@build_bazel_apple_support//platforms:darwin_arm64
+@@ -187,5 +187,7 @@
  
  # iOS configs for each architecture and the fat binary builds.
  build:ios --apple_platform_type=ios
 +build:ios --incompatible_enable_apple_toolchain_resolution
 +build:ios --define=LITERT_LM_FST_CONSTRAINTS_DISABLED=1
- build:ios --copt=-fembed-bitcode
+ # build:ios --copt=-fembed-bitcode
  build:ios --copt=-Wno-c++11-narrowing
  build:ios --ios_minimum_os=13.0
 diff --git a/BUILD b/BUILD
@@ -48,7 +48,7 @@ diff --git a/BUILD.miniaudio b/BUILD.miniaudio
 diff --git a/WORKSPACE b/WORKSPACE
 --- a/WORKSPACE
 +++ b/WORKSPACE
-@@ -272,13 +272,32 @@ rules_rust_dependencies()
+@@ -285,14 +285,36 @@ rules_rust_dependencies()
  
  rust_register_toolchains(
      edition = "2021",
@@ -59,6 +59,7 @@ diff --git a/WORKSPACE b/WORKSPACE
 -        "aarch64-apple-ios",
 -        "aarch64-apple-ios-sim",
 -        "x86_64-linux-android",
+-        "x86_64-apple-darwin",
 -    ],
 +        #
 +        # rules_rust maps `aarch64` to @platforms//cpu:aarch64 by default, while
@@ -82,6 +83,10 @@ diff --git a/WORKSPACE b/WORKSPACE
 +        "x86_64-linux-android": [
 +            "@platforms//cpu:x86_64",
 +            "@platforms//os:android",
++        ],
++        "x86_64-apple-darwin": [
++            "@platforms//cpu:x86_64",
++            "@platforms//os:macos",
 +        ],
 +    },
  )
@@ -193,16 +198,29 @@ new file mode 100644
 diff --git a/c/BUILD b/c/BUILD
 --- a/c/BUILD
 +++ b/c/BUILD
-@@ -14,6 +14,7 @@
- 
+@@ -15,6 +15,7 @@
+ # [Google-internal load of `cc_binary`]
  # [Google-internal load of `cc_library`]
  # [Google-internal load of `cc_test`]
 +load("//:apple_static_library.bzl", "apple_static_library")
  
  package(
      default_hdrs_check = "strict",
-@@ -71,6 +72,13 @@ cc_library(
+@@ -181,17 +181,24 @@ cc_library(
+     name = "engine",
+     srcs = [
+         "conversation.cc",
+         "engine.cc",
      ],
+     hdrs = [
+         "conversation.h",
+         "engine.h",
+     ],
+     visibility = ["//visibility:public"],
+     deps = ENGINE_COMMON_DEPS + [
+         "//runtime/core:engine_impl",
+     ],
+     alwayslink = True,
  )
  
 +apple_static_library(
@@ -212,18 +230,4 @@ diff --git a/c/BUILD b/c/BUILD
 +    deps = [":engine"],
 +)
 +
- cc_library(
-     name = "engine_cpu",
-     srcs = [
-diff --git a/runtime/components/preprocessor/BUILD b/runtime/components/preprocessor/BUILD
---- a/runtime/components/preprocessor/BUILD
-+++ b/runtime/components/preprocessor/BUILD
-@@ -86,7 +86,7 @@ cc_library(
-         "//runtime/engine:io_types",
-         "//runtime/util:litert_status_util",
-     ] + select({
--        "@platforms//os:ios": ["@miniaudio//:miniaudio_objc"],
-+        "@platforms//os:ios": ["@miniaudio//:miniaudio_decoder"],
-         "@platforms//os:macos": ["@miniaudio//:miniaudio_objc"],
-         "//conditions:default": ["@miniaudio"],
-     }),
+ # CPU-only variant of :engine for Engine + Session + Conversation functionality.

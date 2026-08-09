@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-09] - 修复 iOS/Android/Linux 原生平台构建
+- [修复] Linux CI 安装并显式使用 LLVM/Clang 18，避免 Ubuntu 22.04 默认 Clang 14 编译 LiteRT-LM Abseil `std::source_location` 失败。
+- [修复] `BuildNativeLibTask` 将 GPU sampler 兼容补丁限制为 macOS，Android/Linux/Windows 不再读取未配置的补丁输入或修改非 macOS 原生源码。
+- [修复] 重新对齐 `cpp/patches/lite-rt-lm-ios-native-link.patch` 与 LiteRT-LM `20ccf461` 的 `WORKSPACE`、`c/BUILD` 和 Apple Rust toolchain 配置，移除已失效的旧 preprocessor hunk。
+- [文档] 更新 `docs/specs/bazel-windows-android-rc.md` 与 `docs/specs/ios-litertlm-platform.md`，记录跨平台工具链和 iOS patch 验证边界。
+
 ## [2026-08-09] - 增强 Lottie JSON sanitizer
 - [修复] 扩展 LottieJsonSanitizer 对 Gemma4 常见损坏 token 的修复，覆盖未加引号 key/value、缺失冒号、数字误带引号、.2 前导小数、相邻数组对象漏逗号和缺失对象边界。
 - [修复] 规范化 shape transform 的 s/a/p/r/o 属性包装与缩放单位，避免生成裸数组导致 Compottie Invalid vector 渲染失败。

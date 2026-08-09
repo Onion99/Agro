@@ -157,7 +157,21 @@ jobs:
         if: startsWith(matrix.name, 'linux')
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential clang cmake ninja-build pkg-config python3 python3-numpy rpm fakeroot
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config python3 python3-numpy rpm fakeroot curl
+          LLVM_VERSION=18
+          LLVM_INSTALLER="$RUNNER_TEMP/llvm.sh"
+          curl -fsSL https://apt.llvm.org/llvm.sh -o "$LLVM_INSTALLER"
+          chmod +x "$LLVM_INSTALLER"
+          sudo "$LLVM_INSTALLER" "$LLVM_VERSION"
+          sudo apt-get install -y "clang-${LLVM_VERSION}"
+          CLANG_BIN="$(command -v clang-${LLVM_VERSION})"
+          CLANGXX_BIN="$(command -v clang++-${LLVM_VERSION})"
+          test -x "$CLANG_BIN"
+          test -x "$CLANGXX_BIN"
+          echo "LLVM_VERSION=$LLVM_VERSION" >> "$GITHUB_ENV"
+          echo "CC=$CLANG_BIN" >> "$GITHUB_ENV"
+          echo "CXX=$CLANGXX_BIN" >> "$GITHUB_ENV"
+          "$CLANG_BIN" --version
 
       - name: Setup MSBuild (Windows)
         if: startsWith(matrix.name, 'windows')
@@ -206,8 +220,14 @@ jobs:
           build --verbose_failures
           EOF
           if [[ "$MATRIX_NAME" == linux* ]]; then
+            CLANG_BIN="$(command -v clang-${LLVM_VERSION})"
+            CLANGXX_BIN="$(command -v clang++-${LLVM_VERSION})"
             cat >> .bazelrc.user <<EOF
           build --define=xnn_enable_avxvnniint8=false
+          build:linux --action_env=CC=$CLANG_BIN
+          build:linux --action_env=CXX=$CLANGXX_BIN
+          build:linux --repo_env=CC=$CLANG_BIN
+          build:linux --repo_env=CXX=$CLANGXX_BIN
           EOF
           fi
           cat .bazelrc.user

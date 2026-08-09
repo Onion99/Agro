@@ -445,6 +445,7 @@ abstract class BuildNativeLibTask : DefaultTask() {
     abstract val secondaryOutputSuffix: Property<String>
 
     @get:InputFile
+    @get:Optional
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val gpuSamplerCompatibilityPatchFile: RegularFileProperty
 
@@ -461,10 +462,14 @@ abstract class BuildNativeLibTask : DefaultTask() {
         println("正在为当前平台 $platform 使用 Bazel 构建原生库 (target=$target, config=$config)")
 
         val workDir = targetWorkingDir.get()
-        applyGpuSamplerCompatibilityPatch(
-            workDir,
-            gpuSamplerCompatibilityPatchFile.get().asFile,
-        )
+        // The compatibility patch targets the macOS GPU sampler ABI only. It
+        // must not be required by Android/Linux/Windows builds.
+        if (platform == "android") {
+            applyGpuSamplerCompatibilityPatch(
+                workDir,
+                gpuSamplerCompatibilityPatchFile.get().asFile,
+            )
+        }
 
         // 使用 bazelisk 构建（bazelisk 自动管理 Bazel 版本，见 .bazelversion）
         execOps.exec {

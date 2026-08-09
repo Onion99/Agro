@@ -8,6 +8,7 @@ This note records the iOS native bridge for `LiteRtLmJni`.
 
 ## Current Behavior
 
+- The parent-repository iOS patch is rebased against the pinned LiteRT-LM submodule revision `20ccf461`. Its verification contract is `git apply --check` against a clean LF checkout of that revision before an iOS CI change is accepted. The patch updates the current `WORKSPACE` Rust Apple constraints and `c/BUILD` `engine` target; it no longer carries the obsolete `runtime/components/preprocessor/BUILD` hunk from the pre-conversation API layout.
 - `composeApp` no longer registers the old Kotlin/Native cinterop for `sdloader.def`.
 - iOS framework builds no longer link the legacy `stable-diffusion.cpp` static libraries from Gradle.
 - `composeApp/src/nativeInterop/cinterop/litertlm.def` maps the LiteRT LM C API from `cpp/lite-rt-lm/c/engine.h` and `cpp/lite-rt-lm/c/conversation.h`.
