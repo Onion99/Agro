@@ -34,6 +34,22 @@ class LottieMessageParserTest {
         assertNotNull(LottieComposition.parse(lottie.json))
     }
 
+    @Test
+    fun repairsPointArrayShapePathFireAnimationAndCompottieAcceptsSanitizedJson() {
+        val result = LottieMessageParser.parseCompletedResponse(pointArrayShapeFireAnimationJson())
+        val lottie = assertIs<ChatMessageContent.LottieAnimation>(result, result.toString())
+
+        assertEquals("Fire Flame", lottie.title)
+        assertEquals(30, lottie.fps)
+        assertEquals(3_333L, lottie.durationMs)
+        assertEquals(240, lottie.width)
+        assertEquals(240, lottie.height)
+        assertTrue(lottie.json.contains("\"ty\":\"sh\""), lottie.json)
+        assertTrue(lottie.json.contains("\"ty\":\"fl\""), lottie.json)
+        assertTrue(lottie.json.contains("\"ty\":\"tr\""), lottie.json)
+        assertNotNull(LottieComposition.parse(lottie.json))
+    }
+
 
     @Test
     fun parsesModelProducedMinimalNativeLottieJson() {
@@ -79,6 +95,254 @@ class LottieMessageParserTest {
                 "width": 10,
                 "lineCap": "round"
               }
+            }
+        """.trimIndent()
+    }
+
+    private fun minimalNativeLottieJson(): String {
+        return """
+            {
+              "v": "5.7.4",
+              "fr": 30,
+              "ip": 0,
+              "op": 60,
+              "w": 240,
+              "h": 240,
+              "nm": "Breathing Circle",
+              "ddd": 0,
+              "loop": true,
+              "assets": [],
+              "layers": [
+                {
+                  "ddd": 0,
+                  "ind": 1,
+                  "ty": 4,
+                  "nm": "Circle Layer",
+                  "sr": 1,
+                  "ks": {
+                    "o": { "a": 0, "k": 100 },
+                    "r": { "a": 0, "k": 0 },
+                    "p": { "a": 0, "k": [120, 120, 0] },
+                    "a": { "a": 0, "k": [0, 0, 0] },
+                    "s": {
+                      "a": 1,
+                      "k": [
+                        { "t": 0, "s": [90, 90, 100], "e": [100, 100, 100] },
+                        { "t": 30, "s": [100, 100, 100], "e": [90, 90, 100] },
+                        { "t": 60, "s": [90, 90, 100], "e": [90, 90, 100] }
+                      ]
+                    }
+                  },
+                  "ao": 0,
+                  "shapes": [
+                    {
+                      "ty": "gr",
+                      "nm": "Circle Group",
+                      "it": [
+                        {
+                          "ty": "el",
+                          "nm": "Circle Path",
+                          "p": { "a": 0, "k": [0, 0] },
+                          "s": { "a": 0, "k": [100, 100] },
+                          "d": 1
+                        },
+                        {
+                          "ty": "fl",
+                          "nm": "Circle Fill",
+                          "c": { "a": 0, "k": [0.12, 0.65, 0.95, 1] },
+                          "o": { "a": 0, "k": 100 },
+                          "r": 1
+                        },
+                        {
+                          "ty": "tr",
+                          "p": { "a": 0, "k": [0, 0] },
+                          "a": { "a": 0, "k": [0, 0] },
+                          "s": { "a": 0, "k": [100, 100] },
+                          "r": { "a": 0, "k": 0 },
+                          "o": { "a": 0, "k": 100 }
+                        }
+                      ]
+                    }
+                  ],
+                  "ip": 0,
+                  "op": 60,
+                  "st": 0,
+                  "bm": 0
+                }
+              ]
+            }
+        """.trimIndent()
+    }
+
+    private fun pointArrayShapeFireAnimationJson(): String {
+        return """
+            {
+              "v": "5.7.4",
+              "fr": 30,
+              "ip": 0,
+              "op": 100,
+              "w": 240,
+              "h": 240,
+              "nm": "Fire Flame",
+              "ddd": 0,
+              "loop": true,
+              "assets": [],
+              "layers": [
+                {
+                  "ddd": 0,
+                  "ind": 1,
+                  "ty": 4,
+                  "nm": "Fire Flame Layer",
+                  "sr": 1,
+                  "ks": {
+                    "o": {
+                      "a": 0,
+                      "k": 100
+                    },
+                    "r": {
+                      "a": 1,
+                      "k": [0]
+                    },
+                    "p": {
+                      "a": 1,
+                      "k": [
+                        {
+                          "t": 0,
+                          "s": [120, 120, 0],
+                          "e": [120, 120, 0]
+                        },
+                        {
+                          "t": 50,
+                          "s": [130, 120, 0],
+                          "e": [130, 120, 0]
+                        },
+                        {
+                          "t": 100,
+                          "s": [120, 120, 0],
+                          "e": [120, 120, 0]
+                        }
+                      ]
+                    },
+                    "a": {
+                      "a": 0,
+                      "k": [0, 0, 0]
+                    },
+                    "s": {
+                      "a": 1,
+                      "k": [
+                        {
+                          "t": 0,
+                          "s": [100, 100, 100],
+                          "e": [100, 100, 100]
+                        },
+                        {
+                          "t": 30,
+                          "s": [110, 110, 110],
+                          "e": [110, 110, 110]
+                        },
+                        {
+                          "t": 60,
+                          "s": [100, 100, 100],
+                          "e": [100, 100, 100]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "ddd": 0,
+                  "ind": 2,
+                  "ty": 4,
+                  "nm": "Fire Shape",
+                  "sr": 1,
+                  "ks": {
+                    "o": {
+                      "a": 0,
+                      "k": 100
+                    },
+                    "r": {
+                      "a": 1,
+                      "k": [0]
+                    },
+                    "p": {
+                      "a": 0,
+                      "k": [0, 0, 0]
+                    },
+                    "a": {
+                      "a": 0,
+                      "k": [0, 0, 0]
+                    },
+                    "s": {
+                      "a": 0,
+                      "k": [100, 100, 100]
+                    }
+                  },
+                  "ao": 0,
+                  "shapes": [
+                    {
+                      "ty": "gr",
+                      "nm": "Flame Group",
+                      "it": [
+                        {
+                          "ty": "sh",
+                          "nm": "Flame Path",
+                          "ks": {
+                            "k": [
+                              {
+                                "v": [0, 0],
+                                "i": [0, 0],
+                                "o": [0, 0],
+                                "c": 0
+                              },
+                              {
+                                "v": [20, -20],
+                                "i": [0, 0],
+                                "o": [0, 0],
+                                "c": 0
+                              },
+                              {
+                                "v": [40, 0],
+                                "i": [0, 0],
+                                "o": [0, 0],
+                                "c": 0
+                              },
+                              {
+                                "v": [20, 20],
+                                "i": [0, 0],
+                                "o": [0, 0],
+                                "c": 0
+                              },
+                              {
+                                "v": [0, 0],
+                                "i": [0, 0],
+                                "o": [0, 0],
+                                "c": 0
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "ty": "fl",
+                          "nm": "Fire Fill",
+                          "c": {
+                            "a": 0,
+                            "k": [0.8, 0.2, 0.0, 1]
+                          },
+                          "o": {
+                            "a": 0,
+                            "k": 100
+                          },
+                          "r": 1
+                        }
+                      ]
+                    }
+                  ],
+                  "ip": 0,
+                  "op": 100,
+                  "st": 0,
+                  "bm": 0
+                }
+              ]
             }
         """.trimIndent()
     }

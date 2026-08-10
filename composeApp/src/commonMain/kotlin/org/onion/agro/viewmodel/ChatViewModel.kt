@@ -287,7 +287,9 @@ class ChatViewModel(
                     "'$modelPath': ${error.message}"
             )
         }.getOrNull()
-
+        println(
+            "lmMaxNumTokens from LiteRT-LM model : $modelMaxNumTokens"
+        )
         _lmModelMaxNumTokens.value = modelMaxNumTokens
         lmMaxNumTokens.value = modelMaxNumTokens ?: DEFAULT_LM_MAX_NUM_TOKENS
         lmMetadataModelPath = modelPath
@@ -359,7 +361,6 @@ class ChatViewModel(
                 println("cacheDir path is: ${FileKit.cacheDir.path}")
                 isLlmModelLoading.value = true
                 val currentLlmPath = llmPath.value
-                resolveLmMaxNumTokens(currentLlmPath)
                 lmEngine = LmEngine(
                     modelPath = currentLlmPath,
                     backend = lmBackend.value,
@@ -430,8 +431,7 @@ class ChatViewModel(
                 if (isGenerating.value) {
                     stopGeneration()
                 }
-                resolveLmMaxNumTokens(currentLlmPath)
-                
+
                 val needsEngineReinit = lmEngine == null ||
                         activeModelPath != currentLlmPath ||
                         !isSameLmBackend(activeBackend, lmBackend.value) ||
@@ -981,7 +981,6 @@ class ChatViewModel(
     ): LmConversation {
         val currentLlmPath = llmPath.value
         check(currentLlmPath.isNotBlank()) { "LM model path is empty." }
-        resolveLmMaxNumTokens(currentLlmPath)
 
         try {
             lmConversation?.close()
@@ -1420,7 +1419,7 @@ class ChatViewModel(
         const val ABSEIL_STATUS_INTERNAL = 13
         const val LM_BACKEND_CPU = "CPU"
         const val LM_BACKEND_GPU = "GPU"
-        const val DEFAULT_LM_MAX_NUM_TOKENS = 8192
+        const val DEFAULT_LM_MAX_NUM_TOKENS = 16384
         const val MIN_LM_MAX_NUM_TOKENS = 128
         const val LM_MAX_NUM_TOKENS_STEP = 128
 
@@ -1536,10 +1535,9 @@ class ChatViewModel(
                       { "t": 0, "s": [90, 90, 100], "e": [100, 100, 100] },
                       { "t": 30, "s": [100, 100, 100], "e": [90, 90, 100] },
                       { "t": 60, "s": [90, 90, 100], "e": [90, 90, 100] }
-                    ]
-                  }
-                },
-                "ao": 0,
+                    ] }
+                  },
+                  "ao": 0,
                   "shapes": [
                     {
                       "ty": "gr",
@@ -1648,173 +1646,3 @@ class ChatViewModel(
                 this == ChatSessionMode.LOTTIE_ANIMATION
     }
 }
-// ------------------------------------------------------------------------
-// {
-//  "v": "5.7.4",
-//  "fr": 30,
-//  "ip": 0,
-//  "op": 100,
-//  "w": 240,
-//  "h": 240,
-//  "nm": "Fire Flame",
-//  "ddd": 0,
-//  "loop": true,
-//  "assets": [],
-//  "layers": [
-//    {
-//      "ddd": 0,
-//      "ind": 1,
-//      "ty": 4,
-//      "nm": "Fire Flame Layer",
-//      "sr": 1,
-//      "ks": {
-//        "o": {
-//          "a": 0,
-//          "k": 100
-//        },
-//        "r": {
-//          "a": 1,
-//          "k": [0]
-//        },
-//        "p": {
-//          "a": 1,
-//          "k": [
-//            {
-//              "t": 0,
-//              "s": [120, 120, 0],
-//              "e": [120, 120, 0]
-//            },
-//            {
-//              "t": 50,
-//              "s": [130, 120, 0],
-//              "e": [130, 120, 0]
-//            },
-//            {
-//              "t": 100,
-//              "s": [120, 120, 0],
-//              "e": [120, 120, 0]
-//            }
-//          ]
-//        },
-//        "a": {
-//          "a": 0,
-//          "k": [0, 0, 0]
-//        },
-//        "s": {
-//          "a": 1,
-//          "k": [
-//            {
-//              "t": 0,
-//              "s": [100, 100, 100],
-//              "e": [100, 100, 100]
-//            },
-//            {
-//              "t": 30,
-//              "s": [110, 110, 110],
-//              "e": [110, 110, 110]
-//            },
-//            {
-//              "t": 60,
-//              "s": [100, 100, 100],
-//              "e": [100, 100, 100]
-//            }
-//          ]
-//        }
-//      }
-//    },
-//    {
-//      "ddd": 0,
-//      "ind": 2,
-//      "ty": 4,
-//      "nm": "Fire Shape",
-//      "sr": 1,
-//      "ks": {
-//        "o": {
-//          "a": 0,
-//          "k": 100
-//        },
-//        "r": {
-//          "a": 1,
-//          "k": [0]
-//        },
-//        "p": {
-//          "a": 0,
-//          "k": [0, 0, 0]
-//        },
-//        "a": {
-//          "a": 0,
-//          "k": [0, 0, 0]
-//        },
-//        "s": {
-//          "a": 0,
-//          "k": [100, 100, 100]
-//        }
-//      },
-//      "ao": 0,
-//      "shapes": [
-//        {
-//          "ty": "gr",
-//          "nm": "Flame Group",
-//          "it": [
-//            {
-//              "ty": "sh",
-//              "nm": "Flame Path",
-//              "ks": {
-//                "k": [
-//                  {
-//                    "v": [0, 0],
-//                    "i": [0, 0],
-//                    "o": [0, 0],
-//                    "c": 0
-//                  },
-//                  {
-//                    "v": [20, -20],
-//                    "i": [0, 0],
-//                    "o": [0, 0],
-//                    "c": 0
-//                  },
-//                  {
-//                    "v": [40, 0],
-//                    "i": [0, 0],
-//                    "o": [0, 0],
-//                    "c": 0
-//                  },
-//                  {
-//                    "v": [20, 20],
-//                    "i": [0, 0],
-//                    "o": [0, 0],
-//                    "c": 0
-//                  },
-//                  {
-//                    "v": [0, 0],
-//                    "i": [0, 0],
-//                    "o": [0, 0],
-//                    "c": 0
-//                  }
-//                ]
-//              }
-//            },
-//            {
-//              "ty": "fl",
-//              "nm": "Fire Fill",
-//              "c": {
-//                "a": 0,
-//                "k": [0.8, 0.2, 0.0, 1]
-//              },
-//              "o": {
-//                "a": 0,
-//                "k": 100
-//              },
-//              "r": 1
-//            }
-//          ]
-//        }
-//      ],
-//      "ip": 0,
-//      "op": 100,
-//      "st": 0,
-//      "bm": 0
-//    }
-//  ]
-//}
-// ------------------------------------------------------------------------

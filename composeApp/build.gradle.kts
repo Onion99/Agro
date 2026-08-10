@@ -464,12 +464,10 @@ abstract class BuildNativeLibTask : DefaultTask() {
         val workDir = targetWorkingDir.get()
         // The compatibility patch targets the macOS GPU sampler ABI only. It
         // must not be required by Android/Linux/Windows builds.
-        if (platform == "android") {
-            applyGpuSamplerCompatibilityPatch(
-                workDir,
-                gpuSamplerCompatibilityPatchFile.get().asFile,
-            )
-        }
+        applyGpuSamplerCompatibilityPatch(
+            workDir,
+            gpuSamplerCompatibilityPatchFile.get().asFile,
+        )
 
         // 使用 bazelisk 构建（bazelisk 自动管理 Bazel 版本，见 .bazelversion）
         execOps.exec {

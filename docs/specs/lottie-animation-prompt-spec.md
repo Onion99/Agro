@@ -1,7 +1,7 @@
 # Gemma4 Native Lottie Prompt Specification
 
-**Version:** 1.5.0
-**Updated:** 2026-08-09  
+**Version:** 1.6.0
+**Updated:** 2026-08-10  
 **Owner:** `ChatViewModel.LOTTIE_ANIMATION_SYSTEM_INSTRUCTION`
 
 ## Purpose
@@ -42,10 +42,9 @@ Use this one-layer breathing circle as the baseline pattern:
           { "t": 0, "s": [90, 90, 100], "e": [100, 100, 100] },
           { "t": 30, "s": [100, 100, 100], "e": [90, 90, 100] },
           { "t": 60, "s": [90, 90, 100], "e": [90, 90, 100] }
-        ]
-      }
-    },
-    "ao": 0,
+        ] }
+      },
+      "ao": 0,
       "shapes": [
         {
           "ty": "gr",
@@ -88,15 +87,19 @@ For example, these model fragments are repairable:
 "p": { "a": 0,k": [20,2] }
 {t: 1, "s": [1.1,0]          {t:2, "s": [0,0] }
 "c": {a:0,k:[.2,0,0.5,0]}
+"ty": "sh", "ks": { "k": [{ "v": [0,0], "i": [0,0], "o": [0,0] }] }
 ~~~
 
 They become valid JSON property wrappers and chronological keyframe objects. The sanitizer does
-not invent a missing subject, choose an animation style, or load external resources. If the
-payload still cannot form a JSON object or violates the safety validator, the message remains
-unsupported and the original payload is preserved for inspection.
+not invent a missing subject, choose an animation style, or load external resources. It can
+normalize malformed static `ty="sh"` point arrays into Bodymovin path objects and add a missing
+group transform, but the output must still contain drawable geometry plus fill or stroke content.
+If the payload still cannot form a JSON object or violates the safety validator, the message
+remains unsupported and the original payload is preserved for inspection.
 
-The regression test repairsFireAnimationAndCompottieAcceptsSanitizedJson verifies the complete
-path from the malformed payload through LottieMessageParser to LottieComposition.parse.
+The regression tests repairsFireAnimationAndCompottieAcceptsSanitizedJson and
+repairsPointArrayShapePathFireAnimationAndCompottieAcceptsSanitizedJson verify the complete path
+from malformed payloads through LottieMessageParser to LottieComposition.parse.
 
 ## Field Meaning
 

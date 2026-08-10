@@ -1,7 +1,7 @@
 # Gemma4 Native Lottie JSON 与 Compottie 渲染路线
 
 > 日期: 2026-07-28
-> 最新更新: 2026-08-09 (v1.5.0 增强 malformed Native JSON 修复与 Compottie 回归验证)
+> 最新更新: 2026-08-10 (v1.6.0 增强 malformed `ty="sh"` 路径修复与空 drawable 校验)
 > 范围: `ChatViewModel` 专用会话入口、Native Lottie JSON 解析、Compottie 本地渲染、复制与保存
 > 状态: Native JSON 直出路线落地
 > 关联文档: `docs/specs/lottie-animation-prompt-spec.md`、`docs/agents/data-model.md`
@@ -91,9 +91,9 @@ flowchart TD
 
 | 组件 | 职责 |
 | --- | --- |
-| `LottieJsonSanitizer` | 先修复 key/value/冒号/数字/逗号等词法损坏，再修复括号、颜色、尺寸、scale、opacity 和嵌套 shape 格式问题。 |
+| `LottieJsonSanitizer` | 先修复 key/value/冒号/数字/逗号等词法损坏，再修复括号、颜色、尺寸、scale、opacity、嵌套 shape、缺失 group transform 和 malformed `ty="sh"` 点数组路径格式问题。 |
 | `LottieAnimationSpecParser` | 对 sanitizer 输出做 JSON object 解析并提取渲染元数据；不生成图层。 |
-| `LottieJsonValidator` | 校验大小、layers、layer type、3D 标志、assets 和危险字段/值。 |
+| `LottieJsonValidator` | 校验大小、layers、layer type、3D 标志、assets、危险字段/值，以及至少存在可绘制 geometry + fill/stroke。 |
 | `LottieMessageParser` | 将成功结果包装为 `ChatMessageContent.LottieAnimation`，失败时保留原始 payload。 |
 
 Parser 不负责:
@@ -116,6 +116,7 @@ Parser 不负责:
 - JSON 为空、不可解析或没有 `layers`/`v`: `unexpected_content_type` 或 `invalid_lottie_json`。
 - 旧 `lottie_animation_spec` envelope: `unexpected_content_type`。
 - 外部资源、危险字段、3D、空 layers、超过 32 层或超过 256 KiB: 返回稳定的 `Unsupported.reason`。
+- 没有任何可绘制 geometry + fill/stroke: `empty_lottie_drawable_content`。
 - sanitizer 之后仍无法通过 validator: 保留原始 response，不影响会话历史。
 - Compottie 解析失败: UI 显示渲染失败，同时保留可复制的 Native JSON。
 
@@ -123,6 +124,7 @@ Parser 不负责:
 
 - Gemma4 输出最小单圆形 Native JSON 可以被 parser 解析并交给 Compottie。
 - 用户提供的严重 malformed Native JSON 可以被 sanitizer 修复，并通过 `LottieComposition.parse`。
+- `ty="sh"` 的点数组式错误路径可以被规范化为 Bodymovin path object，并通过 `LottieComposition.parse`。
 - 旧 `lottie_animation_spec` 不会再触发本地动画生产，而是被拒绝。
 - 原生 JSON 的 malformed repair 测试继续通过。
 - 同一份 Native JSON 在解析、持久化恢复和复制保存路径中保持语义一致。
@@ -141,3 +143,10 @@ Parser 不负责:
 - 增强 `LottieJsonSanitizer` 的 token-level JSON 修复，覆盖未加引号 key/value、缺失冒号、误带引号数字、前导小数和相邻数组对象漏逗号。
 - 修复 shape transform 的 `s/a/p/r/o` 属性包装与默认值，确保输出符合 Compottie 的 AnimatedVector2 结构。
 - 新增 `Fire` malformed JSON 回归测试，直接调用 `LottieComposition.parse` 验证渲染输入。
+
+### 2026-08-10 v1.6.0
+
+- 修复 `ChatViewModel.LOTTIE_ANIMATION_SYSTEM_INSTRUCTION` 和规范文档中的最小 Lottie 示例括号错位，确保示例本身是有效 Native Lottie JSON。
+- 增强 `LottieJsonSanitizer` 对 `ty="sh"` malformed 点数组路径的归一化能力，将逐点 `{v,i,o,c}` 数组转换为 Bodymovin path object，并在 group 缺失时补齐默认 `tr`。
+- 修复 animated `p.k` keyframe object 被当作静态数字数组读取导致 sanitizer 回退原始 JSON 的问题。
+- 增强 `LottieJsonValidator`，拒绝缺少可绘制 geometry + fill/stroke 的空动画，并补齐 point-array fire payload 到 Compottie 的回归测试。

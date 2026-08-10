@@ -12,6 +12,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlin.math.abs
 
 /**
  * Advanced sanitizer, repair, and auto-completion engine for Lottie JSON payloads.
@@ -363,7 +364,7 @@ object LottieJsonSanitizer {
             put("p", sanitizedP)
             put("a", sanitizeProperty(ks?.get("a"), staticVector3(0f, 0f, 0f)))
             put("s", sanitizedS)
-            put("r", sanitizeProperty(ks?.get("r"), staticScalar(0f)))
+            put("r", sanitizeScalarProperty(ks?.get("r"), 0f))
             put("o", sanitizeOpacity(ks?.get("o")))
         }
     }
@@ -373,7 +374,7 @@ object LottieJsonSanitizer {
         if (element is JsonObject) {
             val k = element["k"]
             if (k is JsonArray) {
-                val coords = k.mapNotNull { it.jsonPrimitive.floatOrNull }
+                val coords = k.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
                 if (coords.size >= 2) {
                     val px = coords[0] * scaleFactorX
                     val py = coords[1] * scaleFactorY
@@ -404,7 +405,7 @@ object LottieJsonSanitizer {
                         buildJsonObject {
                             kf.forEach { (key, valElement) ->
                                 if (key == "s" && valElement is JsonArray) {
-                                    val sList = valElement.mapNotNull { it.jsonPrimitive.floatOrNull }
+                                    val sList = valElement.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
                                     val maxVal = sList.maxOrNull() ?: 100f
                                     val mult = if (maxVal <= 10f && maxVal > 0f) 100f else 1f
                                     val sx = (sList.getOrNull(0) ?: 100f) * mult
@@ -429,7 +430,7 @@ object LottieJsonSanitizer {
                     }
                 }
             } else if (k is JsonArray) {
-                val scales = k.mapNotNull { it.jsonPrimitive.floatOrNull }
+                val scales = k.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
                 if (scales.isNotEmpty()) {
                     val maxVal = scales.maxOrNull() ?: 100f
                     val multiplier = if (maxVal <= 10f && maxVal > 0f) 100f else 1f
@@ -461,6 +462,11 @@ object LottieJsonSanitizer {
                 expandedItems.addAll(flattenAndSanitizeShapeItem(child, scaleFactorX, scaleFactorY))
             }
         }
+        val normalizedItems = if (ty == "gr" && expandedItems.none(::isShapeTransform)) {
+            expandedItems + defaultShapeTransform()
+        } else {
+            expandedItems
+        }
 
         return buildJsonObject {
             shapeGroup.forEach { (k, v) ->
@@ -468,7 +474,7 @@ object LottieJsonSanitizer {
             }
             put("ty", JsonPrimitive(ty))
             put("it", buildJsonArray {
-                expandedItems.forEach { add(it) }
+                normalizedItems.forEach { add(it) }
             })
         }
     }
@@ -491,6 +497,7 @@ object LottieJsonSanitizer {
                     "st" -> if (v is JsonObject) nestedStroke = v
                     "c" -> if (ty == "fl" || ty == "st") put("c", sanitizeColor(v))
                     "o" -> if (ty == "fl" || ty == "st" || ty == "tr" || ty == "gr") put("o", sanitizeOpacity(v))
+                    "ks" -> if (ty == "sh") put("ks", sanitizeShapePath(v, scaleFactorX, scaleFactorY)) else put(k, v)
                     "s" -> when (ty) {
                         "el", "rc", "sr" -> put("s", rescaleShapeSize(v, scaleFactorX, scaleFactorY))
                         "tr" -> put("s", sanitizeShapeScale(v))
@@ -500,11 +507,16 @@ object LottieJsonSanitizer {
                     "tr" -> if (v is JsonObject) put("tr", sanitizeTransform(v, 0, 0, scaleFactorX, scaleFactorY)) else put(k, v)
                     "it" -> {
                         val items = v as? JsonArray
+                        val flattenedChildren = mutableListOf<JsonObject>()
+                        items?.forEach { child ->
+                            if (child is JsonObject) {
+                                flattenedChildren.addAll(flattenAndSanitizeShapeItem(child, scaleFactorX, scaleFactorY))
+                            }
+                        }
                         put("it", buildJsonArray {
-                            items?.forEach { child ->
-                                if (child is JsonObject) {
-                                    flattenAndSanitizeShapeItem(child, scaleFactorX, scaleFactorY).forEach { add(it) }
-                                }
+                            flattenedChildren.forEach { add(it) }
+                            if (ty == "gr" && flattenedChildren.none(::isShapeTransform)) {
+                                add(defaultShapeTransform())
                             }
                         })
                     }
@@ -556,8 +568,209 @@ object LottieJsonSanitizer {
             put("p", normalizeShapeVector(transform["p"], staticVector2(0f, 0f), scaleFactorX, scaleFactorY))
             put("a", normalizeShapeVector(transform["a"], staticVector2(0f, 0f), 1f, 1f))
             put("s", sanitizeShapeScale(transform["s"]))
-            put("r", sanitizeProperty(transform["r"], staticScalar(0f)))
+            put("r", sanitizeScalarProperty(transform["r"], 0f))
             put("o", sanitizeOpacity(transform["o"]))
+        }
+    }
+
+    private fun sanitizeShapePath(
+        element: JsonElement?,
+        scaleFactorX: Float,
+        scaleFactorY: Float
+    ): JsonElement {
+        val property = element as? JsonObject ?: return staticShapePath()
+        val rawK = property["k"]
+        val normalizedK: JsonElement = when {
+            rawK is JsonArray && rawK.isPointArrayPath() -> {
+                normalizePointArrayPath(rawK, scaleFactorX, scaleFactorY)
+            }
+            rawK is JsonObject -> {
+                normalizeShapePathObject(rawK, scaleFactorX, scaleFactorY)
+            }
+            rawK != null -> rawK
+            else -> defaultShapePathObject()
+        }
+        val staticPath = normalizedK is JsonObject
+        val animatedFlag = if (staticPath) {
+            0
+        } else {
+            property["a"]?.jsonPrimitive?.intOrNull ?: 1
+        }
+
+        return buildJsonObject {
+            property.forEach { (key, value) ->
+                when (key) {
+                    "a" -> put("a", JsonPrimitive(animatedFlag as Number))
+                    "k" -> put("k", normalizedK)
+                    else -> put(key, value)
+                }
+            }
+            if (!property.containsKey("a")) {
+                put("a", JsonPrimitive(animatedFlag as Number))
+            }
+            if (!property.containsKey("k")) {
+                put("k", normalizedK)
+            }
+        }
+    }
+
+    private fun JsonArray.isPointArrayPath(): Boolean {
+        return isNotEmpty() && all { point ->
+            point is JsonObject &&
+                point["v"] is JsonArray &&
+                (point["v"] as JsonArray).size >= 2
+        }
+    }
+
+    private fun normalizePointArrayPath(
+        points: JsonArray,
+        scaleFactorX: Float,
+        scaleFactorY: Float
+    ): JsonObject {
+        val vertices = mutableListOf<Pair<Float, Float>>()
+        val inTangents = mutableListOf<Pair<Float, Float>>()
+        val outTangents = mutableListOf<Pair<Float, Float>>()
+        var closed = false
+
+        points.forEach { pointElement ->
+            val point = pointElement as? JsonObject ?: return@forEach
+            val vertex = point["v"].vector2OrNull(scaleFactorX, scaleFactorY) ?: return@forEach
+            vertices.add(vertex)
+            inTangents.add(point["i"].vector2OrNull(scaleFactorX, scaleFactorY) ?: (0f to 0f))
+            outTangents.add(point["o"].vector2OrNull(scaleFactorX, scaleFactorY) ?: (0f to 0f))
+            closed = closed || point["c"].isTruthy()
+        }
+
+        if (vertices.size > 1 && sameVector(vertices.first(), vertices.last())) {
+            vertices.removeAt(vertices.lastIndex)
+            inTangents.removeAt(inTangents.lastIndex)
+            outTangents.removeAt(outTangents.lastIndex)
+            closed = true
+        }
+
+        return shapePathObject(
+            vertices = vertices,
+            inTangents = inTangents.padVectors(vertices.size),
+            outTangents = outTangents.padVectors(vertices.size),
+            closed = closed
+        )
+    }
+
+    private fun normalizeShapePathObject(
+        path: JsonObject,
+        scaleFactorX: Float,
+        scaleFactorY: Float
+    ): JsonObject {
+        val vertices = path["v"].vectorArrayOrNull(scaleFactorX, scaleFactorY)
+            ?: return path
+        val inTangents = path["i"].vectorArrayOrNull(scaleFactorX, scaleFactorY)
+            .orEmpty()
+            .padVectors(vertices.size)
+        val outTangents = path["o"].vectorArrayOrNull(scaleFactorX, scaleFactorY)
+            .orEmpty()
+            .padVectors(vertices.size)
+        val closed = path["c"].isTruthy()
+
+        return shapePathObject(
+            vertices = vertices,
+            inTangents = inTangents,
+            outTangents = outTangents,
+            closed = closed
+        )
+    }
+
+    private fun shapePathObject(
+        vertices: List<Pair<Float, Float>>,
+        inTangents: List<Pair<Float, Float>>,
+        outTangents: List<Pair<Float, Float>>,
+        closed: Boolean
+    ): JsonObject {
+        val safeVertices = vertices.ifEmpty {
+            listOf(0f to 0f, 1f to 0f, 0f to 1f)
+        }
+        return buildJsonObject {
+            put("i", vectorArray(inTangents.padVectors(safeVertices.size)))
+            put("o", vectorArray(outTangents.padVectors(safeVertices.size)))
+            put("v", vectorArray(safeVertices))
+            put("c", JsonPrimitive(closed))
+        }
+    }
+
+    private fun staticShapePath(): JsonObject {
+        return buildJsonObject {
+            put("a", JsonPrimitive(0 as Number))
+            put("k", defaultShapePathObject())
+        }
+    }
+
+    private fun defaultShapePathObject(): JsonObject {
+        return shapePathObject(
+            vertices = listOf(0f to 0f, 1f to 0f, 0f to 1f),
+            inTangents = emptyList(),
+            outTangents = emptyList(),
+            closed = true
+        )
+    }
+
+    private fun JsonElement?.vector2OrNull(
+        scaleFactorX: Float,
+        scaleFactorY: Float
+    ): Pair<Float, Float>? {
+        val array = this as? JsonArray ?: return null
+        val x = array.getOrNull(0)?.jsonPrimitive?.floatOrNull ?: return null
+        val y = array.getOrNull(1)?.jsonPrimitive?.floatOrNull ?: return null
+        return (x * scaleFactorX) to (y * scaleFactorY)
+    }
+
+    private fun JsonElement?.vectorArrayOrNull(
+        scaleFactorX: Float,
+        scaleFactorY: Float
+    ): List<Pair<Float, Float>>? {
+        val array = this as? JsonArray ?: return null
+        return array.mapNotNull { it.vector2OrNull(scaleFactorX, scaleFactorY) }
+            .takeIf { it.isNotEmpty() }
+    }
+
+    private fun List<Pair<Float, Float>>.padVectors(size: Int): List<Pair<Float, Float>> {
+        if (size <= 0) return emptyList()
+        if (this.size >= size) return take(size)
+        return this + List(size - this.size) { 0f to 0f }
+    }
+
+    private fun vectorArray(vectors: List<Pair<Float, Float>>): JsonArray {
+        return buildJsonArray {
+            vectors.forEach { vector ->
+                add(buildJsonArray {
+                    add(formatNumber(vector.first))
+                    add(formatNumber(vector.second))
+                })
+            }
+        }
+    }
+
+    private fun sameVector(first: Pair<Float, Float>, second: Pair<Float, Float>): Boolean {
+        return abs(first.first - second.first) < 0.001f &&
+            abs(first.second - second.second) < 0.001f
+    }
+
+    private fun JsonElement?.isTruthy(): Boolean {
+        val primitive = this as? JsonPrimitive ?: return false
+        return primitive.content.equals("true", ignoreCase = true) ||
+            primitive.intOrNull == 1
+    }
+
+    private fun isShapeTransform(shape: JsonObject): Boolean {
+        return shape["ty"]?.jsonPrimitive?.content == "tr"
+    }
+
+    private fun defaultShapeTransform(): JsonObject {
+        return buildJsonObject {
+            put("ty", JsonPrimitive("tr"))
+            put("p", staticVector2(0f, 0f))
+            put("a", staticVector2(0f, 0f))
+            put("s", staticVector2(100f, 100f))
+            put("r", staticScalar(0f))
+            put("o", staticScalar(100f))
         }
     }
 
@@ -570,7 +783,7 @@ object LottieJsonSanitizer {
         val property = element as? JsonObject ?: return fallback
         if ((property["a"]?.jsonPrimitive?.intOrNull ?: 0) != 0) return fallback
         val values = (property["k"] as? JsonArray)
-            ?.mapNotNull { it.jsonPrimitive.floatOrNull }
+            ?.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
             ?: return fallback
         if (values.size < 2) return fallback
 
@@ -594,7 +807,7 @@ object LottieJsonSanitizer {
         val keyframes = property["k"] as? JsonArray ?: return staticVector2(100f, 100f)
 
         if (!animated) {
-            val values = keyframes.mapNotNull { it.jsonPrimitive.floatOrNull }
+            val values = keyframes.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
             return buildJsonObject {
                 property.forEach { (key, value) ->
                     if (key == "k") {
@@ -621,7 +834,7 @@ object LottieJsonSanitizer {
                                     when (frameKey) {
                                         "s", "e" -> {
                                             val values = (frameValue as? JsonArray)
-                                                ?.mapNotNull { it.jsonPrimitive.floatOrNull }
+                                                ?.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
                                                 .orEmpty()
                                             put(frameKey, normalizedScaleVector(values))
                                         }
@@ -658,7 +871,7 @@ object LottieJsonSanitizer {
         if (element is JsonObject) {
             val k = element["k"]
             if (k is JsonArray) {
-                val sizes = k.mapNotNull { it.jsonPrimitive.floatOrNull }
+                val sizes = k.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
                 if (sizes.size >= 2) {
                     val sx = sizes[0] * scaleFactorX
                     val sy = sizes[1] * scaleFactorY
@@ -680,7 +893,7 @@ object LottieJsonSanitizer {
         if (element is JsonObject) {
             val k = element["k"]
             if (k is JsonArray) {
-                val pos = k.mapNotNull { it.jsonPrimitive.floatOrNull }
+                val pos = k.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
                 if (pos.size >= 2) {
                     val px = pos[0] * scaleFactorX
                     val py = pos[1] * scaleFactorY
@@ -715,7 +928,7 @@ object LottieJsonSanitizer {
     }
 
     private fun normalizeColorArray(kArray: JsonArray): JsonArray {
-        val numbers = kArray.mapNotNull { it.jsonPrimitive.floatOrNull }
+        val numbers = kArray.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
         if (numbers.isEmpty()) return buildJsonArray {
             add(formatNumber(0.2f))
             add(formatNumber(0.6f))
@@ -758,6 +971,31 @@ object LottieJsonSanitizer {
 
     private fun sanitizeProperty(element: JsonElement?, fallback: JsonElement): JsonElement {
         return element ?: fallback
+    }
+
+    private fun sanitizeScalarProperty(element: JsonElement?, fallback: Float): JsonElement {
+        val property = element as? JsonObject ?: return staticScalar(fallback)
+        val k = property["k"]
+        val scalar = when (k) {
+            is JsonPrimitive -> k.floatOrNull
+            is JsonArray -> (k.firstOrNull() as? JsonPrimitive)?.floatOrNull
+            else -> null
+        }
+
+        if (scalar == null) return property
+
+        return buildJsonObject {
+            property.forEach { (key, value) ->
+                when (key) {
+                    "a" -> put("a", JsonPrimitive(0 as Number))
+                    "k" -> put("k", formatNumber(scalar))
+                    else -> put(key, value)
+                }
+            }
+            if (!property.containsKey("a")) {
+                put("a", JsonPrimitive(0 as Number))
+            }
+        }
     }
 
     private fun staticVector2(x: Float, y: Float): JsonObject {

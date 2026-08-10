@@ -87,6 +87,8 @@ object LottieJsonValidator {
         isLenient = false
     }
     private val requiredTopLevelFields = setOf("fr", "layers")
+    private val drawableGeometryTypes = setOf("el", "rc", "sh", "sr")
+    private val drawablePaintTypes = setOf("fl", "st", "gf", "gs")
     private val forbiddenKeys = setOf(
         "fonts",
         "chars",
@@ -127,13 +129,23 @@ object LottieJsonValidator {
         val layers = root["layers"]?.jsonArray ?: throw LottieParseException("invalid_lottie_json")
         requireLottie(layers.isNotEmpty(), "empty_lottie_layers")
         requireLottie(layers.size <= 32, "lottie_layer_count_too_large")
+        var hasDrawableGeometry = false
+        var hasDrawablePaint = false
         layers.forEach { layer ->
             val layerObject = layer as? JsonObject
                 ?: throw LottieParseException("invalid_lottie_layer")
             val layerType = layerObject["ty"].intOrNull() ?: 4
             requireLottie(layerType in setOf(0, 3, 4), "unsupported_lottie_layer_type")
             requireLottie(layerObject["ddd"].intOrNull() ?: 0 == 0, "unsupported_lottie_3d_layer")
+            hasDrawableGeometry = hasDrawableGeometry ||
+                containsShapeType(layerObject, drawableGeometryTypes)
+            hasDrawablePaint = hasDrawablePaint ||
+                containsShapeType(layerObject, drawablePaintTypes)
         }
+        requireLottie(
+            hasDrawableGeometry && hasDrawablePaint,
+            "empty_lottie_drawable_content"
+        )
     }
 
     private fun containsForbiddenContent(element: JsonElement): Boolean {
@@ -146,6 +158,19 @@ object LottieJsonValidator {
                 val value = element.contentOrNull?.lowercase().orEmpty()
                 forbiddenValueFragments.any(value::contains)
             }
+        }
+    }
+
+    private fun containsShapeType(element: JsonElement, types: Set<String>): Boolean {
+        return when (element) {
+            is JsonObject -> {
+                val ty = element["ty"].stringContentOrNull()
+                ty in types ||
+                    (element["shapes"] as? JsonArray)?.any { containsShapeType(it, types) } == true ||
+                    (element["it"] as? JsonArray)?.any { containsShapeType(it, types) } == true
+            }
+            is JsonArray -> element.any { containsShapeType(it, types) }
+            is JsonPrimitive -> false
         }
     }
 }

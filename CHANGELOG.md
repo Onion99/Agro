@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-08-10] - 修复 Lottie path sanitizer 渲染边界
+- [修复] `LottieJsonSanitizer` 支持将 `ty="sh"` 的逐点 `{v,i,o,c}` 数组归一化为 Bodymovin path object，并为缺失 group transform 的 shape group 补齐默认 `tr`。
+- [修复] 修正 animated `p.k` keyframe object 被当作静态数字数组读取导致 sanitizer 回退原始 JSON 的问题，同时规范 `r` 标量 transform。
+- [修复] `LottieJsonValidator` 新增可绘制内容校验，缺少 geometry + fill/stroke 的 Native Lottie JSON 返回 `empty_lottie_drawable_content`。
+- [测试] 补齐 `LottieMessageParserTest` 的最小 Native Lottie helper，并新增用户提供的 Fire Flame 点数组 path payload 到 `LottieComposition.parse` 的回归验证。
+- [文档] 更新 `ChatViewModel.LOTTIE_ANIMATION_SYSTEM_INSTRUCTION`、`docs/specs/lottie-animation-prompt-spec.md` 和 `docs/designs/gemma4-lottie-json-compottie-route-plan.md`，修正最小示例并记录 sanitizer/validator 边界。
+
 ## [2026-08-09] - 修复 iOS/Android/Linux 原生平台构建
 - [修复] Linux CI 安装并显式使用 LLVM/Clang 18，避免 Ubuntu 22.04 默认 Clang 14 编译 LiteRT-LM Abseil `std::source_location` 失败。
 - [修复] `BuildNativeLibTask` 将 GPU sampler 兼容补丁限制为 macOS，Android/Linux/Windows 不再读取未配置的补丁输入或修改非 macOS 原生源码。
