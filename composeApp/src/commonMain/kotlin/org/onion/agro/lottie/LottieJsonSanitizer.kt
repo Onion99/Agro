@@ -49,6 +49,13 @@ object LottieJsonSanitizer {
         """("[A-Za-z_][A-Za-z0-9_-]*"\s*:\s*)(-?(?:\d+(?:\.\d+)?|\.\d+))\s*"(?=\s*[,}\]])"""
     )
     private val missingKeyValueRegex = Regex("""([,{]\s*)(["']?a["']?)\s*(?=,)""")
+    private val malformedAnimatedKeyRegex = Regex(
+        """([,{]\s*)["']?a([01])["']?(?:,|\s|")*["']?k["']?\s*:""",
+        RegexOption.IGNORE_CASE
+    )
+    private val strayQuotesBeforeKeyRegex = Regex(
+        """([,{]\s*)(?:["']\s*)+([A-Za-z_][A-Za-z0-9_-]*)\s*"?\s*:"""
+    )
     private val malformedScaleKeyRegex = Regex("""([,{]\s*)(["']?k["']?)(?=\s*-?(?:\d|\.\d))""")
     private val unquotedValueRegex = Regex(
         """(:\s*)([A-Za-z_][A-Za-z0-9_.-]*)(?=\s*[,}\]])"""
@@ -73,6 +80,7 @@ object LottieJsonSanitizer {
         text = repairStrayCommas(text)
         text = repairUnenclosedShapePropertiesInArray(text)
         text = repairMissingObjectClosuresInArray(text)
+        text = repairUnclosedShapesArrayBeforeLayerProperties(text)
 
         // 3. Repair unbalanced brackets & auto-close missing ones
         text = repairUnbalancedBrackets(text)
@@ -105,6 +113,12 @@ object LottieJsonSanitizer {
             }
             repaired = missingKeyValueRegex.replace(repaired) { match ->
                 "${match.groupValues[1]}\"a\": 0"
+            }
+            repaired = malformedAnimatedKeyRegex.replace(repaired) { match ->
+                "${match.groupValues[1]}\"a\": ${match.groupValues[2]}, \"k\":"
+            }
+            repaired = strayQuotesBeforeKeyRegex.replace(repaired) { match ->
+                "${match.groupValues[1]}\"${match.groupValues[2]}\":"
             }
             repaired = bareKeyBeforeQuotedValueRegex.replace(repaired) { match ->
                 "${match.groupValues[1]}\"${match.groupValues[2]}\": ${match.groupValues[3]}"
@@ -188,11 +202,19 @@ object LottieJsonSanitizer {
         }
     }
 
+    private fun repairUnclosedShapesArrayBeforeLayerProperties(raw: String): String {
+        val regex = Regex("""("shapes"\s*:\s*\[[\s\S]*?\})\s*,\s*(?="(?:ip|op|st|bm|ks|ao)"\s*:)""")
+        return regex.replace(raw) { match ->
+            "${match.groupValues[1]}], "
+        }
+    }
+
     private fun repairUnbalancedBrackets(raw: String): String {
         val stack = mutableListOf<Char>()
         val builder = StringBuilder()
         var inString = false
         var escape = false
+        var rootStarted = false
 
         for ((index, char) in raw.withIndex()) {
             if (escape) {
@@ -217,6 +239,7 @@ object LottieJsonSanitizer {
 
             when (char) {
                 '{' -> {
+                    rootStarted = true
                     stack.add('}')
                     builder.append(char)
                 }
@@ -247,6 +270,10 @@ object LottieJsonSanitizer {
                         }
                         while (stack.size > matchIdx) {
                             builder.append(stack.removeAt(stack.lastIndex))
+                        }
+                        if (rootStarted && stack.isEmpty()) {
+                            // Closed root JSON object. Discard trailing junk outside root.
+                            break
                         }
                     } else {
                         // Extra/stray closing char with no matching open context in current scope — discard!
@@ -381,11 +408,18 @@ object LottieJsonSanitizer {
                     val pz = coords.getOrNull(2) ?: 0f
                     return buildJsonObject {
                         element.forEach { (key, valElement) ->
-                            if (key == "k") put("k", buildJsonArray {
-                                add(JsonPrimitive(px as Number))
-                                add(JsonPrimitive(py as Number))
-                                add(JsonPrimitive(pz as Number))
-                            }) else put(key, valElement)
+                            when (key) {
+                                "a" -> put("a", JsonPrimitive(0 as Number))
+                                "k" -> put("k", buildJsonArray {
+                                    add(JsonPrimitive(px as Number))
+                                    add(JsonPrimitive(py as Number))
+                                    add(JsonPrimitive(pz as Number))
+                                })
+                                else -> put(key, valElement)
+                            }
+                        }
+                        if (!element.containsKey("a")) {
+                            put("a", JsonPrimitive(0 as Number))
                         }
                     }
                 }
@@ -399,8 +433,9 @@ object LottieJsonSanitizer {
         if (element is JsonObject) {
             val a = element["a"]?.jsonPrimitive?.intOrNull ?: 0
             val k = element["k"]
-            if (a == 1 && k is JsonArray) {
-                val sanitizedKf = k.map { kf ->
+            val isKeyframeArray = k is JsonArray && k.isNotEmpty() && k.all { it is JsonObject }
+            if (a == 1 && isKeyframeArray) {
+                val sanitizedKf = (k as JsonArray).map { kf ->
                     if (kf is JsonObject) {
                         buildJsonObject {
                             kf.forEach { (key, valElement) ->
@@ -439,11 +474,18 @@ object LottieJsonSanitizer {
                     val sz = (scales.getOrNull(2) ?: 100f) * multiplier
                     return buildJsonObject {
                         element.forEach { (key, valElement) ->
-                            if (key == "k") put("k", buildJsonArray {
-                                add(formatNumber(sx))
-                                add(formatNumber(sy))
-                                add(formatNumber(sz))
-                            }) else put(key, valElement)
+                            when (key) {
+                                "a" -> put("a", JsonPrimitive(0 as Number))
+                                "k" -> put("k", buildJsonArray {
+                                    add(formatNumber(sx))
+                                    add(formatNumber(sy))
+                                    add(formatNumber(sz))
+                                })
+                                else -> put(key, valElement)
+                            }
+                        }
+                        if (!element.containsKey("a")) {
+                            put("a", JsonPrimitive(0 as Number))
                         }
                     }
                 }

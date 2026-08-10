@@ -5,7 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2026-08-10] - 修复畸形 Lottie JSON 结构边界与多余引号
+- [修复] 优化 `LottieJsonSanitizer`，新增 `strayQuotesBeforeKeyRegex` 属性键前多余引号清理及 `repairUnclosedShapesArrayBeforeLayerProperties` 文本层级修复逻辑，自动闭合未封闭的 `shapes` 数组。
+- [修复] 优化 `repairUnbalancedBrackets` 根对象闭合检测，在根 JSON 结构完备闭合后可靠截断舍弃 AI 生成的尾部垃圾字符（如末尾多余双引号与无效结构），恢复极度损坏的 Lottie 动效渲染能力。
+- [测试] 在 `LottieMessageParserTest` 中挂载 `repairsCrashingEffectJsonWithCorruptedAnimatedKeys` 单元测试，验证极度畸形的 Crashing Effect JSON 可被成功修复并正确解析为 `ChatMessageContent.LottieAnimation`。
+
+## [2026-08-10] - 修复 Lottie JSON 损坏 Key 与动画标记
+- [修复] `LottieJsonSanitizer` 新增 `malformedAnimatedKeyRegex` 正则，识别并修复 AI 生成的 `"a0,"` 和 `"a1,"` 语法损坏，正确修正为标准 `"a": 0` / `"a": 1` 属性。
+- [修复] 修正 `sanitizeScale` 与 `sanitizePosition` 转换逻辑，当属性包含静态数值/坐标数组（而非 Keyframe JsonObject 列表）时强制重置 `"a": 0`，防止 Compottie 解析 Keyframe 抛出 `JsonDecodingException` 异常。
+- [测试] 在 `LottieMessageParserTest` 中补齐 `repairsCubeRotationJsonWithCorruptedAnimatedKeys` 回归测试用例，验证包含 `"a0,"` / `"a1,"` 及带空格数字的畸形 Cube Rotation JSON 可被正常修复并成功解析为 `ChatMessageContent.LottieAnimation`。
 
 ## [2026-08-10] - 修复 Lottie path sanitizer 渲染边界
 - [修复] `LottieJsonSanitizer` 支持将 `ty="sh"` 的逐点 `{v,i,o,c}` 数组归一化为 Bodymovin path object，并为缺失 group transform 的 shape group 补齐默认 `tr`。

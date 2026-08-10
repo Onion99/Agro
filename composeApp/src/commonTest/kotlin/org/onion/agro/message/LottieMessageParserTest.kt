@@ -2,6 +2,7 @@ package org.onion.agro.message
 
 import com.onion.model.ChatMessageContent
 import io.github.alexzhirkevich.compottie.LottieComposition
+import org.onion.agro.lottie.LottieJsonSanitizer
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -63,6 +64,30 @@ class LottieMessageParserTest {
         assertEquals(2_000L, lottie.durationMs)
         assertTrue(lottie.json.contains("\"ty\":\"el\""), lottie.json)
         assertTrue(lottie.json.contains("\"ty\":\"fl\""), lottie.json)
+    }
+
+    @Test
+    fun repairsCubeRotationJsonWithCorruptedAnimatedKeys() {
+        val result = LottieMessageParser.parseCompletedResponse(corruptedCubeRotationJson())
+        val lottie = assertIs<ChatMessageContent.LottieAnimation>(result, result.toString())
+
+        assertEquals("Cube Rotation", lottie.title)
+        assertEquals(30, lottie.fps)
+        assertEquals(240, lottie.width)
+        assertEquals(240, lottie.height)
+        assertTrue(lottie.json.contains("\"ty\":\"el\""), lottie.json)
+        assertTrue(lottie.json.contains("\"ty\":\"fl\""), lottie.json)
+        assertTrue(lottie.json.contains("\"ty\":\"tr\""), lottie.json)
+        assertNotNull(LottieComposition.parse(lottie.json))
+    }
+
+    @Test
+    fun repairsCrashingEffectJsonWithCorruptedAnimatedKeys() {
+        val rawSanitized = LottieJsonSanitizer.sanitize(crashingEffectJson())
+        println("CRASHING_EFFECT_SANITIZED: $rawSanitized")
+        val result = LottieMessageParser.parseCompletedResponse(crashingEffectJson())
+        val lottie = assertIs<ChatMessageContent.LottieAnimation>(result, result.toString())
+        assertNotNull(LottieComposition.parse(lottie.json))
     }
 
 
@@ -483,6 +508,21 @@ class LottieMessageParserTest {
                 }
               ]
             }
+        """.trimIndent()
+    }
+
+    private fun corruptedCubeRotationJson(): String {
+        return """
+            {
+              "v": "5.7.4",
+              "fr": 30,  "ip": 0,  "op": 124,  "w": 480,  "h": 4 8,  "nm": "Cube Rotation",  "ddd": 0,  "loop": true,  "assets": [],  "layers": [  {  "ddd": 0,  "ind":1,  "ty":4,  "nm": "Cube Layer",  "sr":1,  "ks": { "o":{ "a":0,"k":10}, "r":{ "a":1,"k":[0]}, "p":{ "a":0,"k":[24,24]}, "a":{ "a":0,"k": [0,0,0] }, "s":{ "a":1, "k": [10,10,1] }} },  "ao":0, "shapes": [  {  "ty": "gr",  "nm": "Cube Group",  "it": [  {  "ty": "el",  "nm": "Cube Face",  "p":{ "a":0,"k":[124,124]}, "s":{ "a0","k":[48,8]}, "d":1},  {  "ty": "fl",  "nm": "CubeFill",  "c":{ "a0,"k":[0.12,0.4,0.8,1]}, "o":{ "a0,"k":1000}  },  {  "ty": "tr",  "p":{ "a0,"k":[0,0]}, "a":{ "a0,"k":[0,0,0] }, "s":{ "a1,"k":[1000,10000] }, "r":{ "a1,"k":[0,0]}, "o":{ "a0,"k":1000}  }  ]  },  "ip":0,  "op":248,  "st":0,  "bm":0  }  ]  }
+        """.trimIndent()
+    }
+
+    private fun crashingEffectJson(): String {
+        return """
+            {
+              "v": "5.7.4",  "fr":30,  "ip":0,  "op":124,  "w":24,  "h":24,  "nm": "Crashing Effect",  "ddd":0,  "loop":false,  "assets":[],  "layers":[  {  "ddd":0,  "ind":1,  "ty":4,  "nm": "Explosion Points",  "sr":1,  "ks": { "o":{ "a":0, "k":10}, "r":{ "a":0, "k":0}, "p":{ "a":0, "k": [2,2]}, "a":{ "a":0, "k": [0,0,0] }, "s":{ "a1, "k": [1000,10000] } } },  "ao":0,  "shapes":[  {  "ty": "gr",  "nm": "Point Group",  "  "it":[  {  "ty": "el",  "nm": "Point",  "p":{ "a":0, "k": [0,0] }, "s":{ "a0, "k": [0.1,0.1] }, "d":1},  {  "ty": "fl",  "nm": "PointFill",  "c":{ "a0,k":[0.9,0.1,0.1,1] }, "o":{ "a0,k":100}  },  {  "ty": "tr",  "p":{ "a0,k":[0,0] }, "a":{ "a0,k":[0,0,0] }, "s":{ "a1,k":[100,10000] }, "r":{ "a0,k":0}, "o":{ "a0,k":1000}  }  ]  },  "ip":0,  "op":48,  "st":0,  "bm":0  }  ]  }  "}
         """.trimIndent()
     }
 
