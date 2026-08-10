@@ -267,6 +267,9 @@ jobs:
           build --verbose_failures
           build --action_env=BAZEL_VC="$vcPath"
           build --repo_env=BAZEL_VC="$vcPath"
+          build:win_host --define=protobuf_allow_msvc=true
+          build:win_host --host_copt=/Zc:__cplusplus
+          build:win_host --host_cxxopt=/std:c++20
           build:msvc_target_utf8 --copt=/utf-8
           build:msvc_target_utf8 --cxxopt=/utf-8
           build:msvc_target_utf8 --host_copt=/utf-8

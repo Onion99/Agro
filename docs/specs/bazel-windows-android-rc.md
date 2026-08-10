@@ -26,12 +26,12 @@ clang: error: no such file or directory: '/utf-8'
 因此 `.bazelrc.user` 必须遵循以下边界：
 
 - Android target 编译不能收到 `/utf-8`。
-- Windows host 工具编译可以通过 `--config=win_host` 收到 `/utf-8`。
+- Windows host 工具编译可以通过 `--config=win_host` 收到 `/utf-8`、`/std:c++20`、`/Zc:__cplusplus`、`protobuf_allow_msvc=true` 与 Git Bash `shell_executable`。
 - Windows desktop target 编译必须显式启用 `--config=msvc_target_utf8`，不能依赖全局 target copts。
 
 ## 当前配置
 
-`.bazelrc.user` 中保留 Windows Visual Studio 路径，并将 UTF-8 参数拆到显式配置：
+`.bazelrc.user` 中保留 Windows Visual Studio 路径，并将 UTF-8 与 MSVC host C++ 参数拆到显式配置：
 
 ```text
 startup --output_user_root=G:/_b
@@ -39,6 +39,9 @@ build:windows --action_env=BAZEL_VC="C:/Program Files (x86)/Microsoft Visual Stu
 build:windows --repo_env=BAZEL_VC="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC"
 build:win_host --action_env=BAZEL_VC="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC"
 build:win_host --repo_env=BAZEL_VC="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC"
+build:win_host --define=protobuf_allow_msvc=true
+build:win_host --host_copt=/Zc:__cplusplus
+build:win_host --host_cxxopt=/std:c++20
 build:msvc_target_utf8 --copt=/utf-8
 build:msvc_target_utf8 --cxxopt=/utf-8
 build:msvc_target_utf8 --host_copt=/utf-8
@@ -52,7 +55,7 @@ Gradle 的 Bazel 任务通过 `-Pbazel.outputUserRoot=...` 或
 CI 会在构建前重写 `.bazelrc.user` 并导出 `BAZEL_OUTPUT_ROOT`，仍使用 runner
 上的绝对输出根。
 
-`composeApp/build.gradle.kts` 的 Windows desktop 原生库任务显式传入 `--config=msvc_target_utf8`。Android 原生库任务在 Windows 主机上只传入 `--config=win_host`，从而只影响 host 工具链，不污染 Android NDK target 编译。
+`composeApp/build.gradle.kts` 的 Windows desktop 原生库任务显式传入 `--config=msvc_target_utf8`。Android 原生库任务在 Windows 主机上只传入 `--config=win_host`、host-only MSVC C++ 参数与 Git Bash shell，从而只影响 host 工具链和 genrule 执行，不污染 Android NDK target 编译。
 
 ## GitHub Actions 策略
 
@@ -68,7 +71,7 @@ CI 会在构建前重写 `.bazelrc.user` 并导出 `BAZEL_OUTPUT_ROOT`，仍使�
 - Windows CI 通过 `vswhere.exe` 动态发现 Visual Studio C++ toolchain，并写入 `BAZEL_VC`，不依赖本机固定的 BuildTools 路径。
 - Linux、macOS 和 Android-on-macOS 不写入 `BAZEL_VC`，只保留 Bazel 输出目录和磁盘缓存配置。
 - Linux CI 通过 `.bazelrc.user` 写入 `build --define=xnn_enable_avxvnniint8=false`，并安装、显式绑定 LLVM/Clang 18。Ubuntu 22.04 默认 clang 14 不支持 XNNPACK 的 `-mavxvnniint8` 参数，也不能与 LiteRT-LM 使用的 Abseil `std::source_location` 配置组合；CI 必须通过绝对路径设置 Linux 的 `CC`、`CXX` action/repository 环境变量，不能只依赖 `clang` 的 PATH 解析。
-- Windows desktop 仍保留 `msvc_target_utf8` 与 `win_host` 两组 UTF-8 配置，确保 target 与 host 参数边界不回退。
+- Windows desktop 仍保留 `msvc_target_utf8` 与 `win_host` 两组 UTF-8 配置；Windows Android host 工具链通过 `win_host` 保留 MSVC C++20、`__cplusplus` 修正与 Git Bash genrule shell，确保 target 与 host 参数边界不回退。
 - 所有会执行 `./gradlew` 的 Unix runner 在 wrapper 校验前都会执行 `chmod +x ./gradlew`；同时仓库中的 `gradlew` 必须保持 Git 可执行位，避免 Linux/macOS checkout 后出现 `Permission denied`。
 - Desktop 和 Android/iOS 构建 job 必须拉取 Git LFS 资源，并对子模块执行 `git lfs pull`。`cpp/lite-rt-lm/prebuilt/*` 下的 `.so`、`.dylib`、`.dll`、`.lib` 均由子模块 Git LFS 管理；如果 CI 只拿到 LFS pointer，macOS 链接会出现 `ld: unknown file type`。
 - macOS 本地构建前可只恢复当前平台的 LFS 对象，并确认文件是 Mach-O 而不是 pointer 文本：
@@ -95,5 +98,8 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 期望结果：
 
 - Bazel `android_arm64` target 编译不再出现 `clang: error: no such file or directory: '/utf-8'`。
+- Windows host 工具编译 Abseil 时不再出现 `C++ versions less than C++17 are not supported`。
+- Windows host 工具编译 Protobuf 时不再出现 `Protobuf will be dropping support for MSVC + Bazel`。
+- FlatBuffers genrule 不再回退到 `WindowsApps\bash.exe` 并报 `missing input files`。
 - 构建产物输出到 `cpp/libs/liblitertlm_jni.so`。
 - Android 运行时产物同步到 `composeApp/src/androidMain/jniLibs/arm64-v8a/liblitertlm_jni.so`。

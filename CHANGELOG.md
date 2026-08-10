@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-10] - 修复 Windows Android Bazel host C++ 标准参数
+- [修复] `composeApp/build.gradle.kts` 的 `buildAndroidNativeLib` 在 Windows 主机上为 Bazel host 工具链追加 `/Zc:__cplusplus` 与 `/std:c++20`，避免 Abseil host 工具编译继续按低于 C++17 处理。
+- [修改] 同步 `.bazelrc.user` 与 `.github/workflows/build.yml` 的 `win_host` 配置，保留 MSVC host C++20、Protobuf MSVC allow 与 Git Bash `shell_executable`，且不污染 Android NDK target 编译。
+- [文档] 更新 `docs/specs/bazel-windows-android-rc.md`，记录 Windows Android cross-build 的 host-only MSVC 参数边界与验证期望。
+
 ## [2026-08-10] - 修复畸形 Lottie JSON 结构边界与多余引号
 - [修复] 优化 `LottieJsonSanitizer`，新增 `strayQuotesBeforeKeyRegex` 属性键前多余引号清理及 `repairUnclosedShapesArrayBeforeLayerProperties` 文本层级修复逻辑，自动闭合未封闭的 `shapes` 数组。
 - [修复] 优化 `repairUnbalancedBrackets` 根对象闭合检测，在根 JSON 结构完备闭合后可靠截断舍弃 AI 生成的尾部垃圾字符（如末尾多余双引号与无效结构），恢复极度损坏的 Lottie 动效渲染能力。

@@ -6,6 +6,12 @@ build:windows --repo_env=BAZEL_VC="C:/Program Files (x86)/Microsoft Visual Studi
 build:win_host --action_env=BAZEL_VC="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC"
 build:win_host --repo_env=BAZEL_VC="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC"
 
+# Android cross-builds disable Bazel's automatic Windows config, so the host
+# MSVC toolchain needs its C++ mode here.
+build:win_host --define=protobuf_allow_msvc=true
+build:win_host --host_copt=/Zc:__cplusplus
+build:win_host --host_cxxopt=/std:c++20
+
 # MSVC-only UTF-8 flags. Do not set these as global target copts: Android NDK
 # clang treats /utf-8 as an input file and fails during cross-compilation.
 build:msvc_target_utf8 --copt=/utf-8

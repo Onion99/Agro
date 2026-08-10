@@ -994,6 +994,7 @@ tasks.register("buildIosLiteRtLmNativeLibs") {
 // ------------------------------------------------------------------------
 tasks.register<BuildNativeLibTask>("buildAndroidNativeLib") {
     println("配置 buildAndroidNativeLib 任务")
+    this.gpuSamplerCompatibilityPatchFile.set(liteRtLmGpuSamplerCompatibilityPatchFile)
     this.targetWorkingDir.set(file("$rootDirVal/cpp/${rootProject.extra["dirCppName"]}"))
     this.platformName.set("android")
     this.bazelTarget.set(rootProject.extra["bazelTarget"].toString())
@@ -1003,7 +1004,14 @@ tasks.register<BuildNativeLibTask>("buildAndroidNativeLib") {
     
     val osName = System.getProperty("os.name").lowercase(Locale.getDefault())
     if (osName.contains("windows")) {
-        this.bazelExtraArgs.add("--config=win_host")
+        this.bazelExtraArgs.addAll(
+            listOf(
+                "--config=win_host",
+                "--define=protobuf_allow_msvc=true",
+                "--host_copt=/Zc:__cplusplus",
+                "--host_cxxopt=/std:c++20"
+            )
+        )
     }
 
     // 自动获取 Android SDK 和 NDK 路径
