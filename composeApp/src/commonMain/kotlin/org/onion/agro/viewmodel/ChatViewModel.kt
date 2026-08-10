@@ -1501,16 +1501,9 @@ class ChatViewModel(
 
         val LOTTIE_ANIMATION_SYSTEM_INSTRUCTION = """
             You are ${BuildConfig.APP_NAME}'s Lottie animation architect and motion designer.
-            Turn the user's visual idea into one small, readable, smooth 2D vector animation.
 
             IMPORTANT OUTPUT CONTRACT
-            - Output exactly ONE Native Lottie JSON object. Do not output Markdown fences, comments, explanations,
-              a JSON envelope, or any text outside the object.
-            - Output the root fields v, fr, ip, op, w, h, nm, ddd, assets, and layers.
-            - Do NOT output a "type": "lottie_animation_spec" intent object. The client no longer builds animation
-              layers locally. The layers, shapes, colors, timing, and keyframes must all come from your JSON.
-            - The client only sanitizes malformed JSON, validates safety, and renders your final JSON. It does not
-              invent missing geometry, choose a template, choose a kind, or convert parameters into animation.
+            - Output exactly ONE Native Lottie JSON object.
 
             SMALLEST WORKING EXAMPLE: ONE BREATHING CIRCLE
             This is the complete pattern to copy before attempting a complex idea. It has one shape layer, one
@@ -1586,7 +1579,6 @@ class ChatViewModel(
             }
 
             ROOT TIMELINE AND CANVAS VARIABLES
-            - v: Lottie/exporter version string. Use "5.7.4".
             - fr: frames per second. Use 30 for simple UI motion or 60 for very smooth motion.
             - ip: composition in-point, normally frame 0.
             - op: composition out-point. Total duration in seconds is (op - ip) / fr. Use op - ip <= 180 frames.
@@ -1647,21 +1639,6 @@ class ChatViewModel(
             6. Use 2..4 keyframes per animated property. Make motion deliberate, not random; do not animate every property.
             7. For a loop, the first and last visual values must match. For a one-shot, finish on a stable readable pose.
             8. Keep all content inside roughly 8%..92% of the canvas so strokes and scale overshoot are not clipped.
-
-            MOTION RECIPES
-            - Pulse: animate scale 90 -> 105 -> 100, or opacity 65 -> 100 -> 65.
-            - Rotation: animate r 0 -> 360 for one turn; for a loop use matching phase and duration.
-            - Move: animate p from a start position to an end position, then settle; do not teleport.
-            - Fade: animate o 0 -> 100 for entrance and 100 -> 0 for exit.
-            - Draw: use a stroke plus Trim Path e 0 -> 100; draw one path before the next path.
-            - Stagger: give repeated layers different t values separated by a few frames.
-
-            SAFETY AND FORMAT LIMITS
-            - Use only plain JSON. No trailing commas.
-            - Do not use URLs, file paths, images, fonts, text layers, scripts, HTML, CSS, expressions, masks, effects,
-              base64, .lottie packages, external assets, or executable content.
-            - Use at most 32 layers, keep assets empty, keep the JSON below 256 KiB, and prefer 1..3 shape layers.
-            - The final response must contain only the completed Native Lottie JSON object.
         """.trimIndent()
     }
 
@@ -1671,3 +1648,173 @@ class ChatViewModel(
                 this == ChatSessionMode.LOTTIE_ANIMATION
     }
 }
+// ------------------------------------------------------------------------
+// {
+//  "v": "5.7.4",
+//  "fr": 30,
+//  "ip": 0,
+//  "op": 100,
+//  "w": 240,
+//  "h": 240,
+//  "nm": "Fire Flame",
+//  "ddd": 0,
+//  "loop": true,
+//  "assets": [],
+//  "layers": [
+//    {
+//      "ddd": 0,
+//      "ind": 1,
+//      "ty": 4,
+//      "nm": "Fire Flame Layer",
+//      "sr": 1,
+//      "ks": {
+//        "o": {
+//          "a": 0,
+//          "k": 100
+//        },
+//        "r": {
+//          "a": 1,
+//          "k": [0]
+//        },
+//        "p": {
+//          "a": 1,
+//          "k": [
+//            {
+//              "t": 0,
+//              "s": [120, 120, 0],
+//              "e": [120, 120, 0]
+//            },
+//            {
+//              "t": 50,
+//              "s": [130, 120, 0],
+//              "e": [130, 120, 0]
+//            },
+//            {
+//              "t": 100,
+//              "s": [120, 120, 0],
+//              "e": [120, 120, 0]
+//            }
+//          ]
+//        },
+//        "a": {
+//          "a": 0,
+//          "k": [0, 0, 0]
+//        },
+//        "s": {
+//          "a": 1,
+//          "k": [
+//            {
+//              "t": 0,
+//              "s": [100, 100, 100],
+//              "e": [100, 100, 100]
+//            },
+//            {
+//              "t": 30,
+//              "s": [110, 110, 110],
+//              "e": [110, 110, 110]
+//            },
+//            {
+//              "t": 60,
+//              "s": [100, 100, 100],
+//              "e": [100, 100, 100]
+//            }
+//          ]
+//        }
+//      }
+//    },
+//    {
+//      "ddd": 0,
+//      "ind": 2,
+//      "ty": 4,
+//      "nm": "Fire Shape",
+//      "sr": 1,
+//      "ks": {
+//        "o": {
+//          "a": 0,
+//          "k": 100
+//        },
+//        "r": {
+//          "a": 1,
+//          "k": [0]
+//        },
+//        "p": {
+//          "a": 0,
+//          "k": [0, 0, 0]
+//        },
+//        "a": {
+//          "a": 0,
+//          "k": [0, 0, 0]
+//        },
+//        "s": {
+//          "a": 0,
+//          "k": [100, 100, 100]
+//        }
+//      },
+//      "ao": 0,
+//      "shapes": [
+//        {
+//          "ty": "gr",
+//          "nm": "Flame Group",
+//          "it": [
+//            {
+//              "ty": "sh",
+//              "nm": "Flame Path",
+//              "ks": {
+//                "k": [
+//                  {
+//                    "v": [0, 0],
+//                    "i": [0, 0],
+//                    "o": [0, 0],
+//                    "c": 0
+//                  },
+//                  {
+//                    "v": [20, -20],
+//                    "i": [0, 0],
+//                    "o": [0, 0],
+//                    "c": 0
+//                  },
+//                  {
+//                    "v": [40, 0],
+//                    "i": [0, 0],
+//                    "o": [0, 0],
+//                    "c": 0
+//                  },
+//                  {
+//                    "v": [20, 20],
+//                    "i": [0, 0],
+//                    "o": [0, 0],
+//                    "c": 0
+//                  },
+//                  {
+//                    "v": [0, 0],
+//                    "i": [0, 0],
+//                    "o": [0, 0],
+//                    "c": 0
+//                  }
+//                ]
+//              }
+//            },
+//            {
+//              "ty": "fl",
+//              "nm": "Fire Fill",
+//              "c": {
+//                "a": 0,
+//                "k": [0.8, 0.2, 0.0, 1]
+//              },
+//              "o": {
+//                "a": 0,
+//                "k": 100
+//              },
+//              "r": 1
+//            }
+//          ]
+//        }
+//      ],
+//      "ip": 0,
+//      "op": 100,
+//      "st": 0,
+//      "bm": 0
+//    }
+//  ]
+//}
+// ------------------------------------------------------------------------
