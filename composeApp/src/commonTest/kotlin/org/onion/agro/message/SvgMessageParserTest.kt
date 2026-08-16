@@ -79,4 +79,23 @@ class SvgMessageParserTest {
         val unsupported = assertIs<ChatMessageContent.Unsupported>(result)
         assertEquals("svg_too_large", unsupported.reason)
     }
+
+    @Test
+    fun healsGemmaMalformedSvgResponse() {
+        val rawResponse = """
+            {
+              "type": "svg_image",
+              "svg": "<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512' viewBox='0 0 512 512' fill='none'><defs><linearGradient id='gradient1' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' style='stop-color:#000044;stop-opacity:1' /><stop offset='100%' style='stop-color:#1a0033;stop-opacity:1' /></linearGradient><filter id='glow'><feGaussianBlur stdDeviation='4' result='blurOut' in2='SourceGraphic' result='blurOut'/><feMergeIn><feMergeNode in='blurOut'/><feMergeNode in='SourceGraphic'/></feMergeNode></feMergeIn></filter></defs><rect width='512' height='512' fill='#000011'/><g transform='translate(256, 256)'><g id='chip_core'><rect x='-80' y='-80' width='160' height='160' fill='url(#gradient1)'/><path d='M-40 -40 L40 40 Z' filter='url=#glow'/></g></g></g><g id='extra'><circle cx='10' cy='10' r='5'></g></g></svg>"
+            }
+        """.trimIndent()
+
+        val result = SvgMessageParser.parseCompletedResponse(rawResponse)
+        val svg = assertIs<ChatMessageContent.SvgImage>(
+            result,
+            "Expected auto-healed SvgImage but got $result"
+        )
+        assertEquals(512f, svg.width)
+        assertEquals(512f, svg.height)
+    }
 }
+

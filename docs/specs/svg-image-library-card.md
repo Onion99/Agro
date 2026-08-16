@@ -57,15 +57,17 @@ SVG 输出必须自包含，禁止:
 生成完成后 `SvgMessageParser` 会再次执行这些安全检查；不安全、超出 1 MiB、XML
 不完整或画布无效的响应转换为 `Unsupported` 内容，不交给 SVG 解码器。
 
-## 6. SVG 可复制与可渲染约束
+## 6. SVG 可复制、可渲染与 4B 模型防幻觉约束
 
-为避免导出的 JSON 中 `svg` 字段复制后无法渲染，专用 `systemInstruction` 约束如下:
+为避免导出的 JSON 中 `svg` 字段复制后无法渲染，以及针对 Gemma 4B 等轻量级端侧模型容易产生破损滤镜与标签栈失衡的问题，专用 `systemInstruction` 与解析器具备以下约束和自愈机制:
 
 - `svg` 字段必须是单行 SVG markup，不插入 JSON newline escape。
-- SVG/XML 属性必须使用单引号，例如 `width='1024'`，避免在字段值中出现 `\"`。
-- 根节点必须是一个完整 `<svg ...>...</svg>`，包含 `xmlns`、`width`、`height`、`viewBox`。
-- 所有 `<g>`、`<defs>`、`<filter>`、`<mask>`、`<clipPath>` 等标签必须严格配对，禁止多余 `</g>` 或孤立闭合标签。
-- 优先使用十六进制颜色与 `opacity` / `fill-opacity` / `stroke-opacity`，避免 `rgba(...)` 在部分 SVG 渲染器中的兼容问题。
+- SVG/XML 属性必须使用单引号，例如 `width='512'`，避免在字段值中出现 `\"`。
+- 根节点必须是一个完整 `<svg ...>...</svg>`，包含 `xmlns`、`viewBox`。
+- **4B 模型抗幻觉禁令**：严格禁止生成 `<filter>`、`<feGaussianBlur>`、`<feMergeIn>` 等复杂滤镜管道；发光与光晕效果统一通过 `<radialGradient>`、`<linearGradient>` 或带 `opacity` 的重叠半透明图元实现。
+- **结构扁平化与单闭合**：所有形状元素（`<rect/>`、`<circle/>`、`<path/>`、`<stop/>` 等）必须自闭合；尽量使用绝对坐标，避免深层 `<g>` 嵌套。
+- **解析器自愈修复 (Auto-Healing)**：`SvgMessageParser` 在解析 LLM 返回的响应时，会自动执行 `sanitizeSvg`，修复常见的小模型缺陷（如 `filter='url='...'` 引号嵌套修复、`feMergeIn` 规范化、清理孤立多余 `</g>` 闭合标签，以及自动闭合未关闭的容器元素）。
+- 优先使用 6 位标准十六进制颜色（如 `#4A00FF`），避免 5 位或 7 位非法色值。
 - 必须遵循 SVG 的 painter's order：可见元素按照文档顺序从底到顶绘制。`<defs>` 后的第一个可见元素应为全画布背景（如有），所有主体、装饰、阴影与文字必须位于背景之后。
 - 禁止在主体之后追加或重复不透明的全画布背景 `<rect>`、`<path>` 或 `<g>`；响应前必须检查背景不会覆盖请求的图案。
 

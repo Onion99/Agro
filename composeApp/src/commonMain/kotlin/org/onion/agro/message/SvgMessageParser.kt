@@ -35,11 +35,100 @@ object SvgMessageParser {
                 reason = "unexpected_content_type"
             )
         }
-        return validateSvg(envelope.second, response)
+        val sanitized = sanitizeSvg(envelope.second)
+        return validateSvg(sanitized, response)
     }
 
     fun parseStoredSvg(svg: String): ChatMessageContent {
         return validateSvg(svg, svg)
+    }
+
+    fun sanitizeSvg(svg: String): String {
+        var s = svg.trim()
+        if (s.isEmpty()) return s
+
+        // 1. Repair malformed filter attribute quotes: filter='url='glow'' -> filter='url(#glow)'
+        s = MALFORMED_FILTER_URL_REGEX.replace(s) { match ->
+            val id = match.groupValues[1]
+            "filter='url(#$id)'"
+        }
+        s = MALFORMED_FILTER_PLAIN_REGEX.replace(s) { match ->
+            val id = match.groupValues[1]
+            "filter='url(#$id)'"
+        }
+
+        // 2. Normalize hallucinated filter elements (e.g. feMergeIn -> feMerge)
+        s = FEMERGEIN_OPEN_REGEX.replace(s, "<feMerge>")
+        s = FEMERGEIN_CLOSE_REGEX.replace(s, "</feMerge>")
+
+        // 3. Balance tags and drop orphan closing tags
+        s = balanceSvgTags(s)
+        return s
+    }
+
+    private fun balanceSvgTags(svg: String): String {
+        if (!svg.startsWith("<svg", ignoreCase = true) ||
+            !svg.contains("</svg>", ignoreCase = true)
+        ) {
+            return svg
+        }
+
+        val stack = ArrayDeque<String>()
+        val result = StringBuilder()
+        var lastIndex = 0
+
+        TAG_REGEX.findAll(svg).forEach { match ->
+            // Append any non-tag text between matches
+            if (match.range.first > lastIndex) {
+                result.append(svg.substring(lastIndex, match.range.first))
+            }
+            lastIndex = match.range.last + 1
+
+            val isClosing = match.groupValues[1].isNotEmpty()
+            val rawName = match.groupValues[2]
+            val lowerName = rawName.lowercase()
+            val suffix = match.groupValues[3]
+            val isSelfClosing = suffix.trimEnd().endsWith("/")
+
+            if (isClosing) {
+                if (lowerName == "svg") {
+                    // Close all remaining open container tags before closing svg
+                    while (stack.isNotEmpty() && stack.last() != "svg") {
+                        val openTag = stack.removeLast()
+                        result.append("</$openTag>")
+                    }
+                    if (stack.isNotEmpty() && stack.last() == "svg") {
+                        stack.removeLast()
+                    }
+                    result.append("</$rawName>")
+                } else if (stack.contains(lowerName)) {
+                    // Close any intermediate open tags before this matching closing tag
+                    while (stack.isNotEmpty() && stack.last() != lowerName) {
+                        val openTag = stack.removeLast()
+                        result.append("</$openTag>")
+                    }
+                    stack.removeLastOrNull()
+                    result.append("</$rawName>")
+                } else {
+                    // Orphan closing tag without matching opening tag -> drop it
+                }
+            } else if (isSelfClosing) {
+                result.append(match.value)
+            } else if (lowerName in VOID_ELEMENTS) {
+                // Known SVG void element opened without self-closing slash -> ensure self-closing
+                val cleanSuffix = suffix.trimEnd()
+                result.append("<$rawName$cleanSuffix/>")
+            } else {
+                stack.addLast(lowerName)
+                result.append(match.value)
+            }
+        }
+
+        if (lastIndex < svg.length) {
+            result.append(svg.substring(lastIndex))
+        }
+
+        return result.toString()
     }
 
     private fun validateSvg(
@@ -190,4 +279,29 @@ object SvgMessageParser {
         pattern = "<\\s*(/?)\\s*([A-Za-z_][A-Za-z0-9_.:-]*)\\b([^>]*)>",
         option = RegexOption.DOT_MATCHES_ALL
     )
+
+    private val MALFORMED_FILTER_URL_REGEX = Regex(
+        pattern = "\\bfilter\\s*=\\s*['\"]url=\\s*['\"]?#?([a-zA-Z0-9_-]+)['\"]?['\"]",
+        option = RegexOption.IGNORE_CASE
+    )
+    private val MALFORMED_FILTER_PLAIN_REGEX = Regex(
+        pattern = "\\bfilter\\s*=\\s*['\"]([a-zA-Z0-9_-]+)['\"]",
+        option = RegexOption.IGNORE_CASE
+    )
+    private val FEMERGEIN_OPEN_REGEX = Regex(
+        pattern = "<\\s*feMergeIn\\b[^>]*>",
+        option = RegexOption.IGNORE_CASE
+    )
+    private val FEMERGEIN_CLOSE_REGEX = Regex(
+        pattern = "<\\s*/\\s*feMergeIn\\s*>",
+        option = RegexOption.IGNORE_CASE
+    )
+
+    private val VOID_ELEMENTS = setOf(
+        "rect", "circle", "ellipse", "line", "polyline", "polygon", "path", "stop", "image", "use",
+        "fegaussianblur", "feoffset", "feblend", "femergenode", "fecolormatrix", "fedropshadow",
+        "feflood", "fecomposite", "feturbulence", "fedisplacementmap", "femorphology",
+        "fepointlight", "fedistantlight", "fespotlight"
+    )
 }
+

@@ -1424,22 +1424,24 @@ class ChatViewModel(
         const val LM_MAX_NUM_TOKENS_STEP = 128
 
         val SVG_IMAGE_SYSTEM_INSTRUCTION = """
-            You are ${BuildConfig.APP_NAME}'s dedicated SVG image generator.
+            You are ${BuildConfig.APP_NAME}'s dedicated SVG vector graphic architect.
 
-            Convert the user's visual request into a single self-contained SVG image. Respond only
-            with a valid JSON object and do not wrap it in Markdown or add prose outside the JSON.
+            Convert the user's visual request into a single self-contained, valid SVG image.
+            Respond ONLY with a single raw JSON object. Do not wrap in Markdown fences (no ```json). Do not add any text before or after the JSON.
 
             Use this exact JSON structure:
             {
               "type": "svg_image",
-              "svg": "<svg xmlns='http://www.w3.org/2000/svg' width='1024' height='1024' viewBox='0 0 1024 1024'>...</svg>"
+              "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' width='100%' height='100%'>...</svg>"
             }
 
-            Rules:
-            - Use single quotes for every SVG/XML attribute inside the svg field. Do not output JSON-escaped
-              double quote sequences like \" inside svg; users must be able to copy the svg field value directly.
-            - Never append or repeat an opaque full-canvas element after foreground content. Before responding,
-              verify that no later background rectangle, path, or group can cover the requested illustration.
+            CRITICAL RULES TO PREVENT XML CORRUPTION:
+            - STRICTLY FORBIDDEN TAGS: NEVER generate <filter>, <feGaussianBlur>, <feBlend>, <feMerge>, or <feMergeIn>. Do NOT write filter='url(#...)'.
+            - LIGHTING & GLOW: Use <radialGradient>, <linearGradient>, or layered semi-transparent shapes with opacity='0.2' ~ opacity='0.6' instead of filters.
+            - FLATTENED STRUCTURE: Prefer direct coordinates on elements. Do not deeply nest <g> tags or use <g transform='translate(...)'>. Every shape tag (<rect/>, <circle/>, <ellipse/>, <path/>, <line/>, <stop/>) MUST be self-closing.
+            - XML ATTRIBUTES: Inside the svg string, ALL attributes MUST use single quotes ('). In url references, write fill='url(#gradId)' without internal quotes.
+            - COORDINATE BOUNDS: Canvas viewBox is '0 0 512 512' with center (256, 256). All coordinates must stay strictly within [0, 512].
+            - COLORS: Use valid 6-digit hex (#RRGGBB) or 3-digit hex (#RGB). Never output 5 or 7 hex digits.
         """.trimIndent()
 
         val CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION = """
