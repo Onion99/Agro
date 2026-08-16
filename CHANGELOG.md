@@ -5,14 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2026-08-16] - 针对 Gemma 4B 模型加固 SVG 与 8-bit BGM 提示词与解析器自愈能力
+## [2026-08-16] - 针对 Gemma 4B 模型加固 SVG、8-bit BGM 与 Lottie 动效提示词与解析器自愈能力
 - [修复] 重构 `ChatViewModel.SVG_IMAGE_SYSTEM_INSTRUCTION`，针对 4B 级小模型在发光/科技感生成时容易回忆破损语料的问题，增加对 `<filter>`、`<feMergeIn>` 等复杂滤镜标签的绝对负向禁令，强制改用渐变叠加与半透明图元实现光效。
 - [修复] 在 `SVG_IMAGE_SYSTEM_INSTRUCTION` 中强化扁平化坐标约束与单标签自闭合规范，禁止深层 `<g>` 嵌套，消除小模型自回归末尾标签栈失衡与 `</g>` 连环溢出问题。
 - [修复] 重构 `ChatViewModel.CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION`，补充 4/4 拍节拍时值算术指引（1 小节 = 4x L4 或 8x L8）、各通道音域与职责规范，以及强制轨道与顶层 `bpm` 一致的同步约束。
+- [修复] 重构 `ChatViewModel.LOTTIE_ANIMATION_SYSTEM_INSTRUCTION`，补充局部坐标系（禁止 shape 内部写 `[120,120]` 造成二次坐标偏移）、尺寸范围限制（禁止输出 1000px 巨型遮罩）以及关键帧插值规则（`s` 与 `e` 不等），从根本上消除“黑屏/空洞背景”现象。
 - [新增] 在 `SvgMessageParser` 中引入 `sanitizeSvg` 自动容错清洗流水线，包含 `filter='url='...'` 嵌套引号修复、破损 filter 标签归一化、孤立多余 `</g>` 自动过滤剔除以及未闭合容器元素自动平衡闭合。
 - [新增] 在 `ChiptuneBgmMessageParser` 中引入 `sanitizeBgmPayload`，支持 Markdown 代码块提取、注释/尾随逗号清理、轨道 `T<bpm>` 自动同步对齐与重复块语法规范化。
+- [优化] 增强 `LottieJsonSanitizer`，支持畸形孤立双引号行（`",`）清理、零/负数图元退化尺寸（如 `s=[60, 0]` 扁平图元）自动修复为可视圆形、二次坐标偏移自动复位（`p=[120,120]` $\to$ `[0,0]`）、超大图元（$\ge 400\text{px}$）自动压制、关键帧 $s \to e$ 自动补全插值及极低不透明度（$o < 20$）自愈提升。
 - [优化] 增强 `ChiptuneBgmMmlParser.parseTrack`，当 4B 模型生成的音符时值轻微超出循环小节时自动平滑截断至 `requiredTicks`，避免因节拍微小漂移抛出 `track_exceeds_loop_length` 异常。
-- [测试] 新增 `SvgMessageParserTest.healsGemmaMalformedSvgResponse` 与 `ChiptuneBgmMmlParserTest.healsMarkdownWrappedAndTempoMismatchedBgmResponse` 等回归测试，验证破损 SVG 与带瑕疵的 BGM 生成响应均可稳定自愈并渲染。
+- [测试] 覆盖并运行 `SvgMessageParserTest`、`ChiptuneBgmMmlParserTest` 与 `LottieMessageParserTest`（包含 `repairsGemmaBlankScreenChipFlowJson` 及 `repairsGemmaWaterDropJsonWithStrayQuotesAndZeroDimension` 回归测试），验证 SVG、8-bit BGM 及 Lottie 动效三类生成响应均可稳定解析与渲染。
 - [文档] 同步更新 `docs/specs/svg-image-library-card.md`，记录面向 4B 模型的防幻觉约束与解析器自愈机制。
 
 ## [2026-08-10] - 修复 Windows Android Bazel host C++ 标准参数

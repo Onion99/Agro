@@ -90,6 +90,95 @@ class LottieMessageParserTest {
         assertNotNull(LottieComposition.parse(lottie.json))
     }
 
+    @Test
+    fun repairsGemmaBlankScreenChipFlowJson() {
+        val payload = """{"v":"5.7.4","fr":30,"ip":0,"op":90,"w":240,"h":240,"nm":"Tech Chip Flow","ddd":0,"loop":true,"assets":[],"layers":[{"ddd":0,"ind":1,"ty":4,"nm":"Chip Body","sr":1,"ao":0,"st":0,"bm":0,"ip":0,"op":90,"ks":{"p":{"a":0,"k":[120.0,120.0,0.0]},"a":{"a":0,"k":[0,0,0]},"s":{"a":1,"k":[{"t":0,"s":[100,100,100],"e":[100,100,100]},{"t":30,"s":[110,110,110],"e":[110,110,110]},{"t":60,"s":[100,100,100],"e":[100,100,100]},{"t":90,"s":[100,100,100],"e":[100,100,100]}]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}},"shapes":[{"ty":"gr","nm":"Chip Group","it":[{"ty":"el","nm":"Chip Body","p":{"a":0,"k":[120,120]},"s":{"a":0,"k":[1000,1000]},"d":1},{"ty":"fl","nm":"Chip Fill","c":{"a":0,"k":[0.1,0.1,0.1,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]}]},{"ddd":0,"ind":2,"ty":4,"nm":"Data Flow","sr":1,"ao":0,"st":0,"bm":0,"ip":0,"op":90,"ks":{"p":{"a":0,"k":[120.0,120.0,0.0]},"a":{"a":0,"k":[0,0,0]},"s":{"a":0,"k":[1000,100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":10}},"shapes":[{"ty":"gr","nm":"Flow Group","it":[{"ty":"el","nm":"Flow Line","p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[150,50]},"d":1},{"ty":"fl","nm":"Flow Fill","c":{"a":0,"k":[0.38,0.7,1,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]}]}]}"""
+
+        val result = LottieMessageParser.parseCompletedResponse(payload)
+        val lottie = assertIs<ChatMessageContent.LottieAnimation>(result, result.toString())
+        assertEquals("Tech Chip Flow", lottie.title)
+        assertEquals(30, lottie.fps)
+        assertEquals(3000L, lottie.durationMs)
+        assertNotNull(LottieComposition.parse(lottie.json))
+    }
+
+    @Test
+    fun repairsGemmaWaterDropJsonWithStrayQuotesAndZeroDimension() {
+        val payload = """
+            {
+              "v": "5.7.4",
+              "fr": 30,
+              "ip": 0,
+              "op": 60,
+              "w": 240,
+              "h": 240,
+              "nm": "Water Drop",
+              "ddd": 0,
+              "loop": true,
+              "assets": [],
+              "layers": [
+                {
+                  "ddd": 0,
+                  "ind": 1,
+                  "ty": 4,
+                  "nm": "Drop Container",
+                  "sr": 1,
+                  "ks": {
+                    "o": { "a": 0, "k": 100 },
+                    "r": { "a": 0, "k": 0 },
+                    "p": { "a": 0, "k": [120, 120, 0] },
+                    "a": { "a": 0, "k": [0, 0, 0] },
+                    "s": {
+                      "a": 1,
+                      "k": [
+                        { "t": 0, "s": [100, 100, 100], "e": [100, 100, 100] },
+                        { "t": 30, "s": [110, 110, 110], "e": [100, 100, 100] }
+                      ]
+                    }
+                  },
+                  "ao": 0,
+                  "shapes": [
+                    {
+                      "ty": "gr",
+                      "nm": "Drop Shape",
+            ",
+                      "it": [
+                        {
+                          "ty": "el",
+                          "nm": "Drop Path",
+                        "p": { "a": 0, "k": [0, 0]},
+                        "s": { "a": 0, "k": [60, 0]},
+                        "d": 1
+                      },
+                        {
+                          "ty": "fl",
+                          "nm": "Drop Fill",
+                          "c": { "a": 0, "k": [0.1, 0.4, 0.9, 1]},
+                          "o": { "a": 0, "k": 1000},
+                          "r": 1
+                        }
+                      ]
+                    }
+                  ],
+                  "ip": 0,
+                  "op": 60,
+                  "st": 0,
+                  "bm": 0
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val result = LottieMessageParser.parseCompletedResponse(payload)
+        val lottie = assertIs<ChatMessageContent.LottieAnimation>(result, result.toString())
+        assertEquals("Water Drop", lottie.title)
+        assertEquals(30, lottie.fps)
+        assertEquals(2000L, lottie.durationMs)
+        assertNotNull(LottieComposition.parse(lottie.json))
+    }
+
+
+
 
     private fun legacyIntentSpecJson(): String {
         return """

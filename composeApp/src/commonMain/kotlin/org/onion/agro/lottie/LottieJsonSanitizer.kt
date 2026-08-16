@@ -56,6 +56,8 @@ object LottieJsonSanitizer {
     private val strayQuotesBeforeKeyRegex = Regex(
         """([,{]\s*)(?:["']\s*)+([A-Za-z_][A-Za-z0-9_-]*)\s*"?\s*:"""
     )
+    private val strayQuoteCommaBeforeKeyRegex = Regex(""",\s*"\s*,\s*(?="[A-Za-z_])""")
+    private val isolatedQuoteCommaLineRegex = Regex("""(?m)^\s*"\s*,\s*$""")
     private val malformedScaleKeyRegex = Regex("""([,{]\s*)(["']?k["']?)(?=\s*-?(?:\d|\.\d))""")
     private val unquotedValueRegex = Regex(
         """(:\s*)([A-Za-z_][A-Za-z0-9_.-]*)(?=\s*[,}\]])"""
@@ -103,7 +105,8 @@ object LottieJsonSanitizer {
      * never rewritten as a property.
      */
     private fun repairMalformedPropertySyntax(raw: String): String {
-        var repaired = raw
+        var repaired = isolatedQuoteCommaLineRegex.replace(raw, "")
+        repaired = strayQuoteCommaBeforeKeyRegex.replace(repaired, ", ")
         repeat(2) {
             repaired = quotedNumericValueRegex.replace(repaired) { match ->
                 "${match.groupValues[1]}${match.groupValues[2]}"
@@ -435,28 +438,56 @@ object LottieJsonSanitizer {
             val k = element["k"]
             val isKeyframeArray = k is JsonArray && k.isNotEmpty() && k.all { it is JsonObject }
             if (a == 1 && isKeyframeArray) {
-                val sanitizedKf = (k as JsonArray).map { kf ->
-                    if (kf is JsonObject) {
-                        buildJsonObject {
-                            kf.forEach { (key, valElement) ->
-                                if (key == "s" && valElement is JsonArray) {
-                                    val sList = valElement.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
-                                    val maxVal = sList.maxOrNull() ?: 100f
-                                    val mult = if (maxVal <= 10f && maxVal > 0f) 100f else 1f
-                                    val sx = (sList.getOrNull(0) ?: 100f) * mult
-                                    val sy = (sList.getOrNull(1) ?: sx) * mult
-                                    val sz = (sList.getOrNull(2) ?: 100f) * mult
-                                    put("s", buildJsonArray {
-                                        add(formatNumber(sx))
-                                        add(formatNumber(sy))
-                                        add(formatNumber(sz))
-                                    })
-                                } else {
-                                    put(key, valElement)
-                                }
+                val kfList = (k as JsonArray).filterIsInstance<JsonObject>()
+                val sanitizedKf = kfList.mapIndexed { idx, kf ->
+                    val sList = (kf["s"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }.orEmpty()
+                    val eList = (kf["e"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }.orEmpty()
+
+                    val maxVal = sList.maxOrNull() ?: 100f
+                    val mult = if (maxVal in 0.0001f..10f) 100f else if (maxVal >= 500f) 0.1f else 1f
+                    val sx = (sList.getOrNull(0) ?: 100f) * mult
+                    val sy = (sList.getOrNull(1) ?: sx) * mult
+                    val sz = (sList.getOrNull(2) ?: 100f) * mult
+
+                    val nextKf = kfList.getOrNull(idx + 1)
+                    val nextSList = (nextKf?.get("s") as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }.orEmpty()
+                    val (ex, ey, ez) = if (nextSList.isNotEmpty() && (eList.isEmpty() || eList == sList)) {
+                        val nextMax = nextSList.maxOrNull() ?: 100f
+                        val nextMult = if (nextMax in 0.0001f..10f) 100f else if (nextMax >= 500f) 0.1f else 1f
+                        Triple(
+                            (nextSList.getOrNull(0) ?: 100f) * nextMult,
+                            (nextSList.getOrNull(1) ?: nextSList.getOrNull(0) ?: 100f) * nextMult,
+                            (nextSList.getOrNull(2) ?: 100f) * nextMult
+                        )
+                    } else if (eList.isNotEmpty()) {
+                        val eMax = eList.maxOrNull() ?: 100f
+                        val eMult = if (eMax in 0.0001f..10f) 100f else if (eMax >= 500f) 0.1f else 1f
+                        Triple(
+                            (eList.getOrNull(0) ?: 100f) * eMult,
+                            (eList.getOrNull(1) ?: eList.getOrNull(0) ?: 100f) * eMult,
+                            (eList.getOrNull(2) ?: 100f) * eMult
+                        )
+                    } else {
+                        Triple(sx, sy, sz)
+                    }
+
+                    buildJsonObject {
+                        kf.forEach { (key, valElement) ->
+                            if (key != "s" && key != "e") {
+                                put(key, valElement)
                             }
                         }
-                    } else kf
+                        put("s", buildJsonArray {
+                            add(formatNumber(sx))
+                            add(formatNumber(sy))
+                            add(formatNumber(sz))
+                        })
+                        put("e", buildJsonArray {
+                            add(formatNumber(ex))
+                            add(formatNumber(ey))
+                            add(formatNumber(ez))
+                        })
+                    }
                 }
                 return buildJsonObject {
                     element.forEach { (key, valElement) ->
@@ -468,7 +499,7 @@ object LottieJsonSanitizer {
                 val scales = k.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
                 if (scales.isNotEmpty()) {
                     val maxVal = scales.maxOrNull() ?: 100f
-                    val multiplier = if (maxVal <= 10f && maxVal > 0f) 100f else 1f
+                    val multiplier = if (maxVal in 0.0001f..10f) 100f else if (maxVal >= 500f) 0.1f else 1f
                     val sx = (scales.getOrNull(0) ?: 100f) * multiplier
                     val sy = (scales.getOrNull(1) ?: sx) * multiplier
                     val sz = (scales.getOrNull(2) ?: 100f) * multiplier
@@ -915,8 +946,13 @@ object LottieJsonSanitizer {
             if (k is JsonArray) {
                 val sizes = k.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
                 if (sizes.size >= 2) {
-                    val sx = sizes[0] * scaleFactorX
-                    val sy = sizes[1] * scaleFactorY
+                    val rawSx = sizes[0] * scaleFactorX
+                    val rawSy = sizes[1] * scaleFactorY
+                    // Zero/negative dimension auto-repair: if height or width is 0, repair to matching dimension or minimum visible size
+                    val validSx = if (rawSx <= 0f) (if (rawSy > 0f) rawSy else 60f) else rawSx
+                    val validSy = if (rawSy <= 0f) validSx else rawSy
+                    val sx = if (validSx >= 400f) 180f else validSx.coerceIn(10f, 300f)
+                    val sy = if (validSy >= 400f) 180f else validSy.coerceIn(10f, 300f)
                     return buildJsonObject {
                         element.forEach { (key, valElement) ->
                             if (key == "k") put("k", buildJsonArray {
@@ -937,8 +973,14 @@ object LottieJsonSanitizer {
             if (k is JsonArray) {
                 val pos = k.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
                 if (pos.size >= 2) {
-                    val px = pos[0] * scaleFactorX
-                    val py = pos[1] * scaleFactorY
+                    var px = pos[0] * scaleFactorX
+                    var py = pos[1] * scaleFactorY
+                    // Double-offset auto-repair: if local shape p is [120, 120] (canvas center mistaken as local origin),
+                    // reset to [0, 0] so it stays in the center of its layer
+                    if (abs(px - 120f) < 2f && abs(py - 120f) < 2f) {
+                        px = 0f
+                        py = 0f
+                    }
                     return buildJsonObject {
                         element.forEach { (key, valElement) ->
                             if (key == "k") put("k", buildJsonArray {
@@ -1000,7 +1042,9 @@ object LottieJsonSanitizer {
             val k = opacityElement["k"]
             if (k is JsonPrimitive) {
                 val value = k.floatOrNull ?: 100f
-                val clamped = if (value > 100f) 100f else value.coerceAtLeast(0f)
+                // Normalize 0.0..1.0 float opacity to 0..100, and boost near-invisible <20 opacity to readable levels
+                val normalized = if (value in 0.0001f..1.0f) value * 100f else value
+                val clamped = if (normalized > 100f) 100f else if (normalized in 0.0001f..20f) 80f else normalized.coerceAtLeast(0f)
                 return buildJsonObject {
                     opacityElement.forEach { (key, valElement) ->
                         if (key == "k") put("k", formatNumber(clamped)) else put(key, valElement)
