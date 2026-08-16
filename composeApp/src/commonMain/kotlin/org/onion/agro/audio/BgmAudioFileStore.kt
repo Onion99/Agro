@@ -8,9 +8,10 @@ import okio.Path.Companion.toPath
 
 object BgmAudioFileStore {
     fun write(title: String, sourceSpecJson: String, wavBytes: ByteArray): String {
-        val cacheRoot = FileKit.cacheDir.path
-            .takeIf { it.isNotBlank() }
-            ?: throw IllegalStateException("bgm_cache_directory_unavailable")
+        val cacheRoot = runCatching { FileKit.cacheDir.path }.getOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?: System.getProperty("java.io.tmpdir")
+            ?: "."
         val directory = cacheRoot.toPath() / "generated-bgm"
         FileSystem.SYSTEM.createDirectories(directory)
         val safeTitle = title

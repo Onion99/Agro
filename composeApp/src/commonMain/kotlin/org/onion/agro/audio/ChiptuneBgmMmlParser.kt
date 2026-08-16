@@ -97,70 +97,83 @@ object ChiptuneBgmMmlParser {
             cursor.skipSeparators()
             if (!cursor.hasNext()) break
 
+            var duration = 0
             when (val token = cursor.readUppercase()) {
                 '>' -> {
                     requireBgm(channel != BgmChannel.NOISE, "invalid_noise_token:>")
-                    octave += 1
-                    requireBgm(octave in 1..7, "octave_out_of_range")
+                    octave = (octave + 1).coerceIn(1, 7)
                 }
                 '<' -> {
                     requireBgm(channel != BgmChannel.NOISE, "invalid_noise_token:<")
-                    octave -= 1
-                    requireBgm(octave in 1..7, "octave_out_of_range")
+                    octave = (octave - 1).coerceIn(1, 7)
                 }
                 'O' -> {
                     requireBgm(channel != BgmChannel.NOISE, "invalid_noise_token:O")
-                    octave = cursor.readRequiredNumber("missing_octave")
-                    requireBgm(octave in 1..7, "octave_out_of_range")
+                    octave = cursor.readRequiredNumber("missing_octave").coerceIn(1, 7)
                 }
                 'L' -> {
-                    defaultLength = cursor.readRequiredNumber("missing_default_length")
-                    requireBgm(defaultLength in SUPPORTED_LENGTHS, "unsupported_note_length")
+                    val len = cursor.readRequiredNumber("missing_default_length")
+                    requireBgm(len in SUPPORTED_LENGTHS, "unsupported_note_length")
+                    defaultLength = len
                 }
                 'V' -> {
                     requireBgm(channel != BgmChannel.NOISE, "invalid_noise_token:V")
-                    volume = cursor.readRequiredNumber("missing_volume")
-                    requireBgm(volume in 0..15, "volume_out_of_range")
+                    volume = cursor.readRequiredNumber("missing_volume").coerceIn(0, 15)
                 }
                 'T' -> {
                     val tempo = cursor.readNumberOrNull()
                     if (tempo != null) {
                         requireBgm(tempo == bpm, "track_tempo_mismatch")
                     } else if (channel == BgmChannel.NOISE) {
-                        val duration = cursor.readDurationTicks(defaultLength)
+                        duration = cursor.readDurationTicks(defaultLength)
                         events += BgmEvent.drum(currentTick, duration, BgmDrum.TOM, volume)
-                        currentTick += duration
                     } else {
                         throw BgmParseException("missing_tempo")
                     }
                 }
                 'R', 'P' -> {
-                    val duration = cursor.readDurationTicks(defaultLength)
+                    duration = cursor.readDurationTicks(defaultLength)
                     events += BgmEvent.rest(currentTick, duration)
-                    currentTick += duration
                 }
                 'K', 'S', 'H' -> {
                     requireBgm(channel == BgmChannel.NOISE, "invalid_melodic_token:$token")
-                    val duration = cursor.readDurationTicks(defaultLength)
+                    duration = cursor.readDurationTicks(defaultLength)
                     val drum = when (token) {
                         'K' -> BgmDrum.KICK
                         'S' -> BgmDrum.SNARE
                         else -> BgmDrum.HIHAT
                     }
                     events += BgmEvent.drum(currentTick, duration, drum, volume)
-                    currentTick += duration
                 }
                 in 'A'..'G' -> {
                     requireBgm(channel != BgmChannel.NOISE, "invalid_noise_token:$token")
                     val accidental = cursor.readAccidental()
-                    val duration = cursor.readDurationTicks(defaultLength)
+                    duration = cursor.readDurationTicks(defaultLength)
                     val midiNote = midiNote(token, accidental, octave)
                     events += BgmEvent.note(currentTick, duration, midiNote, volume)
-                    currentTick += duration
                 }
                 else -> throw BgmParseException("invalid_mml_token:$token")
             }
-            requireBgm(currentTick <= requiredTicks, "track_exceeds_loop_length:${track.channel}")
+
+            if (duration > 0) {
+                if (currentTick + duration >= requiredTicks) {
+                    val excess = (currentTick + duration) - requiredTicks
+                    val clampedDuration = duration - excess
+                    if (clampedDuration > 0 && events.isNotEmpty()) {
+                        val last = events.removeLast()
+                        events += BgmEvent(
+                            startTick = last.startTick,
+                            durationTicks = clampedDuration,
+                            midiNote = last.midiNote,
+                            drum = last.drum,
+                            volume = last.volume
+                        )
+                    }
+                    currentTick = requiredTicks
+                    break
+                }
+                currentTick += duration
+            }
         }
 
         requireBgm(events.isNotEmpty(), "empty_track:${track.channel}")

@@ -1447,16 +1447,15 @@ class ChatViewModel(
         val CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION = """
             You are ${BuildConfig.APP_NAME}'s dedicated 8-bit chiptune BGM composer.
 
-            Output exactly one raw valid JSON object containing a loopable 8-bit BGM score whose
-            tracks are written in Music Macro Language. Do not use Markdown fences or add prose.
-            Do not output WAV, PCM samples, base64 audio, MIDI, file paths, or scripts.
+            Compose a loopable 8-bit BGM score in Music Macro Language (MML) matching the user's mood or game scene.
+            Respond ONLY with a single raw JSON object. Do not wrap in Markdown fences (no ```json). Do not output any text before or after the JSON.
 
-            Use this JSON structure exactly:
+            Use this exact JSON structure:
             {
               "type": "chiptune_bgm_mml",
               "schemaVersion": 1,
-              "title": "BGM Title",
-              "seed": 12345,
+              "title": "Retro Adventure",
+              "seed": 48271,
               "bpm": 140,
               "timeSignature": "4/4",
               "loopBars": 2,
@@ -1467,37 +1466,47 @@ class ChatViewModel(
                 {
                   "channel": "pulse1",
                   "dutyCycle": 0.5,
-                  "mml": "T140 O5 L4 V12 C E G >C | <G E C D"
+                  "mml": "T140 O5 L8 V12 C E G >C <B A G E | C E G A G E D R"
                 },
                 {
                   "channel": "pulse2",
                   "dutyCycle": 0.25,
-                  "mml": "T140 O4 L4 V9 E G C G | F A C A"
+                  "mml": "T140 O4 L8 V9 E G B >D <G B >D <B | E G B >C <B G F# R"
                 },
                 {
                   "channel": "triangle",
-                  "mml": "T140 O3 L4 C C G G | A A G G"
+                  "dutyCycle": 0.5,
+                  "mml": "T140 O3 L4 C G E G | A E F G"
                 },
                 {
                   "channel": "noise",
+                  "dutyCycle": 0.5,
                   "mml": "T140 L8 [K R H R S R H R]x2"
                 }
               ]
             }
 
-            Rules:
-            - type must be "chiptune_bgm_mml" and schemaVersion must be 1.
-            - bpm must be 60..200, timeSignature must be "4/4", and loopBars must be 2..16.
-            - sampleRate must be 22050 unless the user asks for 11025 or 44100; bitDepth must be 8.
-            - Use 1..4 unique tracks and prefer pulse1, pulse2, triangle, and noise.
-            - pulse1 dutyCycle must be 0.5; pulse2 dutyCycle must be 0.25 or 0.125.
-            - A track T value, when present, must equal the top-level bpm.
-            - Melodic tracks may use O1..O7, L1/L2/L4/L8/L16/L32, V0..V15, A..G,
-              # sharps, - flats, R/P rests, octave shifts < and >, |, and [ ... ]xN repeats.
-            - The triangle track should use O2 or O3 for a clean bass line.
-            - The noise track may use K, S, H, T, R, P, L8/L16, |, and [ ... ]xN repeats.
-            - Compose exactly loopBars measures in 4/4 and make the phrase loop seamlessly.
-            - Do not include comments, trailing commas, or text outside the JSON object.
+            CRITICAL CHIPTUNE RULES:
+            1. CHANNEL ROLES & OCTAVES:
+               - pulse1 (Lead Melody): dutyCycle MUST be 0.5. Range O4..O6, Volume V10..V14.
+               - pulse2 (Harmony/Counter-line): dutyCycle MUST be 0.25. Range O3..O5, Volume V7..V10.
+               - triangle (Bass Line): dutyCycle 0.5. Range O2..O3 (deep smooth bass).
+               - noise (Drums/Percussion): dutyCycle 0.5. Use K (Kick), S (Snare), H (Hi-hat), T (Tom), R (Rest). NEVER use note letters A-G in noise track.
+
+            2. TIME SIGNATURE & BAR TIMING MATH (CRITICAL):
+               - In 4/4 time: 1 bar = 4x L4 notes OR 8x L8 notes OR 16x L16 notes.
+               - For loopBars: 2 -> write exactly 2 bars (8x L4 or 16x L8) separated by '|'.
+               - For loopBars: 4 -> write exactly 4 bars separated by '|'.
+               - Every track must have the exact same total duration to loop seamlessly.
+
+            3. TEMPO SYNCHRONIZATION:
+               - If a track begins with 'T<number>', that number MUST be identical to the top-level "bpm". (e.g. "bpm": 140 -> "T140 ...").
+
+            4. MML SYNTAX & REPEATS:
+               - Notes: C, D, E, F, G, A, B. Sharps (# or +), Flats (-).
+               - Lengths: L1, L2, L4, L8, L16, L32. Dotted note: L4. (1.5x length).
+               - Rests: R or P. Octave shifts: > (up one octave), < (down one octave).
+               - Repeats: [ ... ]x2 or [ ... ]x4. Do NOT use * 2 or parentheses.
         """.trimIndent()
 
         val LOTTIE_ANIMATION_SYSTEM_INSTRUCTION = """
