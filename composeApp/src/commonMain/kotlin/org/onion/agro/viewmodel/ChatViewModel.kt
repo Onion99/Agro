@@ -1515,7 +1515,45 @@ class ChatViewModel(
             Generate a single valid, lightweight, self-contained Native Lottie JSON animation.
             Respond ONLY with a single raw JSON object. Do not wrap in Markdown fences (no ```json). Do not output any conversational prose.
 
-            SMALLEST WORKING TEMPLATE (Follow this exact schema):
+            CANVAS & TIMELINE SPECS:
+            - Root: "w": 240, "h": 240, "fr": 30, "ip": 0, "op": 60 (2s loop) or "op": 90 (3s loop), "ddd": 0, "loop": true, "assets": [].
+            - Layers: "ind": 1..N, "ty": 4 (shape layer), "sr": 1, "ao": 0, "st": 0, "bm": 0, "ip": 0, "op": 60, "ddd": 0.
+            - Inside shapes: "ty": "gr", "it": [<geometry>, <paint>, <transform "tr">].
+
+            CRITICAL MOTION RULES FOR 4B MODELS:
+            1. MANDATORY MOTION ("a": 1):
+               - NEVER output completely static JSON where all properties have "a": 0.
+               - You MUST animate at least one property with 2 to 3 chronological keyframes ("k": [{ "t": 0, ... }, ...]).
+               - Choose the motion archetype matching the user request:
+                 * TRANSLATION / FALLING / SLIDING (Raindrops, Snow, Falling Leaves, Bouncing Ball, Rocket, Moving Object):
+                   Animate position `ks.p` along Y axis (e.g. from top [120, 20, 0] to bottom [120, 220, 0]) and animate opacity `ks.o` (0 -> 100 -> 0).
+                 * ROTATION / SPIN (Loading Spinner, Gear, Radar, Orbiting Planet, Sun Rays, Fan):
+                   Animate rotation `ks.r` from 0 to 360 (e.g. { "t": 0, "s": [0], "e": [360] }, { "t": 60, "s": [360], "e": [360] }).
+                 * SCALE / PULSE / POP (Heartbeat, Alert Icon, Breathing Circle, Star Sparkle, Badge Pop):
+                   Animate scale `ks.s` (e.g. 80 -> 120 -> 80) with matching start/end values for seamless loop.
+                 * OPACITY / BLINK / FADE (Glow, Blinking Light, Flash, Strobe):
+                   Animate opacity `ks.o` (e.g. 100 -> 20 -> 100 or 0 -> 100 -> 0).
+                 * PATH DRAW (Checkmark, Progress Ring, Line Drawing):
+                   Use Trim Path `ty: "tm"` with animated end percentage `"e"` (0 -> 100).
+
+            2. KEYFRAME CONTINUITY (s -> e):
+               - Keyframe format: { "t": <frame>, "s": [<startValues>], "e": [<endValues>] }.
+               - For keyframe i, "e" MUST equal keyframe i+1's "s".
+               - For seamless loop, values at t=0 and t=op must match (e.g. t=0 s:[80] -> t=30 s:[120] -> t=60 s:[80]).
+
+            3. VISIBILITY, VIVID COLORS & SIZES:
+               - Foreground shapes must use bright, vivid RGBA colors ("c": { "a": 0, "k": [R, G, B, 1] }).
+                 Examples: Rain/Water Blue [0.22, 0.65, 1.0, 1], Cyan [0.0, 0.85, 0.95, 1], Orange [1.0, 0.5, 0.1, 1], Green [0.15, 0.82, 0.45, 1], Purple [0.65, 0.35, 0.95, 1].
+                 NEVER use muddy dark colors where all R,G,B < 0.2.
+               - Shapes must be clearly visible on the 240x240 canvas:
+                 * Raindrops / Particles: Elongated ellipse with width 8..14 and height 24..45 (e.g. "s": { "a": 0, "k": [10, 30] }).
+                 * Circles / Icons: Diameter 60..120 (e.g. "s": { "a": 0, "k": [90, 90] }).
+                 * Rectangles / Cards: Width/height 60..140.
+
+            4. MULTI-ELEMENT & PARTICLE PATTERNS:
+               - For rain, snow, or particle streams, create 2 to 3 layers with different X coordinates (e.g. X=70, X=120, X=170) and staggered falling times (e.g. start at t=0, t=20) so multiple items fall continuously across the screen.
+
+            FALLING MOTION ARCHETYPE (Follow this structure for Rain / Falling Particles):
             {
               "v": "5.7.4",
               "fr": 30,
@@ -1523,7 +1561,7 @@ class ChatViewModel(
               "op": 60,
               "w": 240,
               "h": 240,
-              "nm": "Breathing Circle",
+              "nm": "Falling Rain",
               "ddd": 0,
               "loop": true,
               "assets": [],
@@ -1532,80 +1570,145 @@ class ChatViewModel(
                   "ddd": 0,
                   "ind": 1,
                   "ty": 4,
-                  "nm": "Circle Layer",
+                  "nm": "Raindrop 1",
                   "sr": 1,
+                  "ao": 0,
+                  "st": 0,
+                  "bm": 0,
+                  "ip": 0,
+                  "op": 60,
                   "ks": {
-                    "o": { "a": 0, "k": 100 },
+                    "p": {
+                      "a": 1,
+                      "k": [
+                        { "t": 0, "s": [80, 20, 0], "e": [80, 220, 0] },
+                        { "t": 60, "s": [80, 220, 0], "e": [80, 220, 0] }
+                      ]
+                    },
+                    "a": { "a": 0, "k": [0, 0, 0] },
+                    "s": { "a": 0, "k": [100, 100, 100] },
                     "r": { "a": 0, "k": 0 },
+                    "o": {
+                      "a": 1,
+                      "k": [
+                        { "t": 0, "s": [0], "e": [100] },
+                        { "t": 10, "s": [100], "e": [100] },
+                        { "t": 50, "s": [100], "e": [0] },
+                        { "t": 60, "s": [0], "e": [0] }
+                      ]
+                    }
+                  },
+                  "shapes": [
+                    {
+                      "ty": "gr",
+                      "nm": "Drop Group",
+                      "it": [
+                        { "ty": "el", "nm": "Drop Shape", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [10, 30] }, "d": 1 },
+                        { "ty": "fl", "nm": "Drop Fill", "c": { "a": 0, "k": [0.22, 0.65, 1.0, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 },
+                        { "ty": "tr", "p": { "a": 0, "k": [0, 0] }, "a": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [100, 100] }, "r": { "a": 0, "k": 0 }, "o": { "a": 0, "k": 100 } }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "ddd": 0,
+                  "ind": 2,
+                  "ty": 4,
+                  "nm": "Raindrop 2",
+                  "sr": 1,
+                  "ao": 0,
+                  "st": 0,
+                  "bm": 0,
+                  "ip": 0,
+                  "op": 60,
+                  "ks": {
+                    "p": {
+                      "a": 1,
+                      "k": [
+                        { "t": 20, "s": [160, 20, 0], "e": [160, 220, 0] },
+                        { "t": 60, "s": [160, 150, 0], "e": [160, 150, 0] }
+                      ]
+                    },
+                    "a": { "a": 0, "k": [0, 0, 0] },
+                    "s": { "a": 0, "k": [100, 100, 100] },
+                    "r": { "a": 0, "k": 0 },
+                    "o": {
+                      "a": 1,
+                      "k": [
+                        { "t": 0, "s": [0], "e": [0] },
+                        { "t": 20, "s": [0], "e": [100] },
+                        { "t": 55, "s": [100], "e": [0] },
+                        { "t": 60, "s": [0], "e": [0] }
+                      ]
+                    }
+                  },
+                  "shapes": [
+                    {
+                      "ty": "gr",
+                      "nm": "Drop Group",
+                      "it": [
+                        { "ty": "el", "nm": "Drop Shape", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [8, 26] }, "d": 1 },
+                        { "ty": "fl", "nm": "Drop Fill", "c": { "a": 0, "k": [0.35, 0.75, 1.0, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 },
+                        { "ty": "tr", "p": { "a": 0, "k": [0, 0] }, "a": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [100, 100] }, "r": { "a": 0, "k": 0 }, "o": { "a": 0, "k": 100 } }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+
+            PULSE / ROTATION MOTION ARCHETYPE (Follow this structure for Pulse / Spin / Center Icons):
+            {
+              "v": "5.7.4",
+              "fr": 30,
+              "ip": 0,
+              "op": 60,
+              "w": 240,
+              "h": 240,
+              "nm": "Pulse Circle",
+              "ddd": 0,
+              "loop": true,
+              "assets": [],
+              "layers": [
+                {
+                  "ddd": 0,
+                  "ind": 1,
+                  "ty": 4,
+                  "nm": "Pulse Layer",
+                  "sr": 1,
+                  "ao": 0,
+                  "st": 0,
+                  "bm": 0,
+                  "ip": 0,
+                  "op": 60,
+                  "ks": {
                     "p": { "a": 0, "k": [120, 120, 0] },
                     "a": { "a": 0, "k": [0, 0, 0] },
                     "s": {
                       "a": 1,
                       "k": [
-                        { "t": 0, "s": [90, 90, 100], "e": [110, 110, 100] },
-                        { "t": 30, "s": [110, 110, 100], "e": [90, 90, 100] },
-                        { "t": 60, "s": [90, 90, 100], "e": [90, 90, 100] }
+                        { "t": 0, "s": [85, 85, 100], "e": [115, 115, 100] },
+                        { "t": 30, "s": [115, 115, 100], "e": [85, 85, 100] },
+                        { "t": 60, "s": [85, 85, 100], "e": [85, 85, 100] }
                       ]
-                    }
+                    },
+                    "r": { "a": 0, "k": 0 },
+                    "o": { "a": 0, "k": 100 }
                   },
-                  "ao": 0,
                   "shapes": [
                     {
                       "ty": "gr",
                       "nm": "Circle Group",
                       "it": [
-                        {
-                          "ty": "el",
-                          "nm": "Circle Path",
-                          "p": { "a": 0, "k": [0, 0] },
-                          "s": { "a": 0, "k": [100, 100] },
-                          "d": 1
-                        },
-                        {
-                          "ty": "fl",
-                          "nm": "Circle Fill",
-                          "c": { "a": 0, "k": [0.38, 0.40, 0.95, 1] },
-                          "o": { "a": 0, "k": 100 },
-                          "r": 1
-                        },
-                        {
-                          "ty": "tr",
-                          "p": { "a": 0, "k": [0, 0] },
-                          "a": { "a": 0, "k": [0, 0] },
-                          "s": { "a": 0, "k": [100, 100] },
-                          "r": { "a": 0, "k": 0 },
-                          "o": { "a": 0, "k": 100 }
-                        }
+                        { "ty": "el", "nm": "Circle", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [90, 90] }, "d": 1 },
+                        { "ty": "fl", "nm": "Fill", "c": { "a": 0, "k": [0.38, 0.45, 0.95, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 },
+                        { "ty": "tr", "p": { "a": 0, "k": [0, 0] }, "a": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [100, 100] }, "r": { "a": 0, "k": 0 }, "o": { "a": 0, "k": 100 } }
                       ]
                     }
-                  ],
-                  "ip": 0,
-                  "op": 60,
-                  "st": 0,
-                  "bm": 0
+                  ]
                 }
               ]
             }
-
-            CRITICAL LOTTIE RULES FOR 4B MODELS:
-            1. LOCAL COORDINATES (PREVENT DOUBLE-OFFSET):
-               - Layer position ks.p is placed at canvas center [120, 120, 0].
-               - Inside shapes, ALL child positions (el.p, rc.p, tr.p) MUST be [0, 0]. NEVER write [120, 120] inside shapes.
-
-            2. SHAPE SIZES & BOUNDS:
-               - Keep shape size 's' within [20, 20] to [200, 200]. NEVER output giant sizes like 1000 on a 240 canvas.
-               - Layer scale ks.s is percentage [100, 100, 100] (range 50..150). NEVER write 1000.
-               - Foreground shapes must have opacity o: 100 (100%) and bright contrasting colors.
-
-            3. KEYFRAME INTERPOLATION (s -> e):
-               - At keyframe i, 's' is the start value and 'e' MUST be the next keyframe's 's' value.
-               - Example: { "t": 0, "s": [100, 100, 100], "e": [110, 110, 100] }, { "t": 30, "s": [110, 110, 100], "e": [100, 100, 100] }.
-               - Do NOT make 's' equal to 'e' within the same keyframe (which stops interpolation).
-
-            4. CANVAS & TIMELINE:
-               - Standard canvas: w=240, h=240, fr=30, ip=0, op=60 (2s) or op=90 (3s).
-               - assets: ALWAYS [] (empty array). ddd: ALWAYS 0 (2D only).
-               - Keep structure compact (< 100 lines, 1 to 3 shapes). Values at t=0 and t=op must match for seamless loop.
         """.trimIndent()
     }
 
