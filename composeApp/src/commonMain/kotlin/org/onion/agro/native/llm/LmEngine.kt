@@ -94,7 +94,7 @@ class LmEngine(
                 channelsJsonString = null,
                 extraContextJsonString = "{}",
                 enableConversationConstrainedDecoding = enableConversationConstrainedDecoding,
-                filterChannelContentFromKvCache = false,
+                filterChannelContentFromKvCache = true,
                 overwritePromptTemplate = null
             )
             if (ptr == 0L) {
