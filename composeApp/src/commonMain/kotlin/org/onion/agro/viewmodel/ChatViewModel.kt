@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import com.google.ai.edge.litertlm.LiteRtLmJni
+import com.google.ai.edge.litertlm.SamplerConfig
 import io.github.vinceglb.filekit.FileKit
 import io.github.vinceglb.filekit.cacheDir
 import io.github.vinceglb.filekit.path
@@ -39,6 +40,12 @@ import org.onion.agro.native.llm.LiteRtLmModelMetadata
 import org.onion.agro.native.llm.LiteRtLmInferenceException
 import org.onion.agro.native.llm.LmConversation
 import org.onion.agro.native.llm.LmEngine
+import org.onion.agro.native.llm.ContextBudgetLevel
+import org.onion.agro.native.llm.ContextBudgetPolicy
+import org.onion.agro.native.llm.ContextBudgetSnapshot
+import org.onion.agro.native.llm.ContextCoordinator
+import org.onion.agro.native.llm.ContextStrategy
+import org.onion.agro.native.llm.contextStrategy
 import agro.composeapp.generated.resources.Res
 import agro.composeapp.generated.resources.*
 import kotlinx.coroutines.Job
@@ -207,8 +214,7 @@ class ChatViewModel(
         }
     }
 
-    private var lmEngine: LmEngine? = null
-    private var lmConversation: LmConversation? = null
+    private val contextCoordinator = ContextCoordinator()
     private var activeBackend: String? = null
     private var activeEnableSpeculativeDecoding: Boolean? = null
     private var activeMaxNumTokens: Int? = null
@@ -322,7 +328,7 @@ class ChatViewModel(
     fun initLLM() {
         if (isInitializing) return
         if (
-            lmEngine != null &&
+            contextCoordinator.isEngineReady() &&
             llmPath.value == activeModelPath &&
             isSameLmBackend(activeBackend, lmBackend.value) &&
             activeEnableSpeculativeDecoding == enableSpeculativeDecoding.value &&
@@ -337,80 +343,19 @@ class ChatViewModel(
                 if (isGenerating.value) {
                     stopGeneration()
                 }
-                try {
-                    lmConversation?.close()
-                    lmConversation = null
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-                try {
-                    lmEngine?.close()
-                    lmEngine = null
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-                clearActiveLmEngineState()
-
-                println("=== Model Path ===")
-                println("Model Path: ${diffusionModelPath.value}")
-                println("VAE Path: ${vaePath.value}")
-                println("LLM Path: ${llmPath.value}")
-                println("CLIP-L Path: ${clipLPath.value}")
-                println("CLIP-G Path: ${clipGPath.value}")
-                println("T5XXL Path: ${t5xxlPath.value}")
-                println("cacheDir path is: ${FileKit.cacheDir.path}")
                 isLlmModelLoading.value = true
                 val currentLlmPath = llmPath.value
-                lmEngine = LmEngine(
-                    modelPath = currentLlmPath,
-                    backend = lmBackend.value,
-                    visionBackend = lmVisionBackend.value,
-                    audioBackend = lmAudioBackend.value,
-                    maxNumTokens = lmMaxNumTokens.value,
-                    maxNumImages = lmMaxNumImages.value,
-                    cacheDir = FileKit.cacheDir.path ?: "",
-                    enableBenchmark = false,
-                    enableSpeculativeDecoding = enableSpeculativeDecoding.value,
-                    mainNpuNativeLibraryDir = "",
-                    visionNpuNativeLibraryDir = "",
-                    audioNpuNativeLibraryDir = "",
-                    mainBackendNumThreads = lmMainBackendNumThreads.value,
-                    audioBackendNumThreads = lmAudioBackendNumThreads.value
-                )
-                lmEngine?.initialize()
-
-                lmConversation = lmEngine?.createConversation(
-                    systemInstruction = currentSystemInstruction(),
-                    toolsDescriptionJsonString = agentTools.getToolsDescriptionJson(),
-                    enableConversationConstrainedDecoding = resolveConstrainedDecoding(
-                        _conversationContext.value.mode.isStructuredGenerationMode()
-                    ),
-                    samplerConfig = com.google.ai.edge.litertlm.SamplerConfig(
-                        temperature = temperature.value.toDouble(),
-                        topP = topP.value.toDouble(),
-                        topK = topK.value
-                    )
-                )
-                markConversationContextApplied(lmConversation != null)
+                contextCoordinator.closeAll()
+                val engine = createLmEngine(currentLlmPath, lmBackend.value)
+                engine.initialize()
+                contextCoordinator.attachEngine(engine)
+                updateActiveLmEngineState(currentLlmPath, lmBackend.value)
+                recreateLmConversation(forceRecreate = true)
+                markConversationContextApplied(contextCoordinator.currentConversation() != null)
                 persistAppliedConversationContext()
-                activeModelPath = currentLlmPath
-                activeBackend = normalizeLmBackend(lmBackend.value)
-                activeEnableSpeculativeDecoding = enableSpeculativeDecoding.value
-                activeMaxNumTokens = lmMaxNumTokens.value
             } catch (e: Exception) {
                 e.printStackTrace()
-                try {
-                    lmConversation?.close()
-                } catch (closeError: Exception) {
-                    closeError.printStackTrace()
-                }
-                lmConversation = null
-                try {
-                    lmEngine?.close()
-                } catch (closeError: Exception) {
-                    closeError.printStackTrace()
-                }
-                lmEngine = null
+                contextCoordinator.closeAll()
                 clearActiveLmEngineState()
                 markConversationContextApplied(false)
             } finally {
@@ -432,79 +377,28 @@ class ChatViewModel(
                     stopGeneration()
                 }
 
-                val needsEngineReinit = lmEngine == null ||
+                val needsEngineReinit = !contextCoordinator.isEngineReady() ||
                         activeModelPath != currentLlmPath ||
                         !isSameLmBackend(activeBackend, lmBackend.value) ||
                         activeEnableSpeculativeDecoding != enableSpeculativeDecoding.value ||
                         activeMaxNumTokens != lmMaxNumTokens.value
-                
+
                 if (needsEngineReinit) {
-                    try {
-                        lmConversation?.close()
-                        lmConversation = null
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                    try {
-                        lmEngine?.close()
-                        lmEngine = null
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
+                    contextCoordinator.closeAll()
                     clearActiveLmEngineState()
-                    
-                    lmEngine = LmEngine(
-                        modelPath = currentLlmPath,
-                        backend = lmBackend.value,
-                        visionBackend = lmVisionBackend.value,
-                        audioBackend = lmAudioBackend.value,
-                        maxNumTokens = lmMaxNumTokens.value,
-                        maxNumImages = lmMaxNumImages.value,
-                        cacheDir = FileKit.cacheDir.path ?: "",
-                        enableBenchmark = false,
-                        enableSpeculativeDecoding = enableSpeculativeDecoding.value,
-                        mainNpuNativeLibraryDir = "",
-                        visionNpuNativeLibraryDir = "",
-                        audioNpuNativeLibraryDir = "",
-                        mainBackendNumThreads = lmMainBackendNumThreads.value,
-                        audioBackendNumThreads = lmAudioBackendNumThreads.value
-                    )
-                    lmEngine?.initialize()
-                    activeModelPath = currentLlmPath
-                    activeBackend = normalizeLmBackend(lmBackend.value)
-                    activeEnableSpeculativeDecoding = enableSpeculativeDecoding.value
-                    activeMaxNumTokens = lmMaxNumTokens.value
-                } else {
-                    try {
-                        lmConversation?.close()
-                        lmConversation = null
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
+                    val engine = createLmEngine(currentLlmPath, lmBackend.value)
+                    engine.initialize()
+                    contextCoordinator.attachEngine(engine)
+                    updateActiveLmEngineState(currentLlmPath, lmBackend.value)
                 }
-                
-                val engine = lmEngine
-                if (engine != null) {
-                    val instruction = instructionForMode(_conversationContext.value.mode)
-                    selectConversationContext(
-                        mode = _conversationContext.value.mode,
-                        systemInstruction = instruction
-                    )
-                    lmConversation = engine.createConversation(
-                        systemInstruction = instruction,
-                        toolsDescriptionJsonString = agentTools.getToolsDescriptionJson(),
-                        enableConversationConstrainedDecoding = resolveConstrainedDecoding(
-                            _conversationContext.value.mode.isStructuredGenerationMode()
-                        ),
-                        samplerConfig = com.google.ai.edge.litertlm.SamplerConfig(
-                            temperature = temperature.value.toDouble(),
-                            topP = topP.value.toDouble(),
-                            topK = topK.value
-                        )
-                    )
-                    markConversationContextApplied(true)
-                    persistAppliedConversationContext()
-                }
+                val instruction = instructionForMode(_conversationContext.value.mode)
+                selectConversationContext(
+                    mode = _conversationContext.value.mode,
+                    systemInstruction = instruction
+                )
+                recreateLmConversation(forceRecreate = true)
+                markConversationContextApplied(contextCoordinator.currentConversation() != null)
+                persistAppliedConversationContext()
                 _currentChatMessages.clear()
                 val text = getString(Res.string.chat_system_parameters_applied)
                 val sessionId = ensureActiveSession(text)
@@ -514,18 +408,7 @@ class ChatViewModel(
                 chatHistoryRepository.saveMessage(sessionId, message)
             } catch (e: Exception) {
                 e.printStackTrace()
-                try {
-                    lmConversation?.close()
-                } catch (closeError: Exception) {
-                    closeError.printStackTrace()
-                }
-                lmConversation = null
-                try {
-                    lmEngine?.close()
-                } catch (closeError: Exception) {
-                    closeError.printStackTrace()
-                }
-                lmEngine = null
+                contextCoordinator.closeAll()
                 clearActiveLmEngineState()
                 markConversationContextApplied(false)
                 _currentChatMessages.clear()
@@ -544,16 +427,7 @@ class ChatViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        try {
-            lmConversation?.close()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        try {
-            lmEngine?.close()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        contextCoordinator.closeAll()
     }
 
     private var responseGenerationJob: Job? = null
@@ -606,7 +480,7 @@ class ChatViewModel(
                 _currentChatMessages.addAll(loadedMessages)
                 isHistoryVisible.value = false
             }
-            recreateLmConversation()
+            recreateLmConversation(forceRecreate = true)
             persistAppliedConversationContext()
         }
     }
@@ -680,14 +554,14 @@ class ChatViewModel(
                     mode = ChatSessionMode.DEFAULT,
                     systemInstruction = appliedSystemInstructionOrEmpty()
                 )
-                recreateLmConversation()
                 withContext(Dispatchers.Main) {
                     activeSessionId.value = newSessionId
                     _currentChatMessages.clear()
                 }
+                recreateLmConversation(forceRecreate = true)
             } catch (e: Exception) {
                 e.printStackTrace()
-                lmConversation = null
+                contextCoordinator.closeActiveConversation()
                 markConversationContextApplied(false)
                 withContext(Dispatchers.Main) {
                     _currentChatMessages.clear()
@@ -716,17 +590,17 @@ class ChatViewModel(
                     mode = ChatSessionMode.SVG_IMAGE,
                     systemInstruction = appliedSystemInstructionOrEmpty()
                 )
-                recreateLmConversation(
-                    systemInstruction = SVG_IMAGE_SYSTEM_INSTRUCTION,
-                    enableConstrainedDecoding = true
-                )
                 withContext(Dispatchers.Main) {
                     activeSessionId.value = newSessionId
                     _currentChatMessages.clear()
                 }
+                recreateLmConversation(
+                    systemInstruction = SVG_IMAGE_SYSTEM_INSTRUCTION,
+                    forceRecreate = true
+                )
             } catch (e: Exception) {
                 e.printStackTrace()
-                lmConversation = null
+                contextCoordinator.closeActiveConversation()
                 markConversationContextApplied(false)
                 withContext(Dispatchers.Main) {
                     _currentChatMessages.clear()
@@ -755,17 +629,17 @@ class ChatViewModel(
                     mode = ChatSessionMode.CHIPTUNE_BGM_MML,
                     systemInstruction = appliedSystemInstructionOrEmpty()
                 )
-                recreateLmConversation(
-                    systemInstruction = CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION,
-                    enableConstrainedDecoding = true
-                )
                 withContext(Dispatchers.Main) {
                     activeSessionId.value = newSessionId
                     _currentChatMessages.clear()
                 }
+                recreateLmConversation(
+                    systemInstruction = CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION,
+                    forceRecreate = true
+                )
             } catch (e: Exception) {
                 e.printStackTrace()
-                lmConversation = null
+                contextCoordinator.closeActiveConversation()
                 markConversationContextApplied(false)
                 withContext(Dispatchers.Main) {
                     _currentChatMessages.clear()
@@ -794,17 +668,17 @@ class ChatViewModel(
                     mode = ChatSessionMode.LOTTIE_ANIMATION,
                     systemInstruction = appliedSystemInstructionOrEmpty()
                 )
-                recreateLmConversation(
-                    systemInstruction = LOTTIE_ANIMATION_SYSTEM_INSTRUCTION,
-                    enableConstrainedDecoding = true
-                )
                 withContext(Dispatchers.Main) {
                     activeSessionId.value = newSessionId
                     _currentChatMessages.clear()
                 }
+                recreateLmConversation(
+                    systemInstruction = LOTTIE_ANIMATION_SYSTEM_INSTRUCTION,
+                    forceRecreate = true
+                )
             } catch (e: Exception) {
                 e.printStackTrace()
-                lmConversation = null
+                contextCoordinator.closeActiveConversation()
                 markConversationContextApplied(false)
                 withContext(Dispatchers.Main) {
                     _currentChatMessages.clear()
@@ -819,13 +693,14 @@ class ChatViewModel(
     }
 
     fun stopGeneration() {
+        val wasGenerating = isGenerating.value
         isGenerating.value = false
-        if (lmConversation != null && llmPath.value.isNotBlank()) {
-            lmConversation?.cancelProcess()
+        if (wasGenerating && llmPath.value.isNotBlank()) {
+            contextCoordinator.cancelActive()
         }
         responseGenerationJob?.cancel()
         val lastIndex = _currentChatMessages.lastIndex
-        if (lastIndex >= 0) {
+        if (wasGenerating && lastIndex >= 0) {
             val removedMessage = _currentChatMessages.removeAt(lastIndex)
             activeSessionId.value?.let { sessionId ->
                 viewModelScope.launch(Dispatchers.Default) {
@@ -861,8 +736,8 @@ class ChatViewModel(
                 _currentChatMessages.clear()
                 _currentChatMessages.addAll(loadedMessages)
             }
-            if (lmEngine != null) {
-                recreateLmConversation()
+            if (contextCoordinator.isEngineReady()) {
+                recreateLmConversation(forceRecreate = true)
                 persistAppliedConversationContext()
             }
         }
@@ -883,6 +758,7 @@ class ChatViewModel(
         mode: ChatSessionMode,
         systemInstruction: String
     ) {
+        contextCoordinator.onModeSwitched(mode)
         _conversationContext.value = ConversationContextState(
             mode = mode,
             systemInstruction = systemInstruction,
@@ -936,8 +812,75 @@ class ChatViewModel(
         }
     }
 
-    private fun resolveConstrainedDecoding(requested: Boolean): Boolean {
-        return requested && !getPlatform().isIOS
+    private fun updateContextBudget(snapshot: ContextBudgetSnapshot) {
+        val context = _conversationContext.value
+        _conversationContext.value = context.copy(
+            usedTokens = snapshot.usedTokens,
+            maxTokens = snapshot.capacityTokens ?: 0,
+            projectedTokens = snapshot.projectedTokens,
+            budgetRatio = snapshot.ratio,
+            budgetLevel = snapshot.level.name,
+            compactionCount = context.compactionCount + if (snapshot.didCompact) 1 else 0,
+        )
+    }
+
+    /**
+     * Checks the hard boundary before native decoding.  If the current KV
+     * cache is near the limit, rebuild it from a summary plus recent turns;
+     * durable chat history is never deleted.
+     */
+    private suspend fun prepareConversationForPrompt(
+        prompt: String,
+        mode: ChatSessionMode,
+    ): LmConversation {
+        val conversation = checkNotNull(contextCoordinator.currentConversation()) {
+            "LM conversation is not initialized."
+        }
+        val strategy = mode.contextStrategy()
+        val before = ContextBudgetPolicy.inspect(
+            usedTokens = runCatching { conversation.tokenCount() }.getOrNull(),
+            capacityTokens = lmMaxNumTokens.value,
+            incomingPrompt = prompt,
+            strategy = strategy,
+        )
+        updateContextBudget(before)
+
+        if (before.level != ContextBudgetLevel.COMPACTION_REQUIRED &&
+            before.level != ContextBudgetLevel.OVERFLOW
+        ) {
+            return conversation
+        }
+
+        val compactedConversation = contextCoordinator.openConversation(
+            key = activeSessionId.value ?: "pending:${mode.name}",
+            mode = mode,
+            systemInstruction = currentSystemInstruction(),
+            toolsJson = agentTools.getToolsDescriptionJson(),
+            initialMessages = ContextCoordinator.compact(
+                messages = _currentChatMessages.toList(),
+                retainTurns = when (strategy) {
+                    is ContextStrategy.ChatSession -> strategy.historyRetainWindow
+                    is ContextStrategy.StructuredGeneration -> 1
+                },
+            ),
+            samplerConfig = SamplerConfig(
+                temperature = temperature.value.toDouble(),
+                topP = topP.value.toDouble(),
+                topK = topK.value,
+            ),
+            forceRecreate = true,
+        )
+        val after = ContextBudgetPolicy.inspect(
+            usedTokens = runCatching { compactedConversation.tokenCount() }.getOrNull(),
+            capacityTokens = lmMaxNumTokens.value,
+            incomingPrompt = prompt,
+            strategy = strategy,
+        ).copy(didCompact = true)
+        updateContextBudget(after)
+        check(after.isUsable) {
+            "Context remains over the model limit after compaction."
+        }
+        return compactedConversation
     }
 
     private fun normalizeLmBackend(backend: String): String {
@@ -957,6 +900,32 @@ class ChatViewModel(
         activeBackend = null
         activeEnableSpeculativeDecoding = null
         activeMaxNumTokens = null
+    }
+
+    private fun createLmEngine(modelPath: String, backend: String): LmEngine {
+        return LmEngine(
+            modelPath = modelPath,
+            backend = normalizeLmBackend(backend),
+            visionBackend = lmVisionBackend.value,
+            audioBackend = lmAudioBackend.value,
+            maxNumTokens = lmMaxNumTokens.value,
+            maxNumImages = lmMaxNumImages.value,
+            cacheDir = FileKit.cacheDir.path,
+            enableBenchmark = false,
+            enableSpeculativeDecoding = enableSpeculativeDecoding.value,
+            mainNpuNativeLibraryDir = "",
+            visionNpuNativeLibraryDir = "",
+            audioNpuNativeLibraryDir = "",
+            mainBackendNumThreads = lmMainBackendNumThreads.value,
+            audioBackendNumThreads = lmAudioBackendNumThreads.value
+        )
+    }
+
+    private fun updateActiveLmEngineState(modelPath: String, backend: String) {
+        activeModelPath = modelPath
+        activeBackend = normalizeLmBackend(backend)
+        activeEnableSpeculativeDecoding = enableSpeculativeDecoding.value
+        activeMaxNumTokens = lmMaxNumTokens.value
     }
 
     private fun isTokenLimitErrorMessage(message: String): Boolean {
@@ -982,58 +951,23 @@ class ChatViewModel(
         val currentLlmPath = llmPath.value
         check(currentLlmPath.isNotBlank()) { "LM model path is empty." }
 
-        try {
-            lmConversation?.close()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        lmConversation = null
-        try {
-            lmEngine?.close()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        lmEngine = null
+        contextCoordinator.closeAll()
         clearActiveLmEngineState()
 
         val normalizedBackend = normalizeLmBackend(backend)
-        val engine = LmEngine(
-            modelPath = currentLlmPath,
-            backend = normalizedBackend,
-            visionBackend = lmVisionBackend.value,
-            audioBackend = lmAudioBackend.value,
-            maxNumTokens = lmMaxNumTokens.value,
-            maxNumImages = lmMaxNumImages.value,
-            cacheDir = FileKit.cacheDir.path ?: "",
-            enableBenchmark = false,
-            enableSpeculativeDecoding = enableSpeculativeDecoding.value,
-            mainNpuNativeLibraryDir = "",
-            visionNpuNativeLibraryDir = "",
-            audioNpuNativeLibraryDir = "",
-            mainBackendNumThreads = lmMainBackendNumThreads.value,
-            audioBackendNumThreads = lmAudioBackendNumThreads.value
-        )
+        val engine = createLmEngine(currentLlmPath, normalizedBackend)
         try {
             engine.initialize()
-            lmEngine = engine
-            activeModelPath = currentLlmPath
-            activeBackend = normalizedBackend
-            activeEnableSpeculativeDecoding = enableSpeculativeDecoding.value
-            activeMaxNumTokens = lmMaxNumTokens.value
-            recreateLmConversation()
+            contextCoordinator.attachEngine(engine)
+            updateActiveLmEngineState(currentLlmPath, normalizedBackend)
+            recreateLmConversation(forceRecreate = true)
             persistAppliedConversationContext()
             lmBackend.value = normalizedBackend
-            return checkNotNull(lmConversation) {
+            return checkNotNull(contextCoordinator.currentConversation()) {
                 "Failed to recreate LiteRT LM conversation."
             }
         } catch (e: Throwable) {
-            try {
-                engine.close()
-            } catch (closeError: Exception) {
-                closeError.printStackTrace()
-            }
-            lmEngine = null
-            lmConversation = null
+            contextCoordinator.closeAll()
             clearActiveLmEngineState()
             markConversationContextApplied(false)
             throw e
@@ -1042,28 +976,33 @@ class ChatViewModel(
 
     private suspend fun recreateLmConversation(
         systemInstruction: String = currentSystemInstruction(),
-        enableConstrainedDecoding: Boolean =
-            _conversationContext.value.mode.isStructuredGenerationMode()
-    ) {
-        lmConversation?.close()
-        lmConversation = lmEngine?.createConversation(
+        forceRecreate: Boolean = false,
+    ): LmConversation? {
+        if (!contextCoordinator.isEngineReady()) {
+            markConversationContextApplied(false)
+            return null
+        }
+        val mode = _conversationContext.value.mode
+        val conversation = contextCoordinator.openConversation(
+            key = activeSessionId.value ?: "pending:${mode.name}",
+            mode = mode,
             systemInstruction = systemInstruction,
-            toolsDescriptionJsonString = agentTools.getToolsDescriptionJson(),
-            enableConversationConstrainedDecoding = resolveConstrainedDecoding(
-                enableConstrainedDecoding
-            ),
-            samplerConfig = com.google.ai.edge.litertlm.SamplerConfig(
+            toolsJson = agentTools.getToolsDescriptionJson(),
+            initialMessages = ContextCoordinator.replay(_currentChatMessages.toList()),
+            samplerConfig = SamplerConfig(
                 temperature = temperature.value.toDouble(),
                 topP = topP.value.toDouble(),
                 topK = topK.value
-            )
+            ),
+            forceRecreate = forceRecreate,
         )
-        markConversationContextApplied(lmConversation != null)
+        markConversationContextApplied(true)
+        return conversation
     }
     
     @OptIn(ExperimentalTime::class)
     fun getTextTalkerResponse(query: String, onCancelled: () -> Unit, onError: (Throwable) -> Unit) {
-        val activeConversation = lmConversation
+        val activeConversation = contextCoordinator.currentConversation()
         if (activeConversation == null) {
             isGenerating.value = false
             isInferenceOn = false
@@ -1165,6 +1104,15 @@ class ChatViewModel(
             }
 
             var runnerConversation: LmConversation = activeConversation
+            try {
+                runnerConversation = prepareConversationForPrompt(promptContent, sessionMode)
+            } catch (e: Throwable) {
+                isGenerating.value = false
+                isInferenceOn = false
+                showGenerationError(e)
+                onError(e)
+                return@launch
+            }
             var attemptedBackend = activeBackend ?: normalizeLmBackend(lmBackend.value)
             var retriedOnCpuAfterGpuFailure = false
 

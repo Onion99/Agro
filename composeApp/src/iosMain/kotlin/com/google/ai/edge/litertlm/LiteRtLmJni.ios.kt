@@ -21,9 +21,11 @@ import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_create
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_delete
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_optional_args_create
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_optional_args_delete
+import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_optional_args_set_max_output_tokens
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_optional_args_set_visual_token_budget
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_send_message
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_send_message_stream
+import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_get_token_count
 import com.google.ai.edge.litertlm.cinterop.litert_lm_engine_create
 import com.google.ai.edge.litertlm.cinterop.litert_lm_engine_delete
 import com.google.ai.edge.litertlm.cinterop.litert_lm_engine_settings_create
@@ -134,6 +136,7 @@ internal actual object LiteRtLmJni {
         extraContextJsonString: String,
         enableConversationConstrainedDecoding: Boolean,
         filterChannelContentFromKvCache: Boolean,
+        prefillPrefaceOnInit: Boolean,
         overwritePromptTemplate: String?
     ): Long = memScoped {
         val engine = enginePointer.toNativePointer<LiteRtLmEngine>("LiteRT LM engine")
@@ -203,10 +206,11 @@ internal actual object LiteRtLmJni {
         onMessage: (String) -> Unit,
         onDone: () -> Unit,
         onError: (Int, String) -> Unit,
-        visualTokenBudget: Int?
+        visualTokenBudget: Int?,
+        maxOutputToken: Int
     ) {
         val conversation = conversationPointer.toNativePointer<LiteRtLmConversation>("LiteRT LM conversation")
-        val optionalArgs = createOptionalArgs(visualTokenBudget)
+        val optionalArgs = createOptionalArgs(visualTokenBudget, maxOutputToken)
         val callbackState = StableRef.create(
             StreamCallbackState(
                 onMessage = onMessage,
@@ -254,6 +258,11 @@ internal actual object LiteRtLmJni {
         if (enginePointer == 0L) return
         litert_lm_engine_delete(enginePointer.toNativePointer<LiteRtLmEngine>("LiteRT LM engine"))
     }
+
+    actual fun getLmConversationTokenCount(conversationPointer: Long): Int =
+        litert_lm_conversation_get_token_count(
+            conversationPointer.toNativePointer<LiteRtLmConversation>("LiteRT LM conversation")
+        )
 
     private fun createEngine(
         modelPath: String,
@@ -320,15 +329,18 @@ internal actual object LiteRtLmJni {
     }
 
     private fun createOptionalArgs(
-        visualTokenBudget: Int?
+        visualTokenBudget: Int?,
+        maxOutputToken: Int
     ): CPointer<LiteRtLmConversationOptionalArgs>? {
-        visualTokenBudget ?: return null
+        if (visualTokenBudget == null && maxOutputToken <= 0) return null
         val optionalArgs = litert_lm_conversation_optional_args_create()
             ?: throw LiteRtLmJniException("Failed to create LiteRT LM conversation optional args.")
-        litert_lm_conversation_optional_args_set_visual_token_budget(
-            optionalArgs,
-            visualTokenBudget
-        )
+        visualTokenBudget?.let {
+            litert_lm_conversation_optional_args_set_visual_token_budget(optionalArgs, it)
+        }
+        if (maxOutputToken > 0) {
+            litert_lm_conversation_optional_args_set_max_output_tokens(optionalArgs, maxOutputToken)
+        }
         return optionalArgs
     }
 

@@ -14,7 +14,9 @@ class LiteRtLmInferenceException(
 ) : RuntimeException("LiteRT LM error $statusCode: $nativeMessage")
 
 class LmConversation(
-    private val handle: Long
+    private val handle: Long,
+    private val maxOutputTokens: Int? = null,
+    private val visualTokenBudget: Int? = null,
 ) : AutoCloseable, LmChatSession {
 
     private var isAlive = true
@@ -75,7 +77,9 @@ class LmConversation(
                         )
                     )
                 }
-            }
+            },
+            visualTokenBudget = visualTokenBudget,
+            maxOutputToken = maxOutputTokens ?: -1
         )
         
         awaitClose {
@@ -87,6 +91,8 @@ class LmConversation(
         checkIsAlive()
         LiteRtLmJni.cancelLmConversation(handle)
     }
+
+    override fun tokenCount(): Int = LiteRtLmJni.getLmConversationTokenCount(handle)
 
     override fun close() {
         if (isAlive) {

@@ -87,7 +87,8 @@ internal actual object LiteRtLmJni {
     actual fun createLmConversation(
         enginePointer: Long, samplerConfig: Any?, messageJsonString: String, toolsDescriptionJsonString: String,
         channelsJsonString: String?, extraContextJsonString: String, enableConversationConstrainedDecoding: Boolean,
-        filterChannelContentFromKvCache: Boolean, overwritePromptTemplate: String?
+        filterChannelContentFromKvCache: Boolean, prefillPrefaceOnInit: Boolean,
+        overwritePromptTemplate: String?
     ): Long {
         return nativeCreateConversation(
             enginePointer = enginePointer,
@@ -101,7 +102,7 @@ internal actual object LiteRtLmJni {
             overwritePromptTemplate = overwritePromptTemplate,
             loraPath = null,
             audioLoraPath = null,
-            prefillPrefaceOnInit = false,
+            prefillPrefaceOnInit = prefillPrefaceOnInit,
             maxOutputToken = -1,
             thinkingConfig = null,
             enableResponseFormat = false
@@ -135,7 +136,7 @@ internal actual object LiteRtLmJni {
     actual fun sendLmMessageAsync(
         conversationPointer: Long, messageJsonString: String, extraContextJsonString: String,
         onMessage: (String) -> Unit, onDone: () -> Unit, onError: (Int, String) -> Unit,
-        visualTokenBudget: Int?
+        visualTokenBudget: Int?, maxOutputToken: Int
     ) {
         nativeSendMessageAsync(
             conversationPointer = conversationPointer,
@@ -150,7 +151,7 @@ internal actual object LiteRtLmJni {
             repetitionPenaltyConfig = null,
             noRepeatNgramConfig = null,
             suppressTokensConfig = null,
-            maxOutputToken = -1,
+            maxOutputToken = maxOutputToken,
             thinkingConfig = null,
             constraintType = 0,
             constraintString = null
@@ -168,6 +169,9 @@ internal actual object LiteRtLmJni {
     actual fun deleteLmEngine(enginePointer: Long) {
         nativeDeleteEngine(enginePointer)
     }
+
+    actual fun getLmConversationTokenCount(conversationPointer: Long): Int =
+        nativeConversationGetTokenCount(conversationPointer)
 
     private external fun nativeCreateEngine(
         modelPath: String, backend: String, visionBackend: String, audioBackend: String,
@@ -200,6 +204,7 @@ internal actual object LiteRtLmJni {
     )
 
     private external fun nativeConversationCancelProcess(conversationPointer: Long)
+    private external fun nativeConversationGetTokenCount(conversationPointer: Long): Int
     private external fun nativeDeleteConversation(conversationPointer: Long)
     private external fun nativeDeleteEngine(enginePointer: Long)
 }

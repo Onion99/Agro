@@ -236,3 +236,26 @@ class ContextCoordinator(
    * 在 AIGC 模式下，默认屏蔽或严格限制多模态输入，确保将最大显存与 Token 预算留给输出代码生成。
 3. **取消状态安全（Cancellation Safety）**：
    * 用户打断生成时，调用 `cancelProcess()` 后需注意：若底层会话状态损坏，调度器应捕获异常并自动重建 `Conversation`，以干净的 History 恢复会话。
+
+---
+
+## 7. 本轮实现落地（2026-08-20）
+
+本设计已从 ViewModel 内部约定升级为可执行的运行时边界，落地位置如下：
+
+| 设计能力 | 实现 | 关键行为 |
+| --- | --- | --- |
+| 模式策略 | `ContextStrategy` | DEFAULT 使用 1024 输出预算、通道过滤与普通对话；SVG/BGM/Lottie 使用 4096 输出预算、独立沙箱与约束解码。 |
+| 会话所有权 | `ContextCoordinator` | Chat 与 Structured 各自拥有 KV slot；session id、模式或 system instruction 变化时重建，禁止跨模式污染。 |
+| 历史恢复 | `ContextTranscript` | 打开历史或重建会话时，将持久化消息重放为 LiteRT-LM `Message`，不再出现“UI 有历史、KV 为空”的分裂状态。 |
+| 超限保护 | `ContextBudgetPolicy` + ViewModel preflight | 使用原生 `GetTokenCount()` 检查 `used + incoming + reservedOutput`；达到 85% 或硬上限前，以旧消息摘要 + 最近 turns 重建 KV，持久化历史不删除。 |
+| 原生参数 | `LiteRtLmJni` expect/actual | Android/Desktop 传递 `prefillPrefaceOnInit` 与每轮 `maxOutputToken`，并暴露 KV token count；iOS 通过 C API 的 optional args 传递输出预算与 token count。 |
+| UI 可观测性 | `ConversationContextState` | 暴露已用 token、容量、预计 token、比例、预算等级和压缩次数，供上下文头部显示或诊断。 |
+
+### 7.1 兼容性边界
+
+LiteRT-LM 的 Android/Desktop JNI 接口已经提供 prefill 开关；当前 iOS C API 仅提供 system/messages/prompt/filter 等配置，没有 `prefill_preface_on_init` setter，因此 iOS actual 保留参数但使用 C API 默认值。若后续要让 iOS 也强制预热 system preface，需要先在 `cpp/lite-rt-lm/c/conversation.h/.cc` 增加该 C setter，再接入 cinterop；本轮不修改已有 native submodule 工作树。
+
+### 7.2 资源生命周期
+
+`ChatViewModel` 不再直接持有 `LmConversation`/`LmEngine`。模型初始化、模式切换、后端降级、取消和 ViewModel 销毁统一通过 `ContextCoordinator` 回收；CPU fallback 会创建全新的 engine 与 conversation，并从当前 durable transcript 重建上下文。

@@ -69,7 +69,7 @@ class LmEngine(
         systemInstruction: String? = null,
         initialMessages: List<Message> = emptyList(),
         toolsDescriptionJsonString: String = "[]",
-        enableConversationConstrainedDecoding: Boolean = false,
+        strategy: ContextStrategy = ContextStrategy.ChatSession(),
         samplerConfig: SamplerConfig? = null
     ): LmConversation {
         mutex.withLock {
@@ -93,14 +93,18 @@ class LmEngine(
                 toolsDescriptionJsonString = toolsDescriptionJsonString,
                 channelsJsonString = null,
                 extraContextJsonString = "{}",
-                enableConversationConstrainedDecoding = enableConversationConstrainedDecoding,
-                filterChannelContentFromKvCache = true,
+                enableConversationConstrainedDecoding = strategy.enableConstrainedDecoding,
+                filterChannelContentFromKvCache = strategy.filterChannelContent,
+                prefillPrefaceOnInit = strategy.prefillPrefaceOnInit,
                 overwritePromptTemplate = null
             )
             if (ptr == 0L) {
                 throw LiteRtLmJniException("Failed to create LiteRT LM conversation.")
             }
-            return LmConversation(ptr)
+            return LmConversation(
+                handle = ptr,
+                maxOutputTokens = strategy.maxOutputTokens,
+            )
         }
     }
 

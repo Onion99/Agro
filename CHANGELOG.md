@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-20] - 重构 LLM 上下文编排与 LiteRT-LM 运行时边界
+- [新增] 引入 `ContextStrategy`、`ContextCoordinator` 与 `ContextTranscript`，按 Chat/Structured 双模式隔离 KV cache，按 session/system contract 复用或重建 conversation。
+- [修改] `ChatViewModel` 改为通过协调器管理 engine/conversation；打开历史时重放持久化消息，后端 fallback、取消、模式切换和销毁统一回收 native 资源。
+- [新增] 接入原生 KV token count、prefill 配置和每轮 max output token；在推理前执行 `used + incoming + reservedOutput` 硬上限检查，达到阈值自动摘要压缩最近上下文。
+- [修改] 扩展 `ConversationContextState`，提供 token 使用量、容量、预算等级与压缩次数，支持 UI/诊断层观察上下文水位。
+- [测试] 新增 `ContextStrategyTest`，覆盖结构化生成策略、输出预算边界和历史压缩行为。
+- [文档] 更新 `docs/designs/app-context-management-design.md`，记录实现映射与 iOS C API 兼容性边界。
+
 ## [2026-08-16] - 针对 Gemma 4B 模型加固 SVG、8-bit BGM 与 Lottie 动效提示词与解析器自愈能力
 - [修复] 重构 `ChatViewModel.SVG_IMAGE_SYSTEM_INSTRUCTION`，针对 4B 级小模型在发光/科技感生成时容易回忆破损语料的问题，增加对 `<filter>`、`<feMergeIn>` 等复杂滤镜标签的绝对负向禁令，强制改用渐变叠加与半透明图元实现光效。
 - [修复] 在 `SVG_IMAGE_SYSTEM_INSTRUCTION` 中强化扁平化坐标约束与单标签自闭合规范，禁止深层 `<g>` 嵌套，消除小模型自回归末尾标签栈失衡与 `</g>` 连环溢出问题。

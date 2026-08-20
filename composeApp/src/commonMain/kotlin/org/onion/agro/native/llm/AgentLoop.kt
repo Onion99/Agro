@@ -10,6 +10,9 @@ interface LmChatSession {
     ): Flow<Message>
 
     fun cancelProcess()
+
+    /** Native KV token count when the backend exposes it. */
+    fun tokenCount(): Int? = null
 }
 
 data class AgentLoopConfig(
@@ -166,4 +169,3 @@ class AgentLoopRunner(
         }
     }
 }
-

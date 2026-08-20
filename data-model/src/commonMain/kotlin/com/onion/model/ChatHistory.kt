@@ -36,7 +36,13 @@ enum class ChatSessionMode {
 data class ConversationContextState(
     val mode: ChatSessionMode = ChatSessionMode.DEFAULT,
     val systemInstruction: String = "",
-    val isApplied: Boolean = false
+    val isApplied: Boolean = false,
+    val usedTokens: Int = 0,
+    val maxTokens: Int = 0,
+    val projectedTokens: Int = 0,
+    val budgetRatio: Float = 0f,
+    val budgetLevel: String = "UNKNOWN",
+    val compactionCount: Int = 0,
 )
 
 @Serializable

@@ -33,6 +33,7 @@ internal expect object LiteRtLmJni {
         extraContextJsonString: String,
         enableConversationConstrainedDecoding: Boolean,
         filterChannelContentFromKvCache: Boolean = false,
+        prefillPrefaceOnInit: Boolean = false,
         overwritePromptTemplate: String? = null
     ): Long
 
@@ -49,8 +50,11 @@ internal expect object LiteRtLmJni {
         onMessage: (String) -> Unit,
         onDone: () -> Unit,
         onError: (Int, String) -> Unit,
-        visualTokenBudget: Int? = null
+        visualTokenBudget: Int? = null,
+        maxOutputToken: Int = -1
     )
+
+    fun getLmConversationTokenCount(conversationPointer: Long): Int
 
     fun cancelLmConversation(conversationPointer: Long)
     fun deleteLmConversation(conversationPointer: Long)
