@@ -239,11 +239,11 @@ fun ModelScreen() {
     val onSelectCustomClick: () -> Unit = {
         coroutineScope.launch(Dispatchers.Default) {
             if (loadingState == 1) return@launch
+            chatViewModel.loadingModelState.emit(1)
             val path = chatViewModel.selectLlmFile()
             if (path.isNotBlank()) {
-                chatViewModel.loadingModelState.emit(1)
                 chatViewModel.initLLM()
-            }
+            }else chatViewModel.loadingModelState.emit(0)
         }
     }
 
