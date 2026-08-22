@@ -259,3 +259,9 @@ LiteRT-LM 的 Android/Desktop JNI 接口已经提供 prefill 开关；当前 iOS
 ### 7.2 资源生命周期
 
 `ChatViewModel` 不再直接持有 `LmConversation`/`LmEngine`。模型初始化、模式切换、后端降级、取消和 ViewModel 销毁统一通过 `ContextCoordinator` 回收；CPU fallback 会创建全新的 engine 与 conversation，并从当前 durable transcript 重建上下文。
+### 7.3 Structured 会话恢复约束
+
+结构化生成模式（SVG、BGM、Lottie）虽然保留历史消息用于 UI 展示和持久化，但创建或恢复 `LmConversation` 时必须传入空的 `initialMessages`。这些模式启用了 constrained decoding，历史生成 JSON 不能作为 KV Cache 中的对话历史，否则可能污染下一次生成并导致只输出不完整的 JSON 前缀。普通 DEFAULT 会话仍通过 `ContextTranscript` 回放历史；该约束同时适用于普通重建和上下文压缩重建。
+### 7.4 AIGC 多轮请求隔离
+
+AIGC 每次请求前都必须以 `forceRecreate = true` 创建新的 `LmConversation`，即使属于同一个持久化会话。历史输出只用于 UI 和持久化，不得让上一轮 JSON 留在下一轮 constrained decoding 的 KV Cache 中。

@@ -52,4 +52,19 @@ class ContextStrategyTest {
         assertTrue(text.contains("recent assistant"))
         assertTrue(compacted.size < ContextTranscript.toLmMessages(messages).size)
     }
+
+    @Test
+    fun structuredGenerationDoesNotReplayDurableHistory() {
+        val messages = listOf(
+            ChatMessage.text("draw a circle", ChatRole.USER),
+            ChatMessage.text("{\"type\":\"svg_image\"}", ChatRole.ASSISTANT),
+        )
+
+        assertTrue(
+            ContextCoordinator.initialMessages(
+                ChatSessionMode.SVG_IMAGE,
+                messages,
+            ).isEmpty(),
+        )
+    }
 }

@@ -127,6 +127,14 @@ class ContextCoordinator {
     }
 
     companion object {
+        /**
+         * Structured generation sessions are intentionally stateless between
+         * requests. Durable output stays in UI/history, but is not replayed
+         * into the constrained-decoding KV cache.
+         */
+        fun initialMessages(mode: ChatSessionMode, messages: List<ChatMessage>): List<Message> =
+            if (mode == ChatSessionMode.DEFAULT) replay(messages) else emptyList()
+
         fun replay(messages: List<ChatMessage>): List<Message> =
             ContextTranscript.toLmMessages(messages)
 

@@ -857,13 +857,14 @@ class ChatViewModel(
             mode = mode,
             systemInstruction = currentSystemInstruction(),
             toolsJson = agentTools.getToolsDescriptionJson(),
-            initialMessages = ContextCoordinator.compact(
-                messages = _currentChatMessages.toList(),
-                retainTurns = when (strategy) {
-                    is ContextStrategy.ChatSession -> strategy.historyRetainWindow
-                    is ContextStrategy.StructuredGeneration -> 1
-                },
-            ),
+            initialMessages = if (strategy is ContextStrategy.StructuredGeneration) {
+                emptyList()
+            } else {
+                ContextCoordinator.compact(
+                    messages = _currentChatMessages.toList(),
+                    retainTurns = (strategy as ContextStrategy.ChatSession).historyRetainWindow,
+                )
+            },
             samplerConfig = SamplerConfig(
                 temperature = temperature.value.toDouble(),
                 topP = topP.value.toDouble(),
@@ -989,7 +990,10 @@ class ChatViewModel(
             mode = mode,
             systemInstruction = systemInstruction,
             toolsJson = agentTools.getToolsDescriptionJson(),
-            initialMessages = ContextCoordinator.replay(_currentChatMessages.toList()),
+            initialMessages = ContextCoordinator.initialMessages(
+                mode = mode,
+                messages = _currentChatMessages.toList(),
+            ),
             samplerConfig = SamplerConfig(
                 temperature = temperature.value.toDouble(),
                 topP = topP.value.toDouble(),

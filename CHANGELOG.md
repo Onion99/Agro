@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-22] - 修复结构化生成会话恢复后的上下文污染
+- [修复] SVG、BGM、Lottie 会话恢复或重建时不再将持久化历史消息注入 constrained decoding 的 KV Cache，避免生成仅输出 `{` 等不完整 JSON 片段。
+- [测试] 增加结构化模式历史不回放的回归测试。
+- [文档] 更新 `docs/designs/app-context-management-design.md`，补充结构化会话恢复约束。
+
+
 ## [2026-08-20] - 重构 LLM 上下文编排与 LiteRT-LM 运行时边界
 - [新增] 引入 `ContextStrategy`、`ContextCoordinator` 与 `ContextTranscript`，按 Chat/Structured 双模式隔离 KV cache，按 session/system contract 复用或重建 conversation。
 - [修改] `ChatViewModel` 改为通过协调器管理 engine/conversation；打开历史时重放持久化消息，后端 fallback、取消、模式切换和销毁统一回收 native 资源。
