@@ -1033,7 +1033,7 @@ private fun ChatMessagesList(
                     ChatBubble(
                         message = message,
                         onSaveImage = { imageData ->
-                            coroutineScope.launch(Dispatchers.Default) {
+                            coroutineScope.launch(Dispatchers.IO) {
                                 val fileName = "diffusion_${Clock.System.now().toEpochMilliseconds()}.png"
                                 // val success = chatViewModel.diffusionLoader.saveImage(imageData, fileName, message.metadata)
                             }
@@ -1064,7 +1064,7 @@ private fun ChatMessagesList(
                                         suggestedName = audio.title.ifBlank { "chiptune_${message.id}" },
                                         extension = "wav"
                                     ) ?: return@launch
-                                    val wavBytes = withContext(Dispatchers.Default) {
+                                    val wavBytes = withContext(Dispatchers.IO) {
                                         BgmAudioFileStore.read(audio.path)
                                     }
                                     file.write(wavBytes)

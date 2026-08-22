@@ -48,6 +48,7 @@ import org.onion.agro.native.llm.ContextStrategy
 import org.onion.agro.native.llm.contextStrategy
 import agro.composeapp.generated.resources.Res
 import agro.composeapp.generated.resources.*
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import org.jetbrains.compose.resources.getString
 import org.onion.agro.BuildConfig
@@ -337,7 +338,7 @@ class ChatViewModel(
             return
         }
         isInitializing = true
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             loadingModelState.emit(1)
             try {
                 if (isGenerating.value) {
@@ -369,7 +370,7 @@ class ChatViewModel(
     fun applyConversationSettings() {
         val currentLlmPath = llmPath.value
         if (currentLlmPath.isBlank()) return
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             isLlmModelLoading.value = true
             loadingModelState.emit(1)
             try {
@@ -465,7 +466,7 @@ class ChatViewModel(
     }
 
     fun openSession(sessionId: String) {
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             if (isGenerating.value) stopGeneration()
             val session = chatHistoryRepository.getSession(sessionId) ?: return@launch
             val mode = session.mode.toSessionMode()
@@ -486,13 +487,13 @@ class ChatViewModel(
     }
 
     fun renameSession(sessionId: String, title: String) {
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             chatHistoryRepository.renameSession(sessionId, title)
         }
     }
 
     fun deleteSession(sessionId: String) {
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             chatHistoryRepository.deleteSession(sessionId)
             if (activeSessionId.value == sessionId) {
                 withContext(Dispatchers.Main) {
@@ -541,7 +542,7 @@ class ChatViewModel(
     }
 
     fun startNewConversation() {
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             if (isGenerating.value) {
                 stopGeneration()
             }
@@ -576,7 +577,7 @@ class ChatViewModel(
     }
 
     fun startSvgImageConversation() {
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             if (isGenerating.value) {
                 stopGeneration()
             }
@@ -615,7 +616,7 @@ class ChatViewModel(
     }
 
     fun startChiptuneBgmConversation() {
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             if (isGenerating.value) {
                 stopGeneration()
             }
@@ -654,7 +655,7 @@ class ChatViewModel(
     }
 
     fun startLottieAnimationConversation() {
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             if (isGenerating.value) {
                 stopGeneration()
             }
@@ -703,7 +704,7 @@ class ChatViewModel(
         if (wasGenerating && lastIndex >= 0) {
             val removedMessage = _currentChatMessages.removeAt(lastIndex)
             activeSessionId.value?.let { sessionId ->
-                viewModelScope.launch(Dispatchers.Default) {
+                viewModelScope.launch(Dispatchers.IO) {
                     chatHistoryRepository.deleteMessage(sessionId, removedMessage.id)
                 }
             }
@@ -712,7 +713,7 @@ class ChatViewModel(
 
     private fun observeChatSessions(query: String = historySearchQuery.value) {
         sessionCollectionJob?.cancel()
-        sessionCollectionJob = viewModelScope.launch(Dispatchers.Default) {
+        sessionCollectionJob = viewModelScope.launch(Dispatchers.IO) {
             chatHistoryRepository.observeSessions(query).collectLatest { sessions ->
                 withContext(Dispatchers.Main) {
                     _chatSessions.clear()
@@ -723,7 +724,7 @@ class ChatViewModel(
     }
 
     private fun restoreMostRecentSession() {
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             val session = chatHistoryRepository.getMostRecentSession() ?: return@launch
             val mode = session.mode.toSessionMode()
             val instruction = session.systemInstruction.ifBlank {
@@ -1026,7 +1027,7 @@ class ChatViewModel(
             return
         }
         
-        responseGenerationJob = viewModelScope.launch(Dispatchers.Default) {
+        responseGenerationJob = viewModelScope.launch(Dispatchers.IO) {
             isInferenceOn = true
             val promptContent = query
             val startTime = Clock.System.now().toEpochMilliseconds()

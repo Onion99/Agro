@@ -389,7 +389,7 @@ CHIPTUNE_BGM_MML
 
 ```kotlin
 fun startChiptuneBgmMmlConversation() {
-    viewModelScope.launch(Dispatchers.Default) {
+    viewModelScope.launch(Dispatchers.IO) {
         if (isGenerating.value) {
             stopGeneration()
         }

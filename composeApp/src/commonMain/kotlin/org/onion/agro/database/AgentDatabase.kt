@@ -34,7 +34,7 @@ fun createAgentDatabase(builder: RoomDatabase.Builder<AgentDatabase>): AgentData
     return builder
         .addMigrations(MIGRATION_1_2)
         .setDriver(BundledSQLiteDriver())
-        .setQueryCoroutineContext(Dispatchers.Default)
+        .setQueryCoroutineContext(Dispatchers.IO)
         .build()
 }
 
