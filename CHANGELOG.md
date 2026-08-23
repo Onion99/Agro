@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-23] - Gris 艺术水彩与乔布斯极简美学：重塑 LLM 运行态指示器与状态胶囊
+- [重构] 深度融合《Gris》艺术语言与乔布斯极简哲学，全面重写 `GrisWatercolorStatusIndicator` 与 `GrisWatercolorStatusChip`。
+- [新增] 指示器引入神圣几何星轨仪（0.75dp 极细星轨微环、四象限微星芒锚点、巡游星尘卫星 Comet Particle）、多层有机水彩墨晕（Lissajous 调和漂移）与发光纯澈星核。
+- [新增] 状态胶囊引入流光微晶毛玻璃材质（微悬浮、迎光面渐变高光倒角微边框、底层环境水彩溢晕透染），配合平滑字间距与状态淡入淡出动画。
+- [文档] 更新 `docs/agents/ui-theme.md`，沉淀神圣几何星轨、多层水彩墨晕与微晶胶囊设计规范。
+
 ## [2026-08-23] - 修复 LLM 首轮上下文并统一 Gris 水彩运行态
 - [修复] 关闭 Structured 会话中未绑定 JSON Schema 的 tool-call constrained decoding，消除空工具约束导致首轮仅输出 `{` 与换行后结束的问题。
 - [修复] SystemInstruction/模式切换先停用旧 conversation，再清空旧消息并强制重建；回放时排除生成中、取消或失败的完整 turn，避免旧 KV 污染与当前 prompt 重复注入。

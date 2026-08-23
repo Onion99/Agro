@@ -141,13 +141,19 @@ Box(modifier = Modifier.watercolorGradient()) { content() }
 | **模态/遮罩** | **必须**对底层内容施加背景模糊（`backdrop-filter`） |
 | **进度指示器** | 柔和"流淌"色条，**禁止**硬边状态指示器 |
 
-### LLM 运行态水彩指示器
+### LLM 运行态水彩指示器与微晶胶囊
 
-- 统一使用 `GrisWatercolorStatusIndicator`；卡片中的胶囊版本使用 `GrisWatercolorStatusChip`。禁止在页面中重新实现硬编码圆点、阴影或 `System Ready` 文案。
-- 指示器以两个低透明径向 pigment bloom 和一个柔边核心组成；颜色只取自 `AppTheme.colors.*`，尺寸、边框和间距只取自 `AppTheme` token。
-- 状态动效必须有语义差异：`INITIALIZING` 为 Dusty Blue 轨道晕染，`APPLYING_CONTEXT` 为 Sage / Blue 扩散，`READY` 为慢呼吸，`GENERATING` 为较快流动，`ERROR` 为低频 muted tide，`UNINITIALIZED` 为低透明静泊。
-- 错误态不得闪烁或使用高频缩放；动画是辅助反馈，必须同时显示由 Compose Resources 提供的本地化状态文字（空间不足的 Chat header 可仅显示图形，但邻近文字必须表达状态）。
-- 状态颜色映射由组件内部维护；其他页面如需给图标着色，调用 `resolveGrisStatusAccent()`，避免重复 `when` 或仅依赖 `context.isApplied` 二态判断。
+- 统一使用 `GrisWatercolorStatusIndicator`；卡片及信息栏使用微晶流光胶囊版本 `GrisWatercolorStatusChip`。禁止在页面中重新实现硬编码圆点、阴影或 `System Ready` 文案。
+- **Gris 艺术与神圣几何融合**：指示器由多层低透明径向水彩墨晕（Lissajous 调和漂移）、0.75dp 超细神圣几何星轨微环、四象限微星芒锚点、轨道巡游星尘微粒与纯澈发光星核组成。
+- **乔布斯极简主义与极致工艺**：`GrisWatercolorStatusChip` 采用流光微晶毛玻璃材质（微悬浮、背光水彩溢染、迎光面渐变高光倒角微边框），配合平滑字间距与状态淡入淡出动效。
+- **语义状态动效规范**：
+  - `UNINITIALIZED`：低透明静泊星环与沉睡星核。
+  - `INITIALIZING`：星尘巡游粒子沿星轨加速，伴随幽蓝水彩微晕展开。
+  - `APPLYING_CONTEXT`：双环共振与柔和能量涟漪向外扩散。
+  - `READY`：静谧恒稳的心跳慢呼吸，纯澈星核散发温润微光。
+  - `GENERATING`：水彩能量涟漪连续流淌，流光编织回应。
+  - `ERROR`：沉静的暮色微烬与低频阻尼脉动，克制而富有叙事张力，严禁生硬闪烁。
+- 状态颜色与语义映射由组件内部维护；其他页面如需给图标着色，调用 `resolveGrisStatusAccent()`，避免重复 `when` 或仅依赖 `context.isApplied` 二态判断。
 
 ---
 > [!NOTE]
