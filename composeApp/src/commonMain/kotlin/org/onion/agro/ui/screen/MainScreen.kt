@@ -25,6 +25,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
@@ -36,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation3.runtime.NavEntry
 import org.onion.agro.ui.navigation.route.RoutePage
 import androidx.navigation3.ui.NavDisplay
+import com.onion.model.LlmEngineStatus
 import com.onion.theme.helper.verticalSafePadding
 import com.onion.theme.state.AdaptiveLayoutType
 import agro.composeapp.generated.resources.Res
@@ -54,10 +55,13 @@ import agro.composeapp.generated.resources.ic_sun
 import agro.composeapp.generated.resources.light_theme
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.resources.vectorResource
+import org.koin.compose.koinInject
 import org.onion.agro.BuildConfig
+import org.onion.agro.ui.component.GrisWatercolorStatusIndicator
 import org.onion.agro.ui.navigation.NavActions
 import org.onion.agro.ui.navigation.route.MainRoute
 import org.onion.agro.ui.navigation.route.NAV_BOTTOM_ITEMS
+import org.onion.agro.viewmodel.ChatViewModel
 import ui.theme.AppTheme
 
 
@@ -77,6 +81,9 @@ fun MainContent(
     mainNavActions: NavActions,
     onAdvancedSettingsClick: () -> Unit
 ) {
+    val chatViewModel = koinInject<ChatViewModel>()
+    val llmEngineStatus by chatViewModel.llmEngineStatus.collectAsState()
+
     Column(Modifier.fillMaxSize()) {
         Row(modifier = Modifier.weight(1f)) {
             // ── Desktop/Tablet: Glassmorphism vertical navigation rail ──
@@ -91,6 +98,7 @@ fun MainContent(
                         .padding(verticalSafePadding()),
                     selectedRoute = currentRoute,
                     onRouteSelected = { mainNavActions.popAndNavigation(it) },
+                    llmEngineStatus = llmEngineStatus,
                 )
             }
 
@@ -165,6 +173,7 @@ fun EtherealNavigationRail(
     modifier: Modifier,
     selectedRoute: Any?,
     onRouteSelected: (Any) -> Unit,
+    llmEngineStatus: LlmEngineStatus,
 ) {
     val isDark by AppTheme.isDark
     val containerBg = if (isDark) {
@@ -264,28 +273,7 @@ fun EtherealNavigationRail(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .shadow(
-                                elevation = 8.dp,
-                                shape = AppTheme.shape.full,
-                                spotColor = AppTheme.colors.primary,
-                                ambientColor = AppTheme.colors.primary
-                            )
-                            .background(color = AppTheme.colors.primary, shape = AppTheme.shape.full)
-                    )
-
-                    Text(
-                        text = "System Ready",
-                        style = AppTheme.typography.bodySmall,
-                        color = AppTheme.colors.tertiary
-                    )
-                }
+                GrisWatercolorStatusIndicator(status = llmEngineStatus)
 
                 val isDarkState = AppTheme.isDark
                 val isDark by isDarkState

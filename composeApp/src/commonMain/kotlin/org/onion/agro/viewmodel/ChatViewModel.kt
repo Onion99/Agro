@@ -11,6 +11,7 @@ import com.onion.model.ChatMessageContent
 import com.onion.model.ChatRole
 import com.onion.model.ChatSessionMode
 import com.onion.model.ConversationContextState
+import com.onion.model.LlmEngineStatus
 import com.onion.model.LoraConfig
 import com.onion.model.PersistentToolCall
 import com.onion.model.PersistentToolResponse
@@ -20,6 +21,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -45,6 +47,7 @@ import org.onion.agro.native.llm.ContextBudgetPolicy
 import org.onion.agro.native.llm.ContextBudgetSnapshot
 import org.onion.agro.native.llm.ContextCoordinator
 import org.onion.agro.native.llm.ContextStrategy
+import org.onion.agro.native.llm.GenerationOutputPolicy
 import org.onion.agro.native.llm.contextStrategy
 import agro.composeapp.generated.resources.Res
 import agro.composeapp.generated.resources.*
@@ -104,6 +107,8 @@ class ChatViewModel(
     private var activeModelPath: String? = null
     // 0 default,1 loading,2 loading completely
     var loadingModelState = MutableStateFlow(0)
+    private val _llmEngineStatus = MutableStateFlow(LlmEngineStatus.UNINITIALIZED)
+    val llmEngineStatus: StateFlow<LlmEngineStatus> = _llmEngineStatus
     var isDiffusionModelLoading = mutableStateOf(false)
     var isVaeModelLoading = mutableStateOf(false)
     var isLlmModelLoading = mutableStateOf(false)
@@ -330,20 +335,31 @@ class ChatViewModel(
         if (isInitializing) return
         if (
             contextCoordinator.isEngineReady() &&
+            contextCoordinator.currentConversation() != null &&
+            _conversationContext.value.isApplied &&
             llmPath.value == activeModelPath &&
             isSameLmBackend(activeBackend, lmBackend.value) &&
             activeEnableSpeculativeDecoding == enableSpeculativeDecoding.value &&
             activeMaxNumTokens == lmMaxNumTokens.value
         ) {
+            _llmEngineStatus.value = LlmEngineStatus.READY
+            return
+        }
+        if (llmPath.value.isBlank()) {
+            _llmEngineStatus.value = LlmEngineStatus.UNINITIALIZED
+            loadingModelState.value = 0
             return
         }
         isInitializing = true
+        _llmEngineStatus.value = LlmEngineStatus.INITIALIZING
         viewModelScope.launch(Dispatchers.IO) {
             loadingModelState.emit(1)
+            var initialized = false
             try {
                 if (isGenerating.value) {
                     stopGeneration()
                 }
+                _llmEngineStatus.value = LlmEngineStatus.INITIALIZING
                 isLlmModelLoading.value = true
                 val currentLlmPath = llmPath.value
                 contextCoordinator.closeAll()
@@ -354,25 +370,33 @@ class ChatViewModel(
                 recreateLmConversation(forceRecreate = true)
                 markConversationContextApplied(contextCoordinator.currentConversation() != null)
                 persistAppliedConversationContext()
+                initialized = true
+                _llmEngineStatus.value = LlmEngineStatus.READY
             } catch (e: Exception) {
                 e.printStackTrace()
                 contextCoordinator.closeAll()
                 clearActiveLmEngineState()
                 markConversationContextApplied(false)
+                _llmEngineStatus.value = LlmEngineStatus.ERROR
             } finally {
                 isInitializing = false
                 isLlmModelLoading.value = false
             }
-            loadingModelState.emit(2)
+            loadingModelState.emit(if (initialized) 2 else 0)
         }
     }
 
     fun applyConversationSettings() {
         val currentLlmPath = llmPath.value
-        if (currentLlmPath.isBlank()) return
+        if (currentLlmPath.isBlank()) {
+            _llmEngineStatus.value = LlmEngineStatus.UNINITIALIZED
+            return
+        }
+        _llmEngineStatus.value = LlmEngineStatus.APPLYING_CONTEXT
         viewModelScope.launch(Dispatchers.IO) {
             isLlmModelLoading.value = true
             loadingModelState.emit(1)
+            var applied = false
             try {
                 if (isGenerating.value) {
                     stopGeneration()
@@ -385,6 +409,7 @@ class ChatViewModel(
                         activeMaxNumTokens != lmMaxNumTokens.value
 
                 if (needsEngineReinit) {
+                    _llmEngineStatus.value = LlmEngineStatus.INITIALIZING
                     contextCoordinator.closeAll()
                     clearActiveLmEngineState()
                     val engine = createLmEngine(currentLlmPath, lmBackend.value)
@@ -392,36 +417,49 @@ class ChatViewModel(
                     contextCoordinator.attachEngine(engine)
                     updateActiveLmEngineState(currentLlmPath, lmBackend.value)
                 }
+                _llmEngineStatus.value = LlmEngineStatus.APPLYING_CONTEXT
                 val instruction = instructionForMode(_conversationContext.value.mode)
                 selectConversationContext(
                     mode = _conversationContext.value.mode,
                     systemInstruction = instruction
                 )
-                recreateLmConversation(forceRecreate = true)
-                markConversationContextApplied(contextCoordinator.currentConversation() != null)
-                persistAppliedConversationContext()
-                _currentChatMessages.clear()
                 val text = getString(Res.string.chat_system_parameters_applied)
                 val sessionId = ensureActiveSession(text)
                 chatHistoryRepository.clearSessionMessages(sessionId)
+                withContext(Dispatchers.Main) {
+                    _currentChatMessages.clear()
+                }
+
+                checkNotNull(recreateLmConversation(forceRecreate = true)) {
+                    "Failed to apply the conversation context."
+                }
+                markConversationContextApplied(contextCoordinator.currentConversation() != null)
+                persistAppliedConversationContext()
                 val message = ChatMessage.text(text, role = ChatRole.SYSTEM)
-                _currentChatMessages.add(message)
+                withContext(Dispatchers.Main) {
+                    _currentChatMessages.add(message)
+                }
                 chatHistoryRepository.saveMessage(sessionId, message)
+                applied = true
+                _llmEngineStatus.value = LlmEngineStatus.READY
             } catch (e: Exception) {
                 e.printStackTrace()
                 contextCoordinator.closeAll()
                 clearActiveLmEngineState()
                 markConversationContextApplied(false)
-                _currentChatMessages.clear()
+                _llmEngineStatus.value = LlmEngineStatus.ERROR
                 val text = getString(Res.string.chat_system_parameters_apply_failed, e.message ?: "")
                 val sessionId = ensureActiveSession(text)
                 chatHistoryRepository.clearSessionMessages(sessionId)
                 val message = ChatMessage.text(text, role = ChatRole.SYSTEM)
-                _currentChatMessages.add(message)
+                withContext(Dispatchers.Main) {
+                    _currentChatMessages.clear()
+                    _currentChatMessages.add(message)
+                }
                 chatHistoryRepository.saveMessage(sessionId, message)
             } finally {
                 isLlmModelLoading.value = false
-                loadingModelState.emit(2)
+                loadingModelState.emit(if (applied) 2 else 0)
             }
         }
     }
@@ -466,23 +504,47 @@ class ChatViewModel(
     }
 
     fun openSession(sessionId: String) {
+        _llmEngineStatus.value = if (contextCoordinator.isEngineReady()) {
+            LlmEngineStatus.APPLYING_CONTEXT
+        } else {
+            LlmEngineStatus.UNINITIALIZED
+        }
         viewModelScope.launch(Dispatchers.IO) {
-            if (isGenerating.value) stopGeneration()
-            val session = chatHistoryRepository.getSession(sessionId) ?: return@launch
-            val mode = session.mode.toSessionMode()
-            val instruction = session.systemInstruction.ifBlank {
-                instructionForMode(mode)
+            try {
+                if (isGenerating.value) stopGeneration()
+                val session = chatHistoryRepository.getSession(sessionId) ?: run {
+                    _llmEngineStatus.value = if (_conversationContext.value.isApplied) {
+                        LlmEngineStatus.READY
+                    } else {
+                        LlmEngineStatus.UNINITIALIZED
+                    }
+                    return@launch
+                }
+                val mode = session.mode.toSessionMode()
+                val instruction = session.systemInstruction.ifBlank {
+                    instructionForMode(mode)
+                }
+                val loadedMessages = chatHistoryRepository.loadMessages(sessionId)
+                withContext(Dispatchers.Main) {
+                    selectConversationContext(mode, instruction)
+                    activeSessionId.value = sessionId
+                    _currentChatMessages.clear()
+                    _currentChatMessages.addAll(loadedMessages)
+                    isHistoryVisible.value = false
+                }
+                val conversation = recreateLmConversation(forceRecreate = true)
+                persistAppliedConversationContext()
+                _llmEngineStatus.value = if (conversation != null) {
+                    LlmEngineStatus.READY
+                } else {
+                    LlmEngineStatus.UNINITIALIZED
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                contextCoordinator.closeActiveConversation()
+                markConversationContextApplied(false)
+                _llmEngineStatus.value = LlmEngineStatus.ERROR
             }
-            val loadedMessages = chatHistoryRepository.loadMessages(sessionId)
-            withContext(Dispatchers.Main) {
-                selectConversationContext(mode, instruction)
-                activeSessionId.value = sessionId
-                _currentChatMessages.clear()
-                _currentChatMessages.addAll(loadedMessages)
-                isHistoryVisible.value = false
-            }
-            recreateLmConversation(forceRecreate = true)
-            persistAppliedConversationContext()
         }
     }
 
@@ -510,17 +572,34 @@ class ChatViewModel(
     }
 
     fun sendMessage(message: String, isUser: Boolean = true) {
+        if (message.isBlank()) return
+        val isConversationReady = _conversationContext.value.isApplied &&
+            contextCoordinator.currentConversation() != null &&
+            _llmEngineStatus.value == LlmEngineStatus.READY
+        if (!isConversationReady) {
+            viewModelScope.launch {
+                showToast(getString(Res.string.chat_context_wait_until_ready))
+            }
+            return
+        }
+
         viewModelScope.launch {
-            if(isGenerating.value) stopGeneration()
-            if(message.isBlank()) return@launch
+            if (isGenerating.value) stopGeneration()
             val sessionId = ensureActiveSession(message)
-            val userMessage = ChatMessage.text(
+            val messageDraft = ChatMessage.text(
                 text = message,
                 role = if (isUser) ChatRole.USER else ChatRole.ASSISTANT
             )
+            val turnId = messageDraft.id.toString()
+            val userMessage = messageDraft.copy(
+                metadata = mapOf(METADATA_TURN_ID to turnId)
+            )
             _currentChatMessages.add(userMessage)
             chatHistoryRepository.saveMessage(sessionId, userMessage)
-            val meta = mapOf("is_generating" to "true")
+            val meta = mapOf(
+                METADATA_IS_GENERATING to "true",
+                METADATA_TURN_ID to turnId,
+            )
             val assistantMessage = ChatMessage.text(
                 text = "",
                 role = ChatRole.ASSISTANT,
@@ -529,6 +608,7 @@ class ChatViewModel(
             _currentChatMessages.add(assistantMessage)
             chatHistoryRepository.saveMessage(sessionId, assistantMessage)
             isGenerating.value = true
+            _llmEngineStatus.value = LlmEngineStatus.GENERATING
             getTextTalkerResponse(message, {}, {
                 println(it.message)
             })
@@ -541,146 +621,73 @@ class ChatViewModel(
         val negativePrompt = message.metadata?.get("negative_prompt") ?: ""
     }
 
-    fun startNewConversation() {
-        viewModelScope.launch(Dispatchers.IO) {
-            if (isGenerating.value) {
-                stopGeneration()
-            }
-            try {
-                selectConversationContext(
-                    mode = ChatSessionMode.DEFAULT,
-                    systemInstruction = systemPrompt.value
-                )
-                val newSessionId = chatHistoryRepository.createSession(
-                    mode = ChatSessionMode.DEFAULT,
-                    systemInstruction = appliedSystemInstructionOrEmpty()
-                )
-                withContext(Dispatchers.Main) {
-                    activeSessionId.value = newSessionId
-                    _currentChatMessages.clear()
-                }
-                recreateLmConversation(forceRecreate = true)
-            } catch (e: Exception) {
-                e.printStackTrace()
-                contextCoordinator.closeActiveConversation()
-                markConversationContextApplied(false)
-                withContext(Dispatchers.Main) {
-                    _currentChatMessages.clear()
-                }
-            } finally {
-                withContext(Dispatchers.Main) {
-                    isGenerating.value = false
-                    isInferenceOn = false
-                }
-            }
-        }
-    }
+    fun startNewConversation() = startConversation(ChatSessionMode.DEFAULT)
 
-    fun startSvgImageConversation() {
-        viewModelScope.launch(Dispatchers.IO) {
-            if (isGenerating.value) {
-                stopGeneration()
-            }
-            try {
-                selectConversationContext(
-                    mode = ChatSessionMode.SVG_IMAGE,
-                    systemInstruction = SVG_IMAGE_SYSTEM_INSTRUCTION
-                )
-                val newSessionId = chatHistoryRepository.createSession(
-                    title = getString(Res.string.library_svg_image),
-                    mode = ChatSessionMode.SVG_IMAGE,
-                    systemInstruction = appliedSystemInstructionOrEmpty()
-                )
-                withContext(Dispatchers.Main) {
-                    activeSessionId.value = newSessionId
-                    _currentChatMessages.clear()
-                }
-                recreateLmConversation(
-                    systemInstruction = SVG_IMAGE_SYSTEM_INSTRUCTION,
-                    forceRecreate = true
-                )
-            } catch (e: Exception) {
-                e.printStackTrace()
-                contextCoordinator.closeActiveConversation()
-                markConversationContextApplied(false)
-                withContext(Dispatchers.Main) {
-                    _currentChatMessages.clear()
-                }
-            } finally {
-                withContext(Dispatchers.Main) {
-                    isGenerating.value = false
-                    isInferenceOn = false
-                }
-            }
-        }
-    }
+    fun startSvgImageConversation() = startConversation(ChatSessionMode.SVG_IMAGE)
 
-    fun startChiptuneBgmConversation() {
-        viewModelScope.launch(Dispatchers.IO) {
-            if (isGenerating.value) {
-                stopGeneration()
-            }
-            try {
-                selectConversationContext(
-                    mode = ChatSessionMode.CHIPTUNE_BGM_MML,
-                    systemInstruction = CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION
-                )
-                val newSessionId = chatHistoryRepository.createSession(
-                    title = getString(Res.string.library_chiptune_bgm),
-                    mode = ChatSessionMode.CHIPTUNE_BGM_MML,
-                    systemInstruction = appliedSystemInstructionOrEmpty()
-                )
-                withContext(Dispatchers.Main) {
-                    activeSessionId.value = newSessionId
-                    _currentChatMessages.clear()
-                }
-                recreateLmConversation(
-                    systemInstruction = CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION,
-                    forceRecreate = true
-                )
-            } catch (e: Exception) {
-                e.printStackTrace()
-                contextCoordinator.closeActiveConversation()
-                markConversationContextApplied(false)
-                withContext(Dispatchers.Main) {
-                    _currentChatMessages.clear()
-                }
-            } finally {
-                withContext(Dispatchers.Main) {
-                    isGenerating.value = false
-                    isInferenceOn = false
-                }
-            }
-        }
-    }
+    fun startChiptuneBgmConversation() = startConversation(ChatSessionMode.CHIPTUNE_BGM_MML)
 
-    fun startLottieAnimationConversation() {
+    fun startLottieAnimationConversation() = startConversation(ChatSessionMode.LOTTIE_ANIMATION)
+
+    private fun startConversation(mode: ChatSessionMode) {
+        _llmEngineStatus.value = if (contextCoordinator.isEngineReady()) {
+            LlmEngineStatus.APPLYING_CONTEXT
+        } else {
+            LlmEngineStatus.UNINITIALIZED
+        }
         viewModelScope.launch(Dispatchers.IO) {
             if (isGenerating.value) {
                 stopGeneration()
             }
             try {
+                if (contextCoordinator.isEngineReady()) {
+                    _llmEngineStatus.value = LlmEngineStatus.APPLYING_CONTEXT
+                }
+                val instruction = instructionForMode(mode)
                 selectConversationContext(
-                    mode = ChatSessionMode.LOTTIE_ANIMATION,
-                    systemInstruction = LOTTIE_ANIMATION_SYSTEM_INSTRUCTION
+                    mode = mode,
+                    systemInstruction = instruction,
                 )
-                val newSessionId = chatHistoryRepository.createSession(
-                    title = getString(Res.string.library_lottie_animation),
-                    mode = ChatSessionMode.LOTTIE_ANIMATION,
-                    systemInstruction = appliedSystemInstructionOrEmpty()
-                )
+                val newSessionId = when (mode) {
+                    ChatSessionMode.DEFAULT -> chatHistoryRepository.createSession(
+                        mode = mode,
+                        systemInstruction = instruction,
+                    )
+                    ChatSessionMode.SVG_IMAGE -> chatHistoryRepository.createSession(
+                        title = getString(Res.string.library_svg_image),
+                        mode = mode,
+                        systemInstruction = instruction,
+                    )
+                    ChatSessionMode.CHIPTUNE_BGM_MML -> chatHistoryRepository.createSession(
+                        title = getString(Res.string.library_chiptune_bgm),
+                        mode = mode,
+                        systemInstruction = instruction,
+                    )
+                    ChatSessionMode.LOTTIE_ANIMATION -> chatHistoryRepository.createSession(
+                        title = getString(Res.string.library_lottie_animation),
+                        mode = mode,
+                        systemInstruction = instruction,
+                    )
+                }
                 withContext(Dispatchers.Main) {
                     activeSessionId.value = newSessionId
                     _currentChatMessages.clear()
                 }
-                recreateLmConversation(
-                    systemInstruction = LOTTIE_ANIMATION_SYSTEM_INSTRUCTION,
-                    forceRecreate = true
+                val conversation = recreateLmConversation(
+                    systemInstruction = instruction,
+                    forceRecreate = true,
                 )
+                persistAppliedConversationContext()
+                _llmEngineStatus.value = if (conversation != null) {
+                    LlmEngineStatus.READY
+                } else {
+                    LlmEngineStatus.UNINITIALIZED
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
                 contextCoordinator.closeActiveConversation()
                 markConversationContextApplied(false)
+                _llmEngineStatus.value = LlmEngineStatus.ERROR
                 withContext(Dispatchers.Main) {
                     _currentChatMessages.clear()
                 }
@@ -703,9 +710,26 @@ class ChatViewModel(
         val lastIndex = _currentChatMessages.lastIndex
         if (wasGenerating && lastIndex >= 0) {
             val removedMessage = _currentChatMessages.removeAt(lastIndex)
+            val removedTurnId = removedMessage.metadata?.get(METADATA_TURN_ID)
+            val userIndex = _currentChatMessages.indexOfLast { message ->
+                message.role == ChatRole.USER &&
+                    removedTurnId != null &&
+                    message.metadata?.get(METADATA_TURN_ID) == removedTurnId
+            }
+            val excludedUserMessage = if (userIndex >= 0) {
+                _currentChatMessages[userIndex].copy(
+                    metadata = _currentChatMessages[userIndex].metadata.orEmpty() +
+                        (METADATA_EXCLUDE_FROM_CONTEXT to "true")
+                ).also { updated ->
+                    _currentChatMessages[userIndex] = updated
+                }
+            } else {
+                null
+            }
             activeSessionId.value?.let { sessionId ->
                 viewModelScope.launch(Dispatchers.IO) {
                     chatHistoryRepository.deleteMessage(sessionId, removedMessage.id)
+                    excludedUserMessage?.let { chatHistoryRepository.saveMessage(sessionId, it) }
                 }
             }
         }
@@ -726,6 +750,9 @@ class ChatViewModel(
     private fun restoreMostRecentSession() {
         viewModelScope.launch(Dispatchers.IO) {
             val session = chatHistoryRepository.getMostRecentSession() ?: return@launch
+            if (contextCoordinator.isEngineReady()) {
+                _llmEngineStatus.value = LlmEngineStatus.APPLYING_CONTEXT
+            }
             val mode = session.mode.toSessionMode()
             val instruction = session.systemInstruction.ifBlank {
                 instructionForMode(mode)
@@ -738,8 +765,13 @@ class ChatViewModel(
                 _currentChatMessages.addAll(loadedMessages)
             }
             if (contextCoordinator.isEngineReady()) {
-                recreateLmConversation(forceRecreate = true)
+                val conversation = recreateLmConversation(forceRecreate = true)
                 persistAppliedConversationContext()
+                _llmEngineStatus.value = if (conversation != null) {
+                    LlmEngineStatus.READY
+                } else {
+                    LlmEngineStatus.ERROR
+                }
             }
         }
     }
@@ -834,10 +866,28 @@ class ChatViewModel(
         prompt: String,
         mode: ChatSessionMode,
     ): LmConversation {
-        val conversation = checkNotNull(contextCoordinator.currentConversation()) {
-            "LM conversation is not initialized."
-        }
         val strategy = mode.contextStrategy()
+        val conversation = if (strategy is ContextStrategy.StructuredGeneration) {
+            // Structured output is request-scoped. Never let a previous JSON
+            // response become the prefix of the next generation.
+            contextCoordinator.openConversation(
+                key = activeSessionId.value ?: "pending:${mode.name}",
+                mode = mode,
+                systemInstruction = currentSystemInstruction(),
+                toolsJson = agentTools.getToolsDescriptionJson(),
+                initialMessages = emptyList(),
+                samplerConfig = SamplerConfig(
+                    temperature = temperature.value.toDouble(),
+                    topP = topP.value.toDouble(),
+                    topK = topK.value,
+                ),
+                forceRecreate = true,
+            )
+        } else {
+            checkNotNull(contextCoordinator.currentConversation()) {
+                "LM conversation is not initialized."
+            }
+        }
         val before = ContextBudgetPolicy.inspect(
             usedTokens = runCatching { conversation.tokenCount() }.getOrNull(),
             capacityTokens = lmMaxNumTokens.value,
@@ -953,6 +1003,7 @@ class ChatViewModel(
         val currentLlmPath = llmPath.value
         check(currentLlmPath.isNotBlank()) { "LM model path is empty." }
 
+        _llmEngineStatus.value = LlmEngineStatus.INITIALIZING
         contextCoordinator.closeAll()
         clearActiveLmEngineState()
 
@@ -962,6 +1013,7 @@ class ChatViewModel(
             engine.initialize()
             contextCoordinator.attachEngine(engine)
             updateActiveLmEngineState(currentLlmPath, normalizedBackend)
+            _llmEngineStatus.value = LlmEngineStatus.APPLYING_CONTEXT
             recreateLmConversation(forceRecreate = true)
             persistAppliedConversationContext()
             lmBackend.value = normalizedBackend
@@ -972,6 +1024,7 @@ class ChatViewModel(
             contextCoordinator.closeAll()
             clearActiveLmEngineState()
             markConversationContextApplied(false)
+            _llmEngineStatus.value = LlmEngineStatus.ERROR
             throw e
         }
     }
@@ -1011,10 +1064,15 @@ class ChatViewModel(
         if (activeConversation == null) {
             isGenerating.value = false
             isInferenceOn = false
+            markConversationContextApplied(false)
+            _llmEngineStatus.value = LlmEngineStatus.ERROR
             viewModelScope.launch {
                 if (_currentChatMessages.isNotEmpty()) {
                     val lastIdx = _currentChatMessages.lastIndex
-                    val meta = mapOf("is_generating" to "false")
+                    val meta = _currentChatMessages[lastIdx].metadata.orEmpty() + mapOf(
+                        METADATA_IS_GENERATING to "false",
+                        METADATA_EXCLUDE_FROM_CONTEXT to "true",
+                    )
                     val updated = _currentChatMessages[lastIdx].copy(
                         contents = listOf(
                             ChatMessageContent.Text(
@@ -1033,6 +1091,7 @@ class ChatViewModel(
         
         responseGenerationJob = viewModelScope.launch(Dispatchers.IO) {
             isInferenceOn = true
+            _llmEngineStatus.value = LlmEngineStatus.GENERATING
             val promptContent = query
             val startTime = Clock.System.now().toEpochMilliseconds()
             
@@ -1071,7 +1130,8 @@ class ChatViewModel(
                 }
                 if (messageIndex >= 0) {
                     val msgToUpdate = _currentChatMessages[messageIndex]
-                    val meta = mapOf("is_generating" to isGeneratingNow.toString())
+                    val meta = msgToUpdate.metadata.orEmpty() +
+                        (METADATA_IS_GENERATING to isGeneratingNow.toString())
                     val contents = if (sessionMode.isStructuredGenerationMode()) {
                         listOf(ChatMessageContent.Text(""))
                     } else {
@@ -1089,7 +1149,11 @@ class ChatViewModel(
                     it.id.toString() == assistantMessageId
                 }
                 if (messageIndex >= 0) {
-                    val meta = mapOf("is_generating" to "false")
+                    val currentMessage = _currentChatMessages[messageIndex]
+                    val meta = currentMessage.metadata.orEmpty() + mapOf(
+                        METADATA_IS_GENERATING to "false",
+                        METADATA_EXCLUDE_FROM_CONTEXT to "true",
+                    )
                     val errMsg = error.message.orEmpty()
                     val displayMsg = if (isTokenLimitErrorMessage(errMsg)) {
                         getString(Res.string.chat_system_error_token_limit_exceeded)
@@ -1099,12 +1163,21 @@ class ChatViewModel(
                             errMsg.ifEmpty { getString(Res.string.unknown_error) }
                         )
                     }
-                    val updated = _currentChatMessages[messageIndex].copy(
+                    val updated = currentMessage.copy(
                         contents = listOf(ChatMessageContent.Text(displayMsg)),
                         metadata = meta
                     )
                     _currentChatMessages[messageIndex] = updated
                     sessionId?.let { chatHistoryRepository.saveMessage(it, updated) }
+                }
+                val recovered = runCatching {
+                    recreateLmConversation(forceRecreate = true)
+                }.getOrNull() != null
+                _llmEngineStatus.value = if (recovered) {
+                    LlmEngineStatus.READY
+                } else {
+                    markConversationContextApplied(false)
+                    LlmEngineStatus.ERROR
                 }
             }
 
@@ -1247,6 +1320,13 @@ class ChatViewModel(
                     isInferenceOn = false
 
                     if (e is CancellationException) {
+                        if (_llmEngineStatus.value == LlmEngineStatus.GENERATING) {
+                            _llmEngineStatus.value = if (_conversationContext.value.isApplied) {
+                                LlmEngineStatus.READY
+                            } else {
+                                LlmEngineStatus.UNINITIALIZED
+                            }
+                        }
                         onCancelled()
                         return@launch
                     }
@@ -1290,6 +1370,7 @@ class ChatViewModel(
                         retriedOnCpuAfterGpuFailure = true
                         isGenerating.value = true
                         isInferenceOn = true
+                        _llmEngineStatus.value = LlmEngineStatus.GENERATING
                         updateAssistantMessage(isGeneratingNow = true)
                         continue
                     }
@@ -1299,39 +1380,58 @@ class ChatViewModel(
                     return@launch
                 }
             }
-            
-            println("ChatViewModel: collect finished!")
+
+            if (!GenerationOutputPolicy.hasUsableContent(generatedResult)) {
+                val emptyResponseError = IllegalStateException(
+                    getString(Res.string.chat_system_empty_response)
+                )
+                isGenerating.value = false
+                isInferenceOn = false
+                showGenerationError(emptyResponseError)
+                onError(emptyResponseError)
+                return@launch
+            }
+
             val generationDuration = Clock.System.now().toEpochMilliseconds() - startTime
             val messageIndex = _currentChatMessages.indexOfFirst {
                 it.id.toString() == assistantMessageId
             }
             if (messageIndex >= 0) {
-                val meta = mutableMapOf(
-                    "prompt" to promptContent,
-                    "time_taken" to formatDuration(generationDuration),
-                    "is_generating" to "false",
-                    "agent_turn_count" to terminalTurnCount.toString(),
-                    "agent_transition" to terminalTransition,
-                    "lm_backend" to attemptedBackend
-                )
+                val currentMessage = _currentChatMessages[messageIndex]
+                val meta = currentMessage.metadata.orEmpty().toMutableMap().apply {
+                    put("prompt", promptContent)
+                    put("time_taken", formatDuration(generationDuration))
+                    put(METADATA_IS_GENERATING, "false")
+                    put("agent_turn_count", terminalTurnCount.toString())
+                    put("agent_transition", terminalTransition)
+                    put("lm_backend", attemptedBackend)
+                }
                 if (retriedOnCpuAfterGpuFailure) {
                     meta["gpu_decode_cpu_retry"] = "true"
                 }
-                val finalContents = when (sessionMode) {
-                    ChatSessionMode.SVG_IMAGE -> {
-                        listOf(SvgMessageParser.parseCompletedResponse(generatedResult.trim()))
+                val finalContents = try {
+                    when (sessionMode) {
+                        ChatSessionMode.SVG_IMAGE -> {
+                            listOf(SvgMessageParser.parseCompletedResponse(generatedResult.trim()))
+                        }
+                        ChatSessionMode.CHIPTUNE_BGM_MML -> {
+                            listOf(ChiptuneBgmMessageParser.parseCompletedResponse(generatedResult.trim()))
+                        }
+                        ChatSessionMode.LOTTIE_ANIMATION -> {
+                            listOf(LottieMessageParser.parseCompletedResponse(generatedResult.trim()))
+                        }
+                        ChatSessionMode.DEFAULT -> {
+                            listOf(ChatMessageContent.Text(displayText()))
+                        }
                     }
-                    ChatSessionMode.CHIPTUNE_BGM_MML -> {
-                        listOf(ChiptuneBgmMessageParser.parseCompletedResponse(generatedResult.trim()))
-                    }
-                    ChatSessionMode.LOTTIE_ANIMATION -> {
-                        listOf(LottieMessageParser.parseCompletedResponse(generatedResult.trim()))
-                    }
-                    ChatSessionMode.DEFAULT -> {
-                        listOf(ChatMessageContent.Text(displayText()))
-                    }
+                } catch (e: Throwable) {
+                    isGenerating.value = false
+                    isInferenceOn = false
+                    showGenerationError(e)
+                    onError(e)
+                    return@launch
                 }
-                val updated = _currentChatMessages[messageIndex].copy(
+                val updated = currentMessage.copy(
                     contents = finalContents,
                     metadata = meta,
                     toolCalls = persistentToolCalls,
@@ -1340,9 +1440,10 @@ class ChatViewModel(
                 _currentChatMessages[messageIndex] = updated
                 sessionId?.let { chatHistoryRepository.saveMessage(it, updated) }
             }
-            
+
             isGenerating.value = false
             isInferenceOn = false
+            _llmEngineStatus.value = LlmEngineStatus.READY
         }
     }
 
@@ -1363,9 +1464,9 @@ class ChatViewModel(
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+            restoreMostRecentSession()
         }
         observeChatSessions()
-        restoreMostRecentSession()
     }
 
     private companion object {
@@ -1375,6 +1476,9 @@ class ChatViewModel(
         const val DEFAULT_LM_MAX_NUM_TOKENS = 16384
         const val MIN_LM_MAX_NUM_TOKENS = 128
         const val LM_MAX_NUM_TOKENS_STEP = 128
+        const val METADATA_IS_GENERATING = "is_generating"
+        const val METADATA_TURN_ID = "turn_id"
+        const val METADATA_EXCLUDE_FROM_CONTEXT = "exclude_from_context"
 
         val SVG_IMAGE_SYSTEM_INSTRUCTION = """
             You are ${BuildConfig.APP_NAME}'s dedicated SVG vector graphic architect.

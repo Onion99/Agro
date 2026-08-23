@@ -35,6 +35,10 @@
   微动画规划器。
 - `ConversationContextState` 是 UI 与 ViewModel 共享的当前上下文状态；
   `isApplied` 只在原生模型 conversation 成功创建后为 `true`。
+- `LlmEngineStatus` 表达当前 native engine/conversation 的瞬时生命周期，包含
+  `UNINITIALIZED`、`INITIALIZING`、`APPLYING_CONTEXT`、`READY`、`GENERATING`
+  与 `ERROR`。该枚举供 ViewModel 与 UI 共享，但不序列化、不写入 Room，也不替代
+  `ConversationContextState.isApplied` 的上下文提交语义。
 - system instruction 的完整文本由持久化层保存快照，不应仅从模式名在 UI 中推断。
 
 ## 5. 8-bit BGM 规格

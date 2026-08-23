@@ -71,6 +71,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -103,6 +104,7 @@ import com.onion.model.ChatMessage
 import com.onion.model.ChatMessageContent
 import com.onion.model.ChatSessionMode
 import com.onion.model.ConversationContextState
+import com.onion.model.LlmEngineStatus
 import com.onion.theme.state.ContentType
 import com.onion.theme.style.MediumOutlinedTextField
 import com.onion.theme.style.glassSurface
@@ -135,7 +137,6 @@ import agro.composeapp.generated.resources.chat_context_bgm_title
 import agro.composeapp.generated.resources.chat_context_expand
 import agro.composeapp.generated.resources.chat_context_lottie_description
 import agro.composeapp.generated.resources.chat_context_lottie_title
-import agro.composeapp.generated.resources.chat_context_not_applied
 import agro.composeapp.generated.resources.chat_context_svg_description
 import agro.composeapp.generated.resources.chat_context_svg_title
 import agro.composeapp.generated.resources.chat_input_hint_desktop
@@ -194,6 +195,9 @@ import org.onion.agro.BuildConfig
 import org.onion.agro.audio.BgmAudioFileStore
 import org.onion.agro.audio.BgmAudioPlayer
 import org.onion.agro.database.ChatSessionEntity
+import org.onion.agro.ui.component.GrisWatercolorStatusIndicator
+import org.onion.agro.ui.component.resolveGrisStatusAccent
+import org.onion.agro.ui.component.resolveGrisStatusLabel
 import org.onion.agro.utils.Animations
 import org.onion.agro.viewmodel.ChatViewModel
 import ui.theme.AppTheme
@@ -214,6 +218,7 @@ fun ChatScreen(
         val chatViewModel = koinInject<ChatViewModel>()
         val chatMessages = chatViewModel.currentChatMessages
         val conversationContext by chatViewModel.conversationContext
+        val llmEngineStatus by chatViewModel.llmEngineStatus.collectAsState()
         val activeSessionId = chatViewModel.activeSessionId.value
         var isContextDetailsVisible by remember(activeSessionId, conversationContext.systemInstruction) {
             mutableStateOf(false)
@@ -295,6 +300,7 @@ fun ChatScreen(
         ) {
             ConversationContextHeader(
                 context = conversationContext,
+                llmEngineStatus = llmEngineStatus,
                 expanded = isContextDetailsVisible,
                 onToggleExpanded = {
                     val shouldShowDetails = !isContextDetailsVisible
@@ -326,6 +332,8 @@ fun ChatScreen(
             InputArea(
                 text = text,
                 isGenerating = chatViewModel.isGenerating.value,
+                canSend = conversationContext.isApplied &&
+                    llmEngineStatus == LlmEngineStatus.READY,
                 onAttachClick = {
                     coroutineScope.launch {
                         snackbarHostState.showSnackbar(getString(Res.string.feature_not_available))
@@ -425,6 +433,7 @@ fun ChatScreen(
 @Composable
 private fun ConversationContextHeader(
     context: ConversationContextState,
+    llmEngineStatus: LlmEngineStatus,
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
     onHistoryClick: () -> Unit,
@@ -460,10 +469,11 @@ private fun ConversationContextHeader(
         ChatSessionMode.CHIPTUNE_BGM_MML -> Icons.Filled.MusicNote
         else -> Icons.Filled.AutoAwesome
     }
-    val statusText = if (context.isApplied) {
+    val runtimeStatusText = resolveGrisStatusLabel(llmEngineStatus)
+    val statusText = if (context.isApplied && llmEngineStatus == LlmEngineStatus.READY) {
         description
     } else {
-        stringResource(Res.string.chat_context_not_applied)
+        runtimeStatusText
     }
     val toggleDescription = stringResource(
         if (expanded) {
@@ -472,11 +482,7 @@ private fun ConversationContextHeader(
             Res.string.chat_context_expand
         }
     )
-    val statusColor = if (context.isApplied) {
-        AppTheme.colors.primary
-    } else {
-        AppTheme.colors.tertiary
-    }
+    val statusColor = resolveGrisStatusAccent(llmEngineStatus)
     val horizontalPadding = if (isSingle) {
         AppTheme.spacing.containerPaddingMobile
     } else {
@@ -546,6 +552,11 @@ private fun ConversationContextHeader(
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
+                        GrisWatercolorStatusIndicator(
+                            status = llmEngineStatus,
+                            showText = false,
+                            compact = true,
+                        )
                         Icon(
                             imageVector = if (expanded) {
                                 Icons.Filled.ExpandLess
@@ -2193,6 +2204,7 @@ private fun ImageContentActions(
 fun InputArea(
     text: String,
     isGenerating: Boolean,
+    canSend: Boolean,
     onAttachClick: () -> Unit,
     onSendClick: () -> Unit,
     onNewChatClick: () -> Unit,
@@ -2301,6 +2313,7 @@ fun InputArea(
 
                         IconButton(
                             onClick = onSendClick,
+                            enabled = isGenerating || canSend,
                             modifier = Modifier
                                 .background(
                                     color = AppTheme.colors.primaryContainer.copy(alpha = 0.3f),
@@ -2409,6 +2422,7 @@ fun InputArea(
 
                         IconButton(
                             onClick = onSendClick,
+                            enabled = isGenerating || canSend,
                             modifier = Modifier
                                 .background(
                                     color = AppTheme.colors.primaryContainer.copy(alpha = 0.3f),

@@ -120,6 +120,12 @@
     <string name="chat_disclaimer">%1$s 基于概率编织回应，请以温和的审视探寻真相。</string>
     <string name="model_loading_title">模型初始化中</string>
     <string name="model_loading_subtitle">正在配置权重并准备本地神经网络引擎...</string>
+    <string name="llm_status_standby">模型待加载</string>
+    <string name="llm_status_initializing">正在准备本地模型</string>
+    <string name="llm_status_applying_context">正在晕染新上下文</string>
+    <string name="llm_status_ready">系统已就绪</string>
+    <string name="llm_status_generating">正在编织回应</string>
+    <string name="llm_status_error">模型需要检查</string>
 
     <!-- LLM Settings Screen -->
     <string name="llm_settings_title">模型参数</string>
@@ -169,6 +175,7 @@
     <string name="chat_system_engine_not_initialized">系统：神经网络引擎未初始化或模型尚未加载。请稍候或检查模型路径。</string>
     <string name="chat_system_error_prefix">错误：%1$s</string>
     <string name="chat_system_error_token_limit_exceeded">输入内容过长。你的输入、附带的附件或历史记录已超出模型的「上下文限制」。请前往「设置」页面调高「上下文限制 (Context Limits)」或清除对话历史记录后重试。</string>
+    <string name="chat_system_empty_response">模型在生成有效回答前已经结束，请重试。</string>
     <string name="chat_gpu_decode_failed_fallback_cpu">GPU 模式错误，已自动切换为 CPU 模式</string>
     <string name="chat_thinking_prefix">> *正在思考...*\n</string>
     <string name="chat_running_tool">\n`[正在运行工具: %1$s...]`\n</string>
@@ -214,6 +221,7 @@
     <string name="chat_context_bgm_description">创作 JSON + MML 芯片音乐并渲染本地 WAV 音频</string>
     <string name="chat_context_lottie_description">创作受限 Lottie 规格，并预览本地 JSON 动画</string>
     <string name="chat_context_not_applied">正在等待模型应用当前上下文</string>
+    <string name="chat_context_wait_until_ready">模型仍在准备所选上下文，请稍候。</string>
     <string name="chat_context_current_instruction">当前系统指令</string>
     <string name="chat_context_expand">查看系统指令</string>
     <string name="chat_context_collapse">收起系统指令</string>

@@ -5,16 +5,17 @@ import com.onion.model.ChatRole
 import com.onion.model.ChatSessionMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ContextStrategyTest {
     @Test
-    fun structuredModesUseAnIsolatedHighOutputPolicy() {
+    fun structuredModesUseAnIsolatedHighOutputPolicyWithoutToolCallConstraint() {
         val strategy = ChatSessionMode.SVG_IMAGE.contextStrategy()
 
         assertTrue(strategy is ContextStrategy.StructuredGeneration)
         assertTrue(strategy.prefillPrefaceOnInit)
-        assertTrue(strategy.enableConstrainedDecoding)
+        assertFalse(strategy.enableConstrainedDecoding)
         assertEquals(4_096, strategy.maxOutputTokens)
         assertTrue(strategy.filterChannelContent.not())
     }
@@ -65,6 +66,66 @@ class ContextStrategyTest {
                 ChatSessionMode.SVG_IMAGE,
                 messages,
             ).isEmpty(),
+        )
+    }
+
+    @Test
+    fun conversationRebuildDoesNotReplayTheInFlightPrompt() {
+        val messages = listOf(
+            ChatMessage.text("completed prompt", ChatRole.USER),
+            ChatMessage.text("completed answer", ChatRole.ASSISTANT),
+            ChatMessage.text(
+                "current prompt",
+                ChatRole.USER,
+                metadata = mapOf("turn_id" to "turn-current"),
+            ),
+            ChatMessage.text(
+                "",
+                ChatRole.ASSISTANT,
+                metadata = mapOf(
+                    "turn_id" to "turn-current",
+                    "is_generating" to "true",
+                ),
+            ),
+        )
+
+        val replay = ContextCoordinator.initialMessages(ChatSessionMode.DEFAULT, messages)
+        val replayText = replay.joinToString("\n")
+
+        assertTrue(replayText.contains("completed prompt"))
+        assertTrue(replayText.contains("completed answer"))
+        assertFalse(replayText.contains("current prompt"))
+    }
+
+    @Test
+    fun failedTurnIsExcludedFromConversationRebuild() {
+        val messages = listOf(
+            ChatMessage.text(
+                "failed prompt",
+                ChatRole.USER,
+                metadata = mapOf("turn_id" to "turn-failed"),
+            ),
+            ChatMessage.text(
+                "The model returned no usable response",
+                ChatRole.ASSISTANT,
+                metadata = mapOf(
+                    "turn_id" to "turn-failed",
+                    "exclude_from_context" to "true",
+                ),
+            ),
+        )
+
+        assertTrue(
+            ContextCoordinator.initialMessages(ChatSessionMode.DEFAULT, messages).isEmpty()
+        )
+    }
+
+    @Test
+    fun punctuationOnlyTerminalOutputIsRejected() {
+        assertFalse(GenerationOutputPolicy.hasUsableContent("{\n"))
+        assertFalse(GenerationOutputPolicy.hasUsableContent("[]"))
+        assertTrue(
+            GenerationOutputPolicy.hasUsableContent("{\"type\":\"svg_image\"}")
         )
     }
 }

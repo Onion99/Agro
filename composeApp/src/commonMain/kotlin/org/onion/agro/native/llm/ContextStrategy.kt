@@ -30,7 +30,10 @@ sealed interface ContextStrategy {
         override val prefillPrefaceOnInit: Boolean = true,
         override val filterChannelContent: Boolean = false,
         override val maxOutputTokens: Int = 4_096,
-        override val enableConstrainedDecoding: Boolean = true,
+        // The current JNI boolean enables model tool-call constraints. It does
+        // not bind schemaOrGrammar to the request, so enabling it with the
+        // structured slot's empty tool list can terminate output after "{".
+        override val enableConstrainedDecoding: Boolean = false,
         val maxRetryCount: Int = 2,
     ) : ContextStrategy
 }

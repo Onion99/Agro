@@ -25,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,12 +49,14 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.onion.model.LlmEngineStatus
 import com.onion.theme.state.ContentType
 import com.onion.theme.style.glassSurface
 import agro.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 import org.onion.agro.database.ChatSessionEntity
+import org.onion.agro.ui.component.GrisWatercolorStatusChip
 import org.onion.agro.viewmodel.ChatViewModel
 import ui.theme.AppTheme
 import kotlin.time.Clock
@@ -66,6 +69,7 @@ fun LibraryScreen(
     val isDesktop = AppTheme.contentType == ContentType.Dual
     val containerPadding = if (isDesktop) AppTheme.spacing.containerPaddingDesktop else AppTheme.spacing.containerPaddingMobile
     val chatViewModel = koinInject<ChatViewModel>()
+    val llmEngineStatus by chatViewModel.llmEngineStatus.collectAsState()
     var isForgeIdeaDialogVisible by remember { mutableStateOf(false) }
     
     val primaryColor = AppTheme.colors.primary
@@ -151,6 +155,7 @@ fun LibraryScreen(
                 ) {
                     LivingMemoryCard(
                         sessions = chatViewModel.chatSessions.take(4),
+                        llmEngineStatus = llmEngineStatus,
                         onSessionClick = { sessionId ->
                             chatViewModel.openSession(sessionId)
                             onOpenChat()
@@ -210,6 +215,7 @@ fun LibraryScreen(
                 ) {
                     LivingMemoryCard(
                         sessions = chatViewModel.chatSessions.take(4),
+                        llmEngineStatus = llmEngineStatus,
                         onSessionClick = { sessionId ->
                             chatViewModel.openSession(sessionId)
                             onOpenChat()
@@ -402,6 +408,7 @@ fun BentoCard(
 @Composable
 fun LivingMemoryCard(
     sessions: List<ChatSessionEntity> = emptyList(),
+    llmEngineStatus: LlmEngineStatus,
     onSessionClick: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -453,35 +460,7 @@ fun LivingMemoryCard(
                     )
                 }
                 
-                // Active badge
-                Box(
-                    modifier = Modifier
-                        .background(
-                            color = AppTheme.colors.primaryContainer.copy(alpha = 0.3f),
-                            shape = AppTheme.shape.full
-                        )
-                        .padding(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs)
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .background(
-                                    color = AppTheme.colors.primary,
-                                    shape = AppTheme.shape.full
-                                )
-                        )
-                        Text(
-                            text = stringResource(Res.string.library_status_active),
-                            style = AppTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = AppTheme.colors.primary
-                        )
-                    }
-                }
+                GrisWatercolorStatusChip(status = llmEngineStatus)
             }
 
             Spacer(modifier = Modifier.height(AppTheme.spacing.md))

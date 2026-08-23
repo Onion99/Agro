@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-23] - 修复 LLM 首轮上下文并统一 Gris 水彩运行态
+- [修复] 关闭 Structured 会话中未绑定 JSON Schema 的 tool-call constrained decoding，消除空工具约束导致首轮仅输出 `{` 与换行后结束的问题。
+- [修复] SystemInstruction/模式切换先停用旧 conversation，再清空旧消息并强制重建；回放时排除生成中、取消或失败的完整 turn，避免旧 KV 污染与当前 prompt 重复注入。
+- [修复] LiteRT-LM 流式回调改为有序缓冲投递，并拦截纯括号/标点终止响应；初始化失败不再误报模型加载完成。
+- [新增] 引入 `LlmEngineStatus` 运行态与 Gris 水彩指示器/Chip，在 Chat、Library 和主导航统一展示待加载、初始化、应用上下文、就绪、生成和错误状态，并仅在 `READY` 时开放发送。
+- [测试] 扩展 `ContextStrategyTest`，覆盖 Structured 约束开关、生成中 prompt 不回放、失败 turn 隔离与无效终止输出。
+- [文档] 更新 `docs/designs/app-context-management-design.md`、`docs/agents/ui-theme.md` 与 `docs/agents/data-model.md`，记录桥接边界、切换事务、状态模型及视觉规范。
+
 ## [2026-08-22] - 修复结构化生成会话恢复后的上下文污染
 - [修复] SVG、BGM、Lottie 会话恢复或重建时不再将持久化历史消息注入 constrained decoding 的 KV Cache，避免生成仅输出 `{` 等不完整 JSON 片段。
 - [测试] 增加结构化模式历史不回放的回归测试。

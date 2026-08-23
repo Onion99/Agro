@@ -39,7 +39,7 @@
 | **KV Cache 策略** | 累积追加 + 思考链回滚 + 滑窗压缩 | 独立隔离 / 单次生成后即弃或重置，防止污染主会话 |
 | **System Prompt** | 通用助手人格、工具定义（Tools） | 极长且严格的 DSL/Schema 规范、few-shot 样本 |
 | **前缀预热 (Prefill)** | `prefillPrefaceOnInit = true` | 针对专用 System Instruction 做前缀固化 |
-| **约束解码** | 通常关闭或仅在 Tool Call 时局部开启 | **强制开启（Constrained Decoding / JSON Schema）** |
+| **约束解码** | 通常关闭或仅在 Tool Call 时局部开启 | 当前桥接关闭；待 request-level JSON Schema / Grammar 真正绑定后再启用 |
 | **Token 预算分配** | 平衡输入与输出（如 Input 70%, Output 30%） | **高输出预算（Max Output Tokens 占比极高）** |
 | **“重新生成”处理** | 回滚上一轮 Checkpoint，保留更早前文 | 丢弃旧输出，重新单轮 Prefill 或错误反馈微调 |
 
@@ -95,9 +95,11 @@
   * 生成完成后，产出的代码（如 SVG 源码、MML 序列、Lottie JSON）只沉淀为业务消息中的媒体/结构化 Payload；
   * 不将冗长生成代码（可能包含数千 Token）无休止地堆叠在后续对话的 KV Cache 中。
 
-### 4.2 专用 System Prompt 预热与语法约束绑定
-* **Schema / Grammar 绑定**：
-  * 在创建 AIGC 会话时，强制开启 `enableConversationConstrainedDecoding = true`，并将对应的 JSON Schema / EBNF 语法规则传入 `ConstraintProvider`（LLGuidance），确保生成的 JSON 或代码 100% 符合解析器格式。
+### 4.2 专用 System Prompt 预热与语法约束边界
+* **当前桥接边界**：
+  * Kotlin/JNI 的 `enableConversationConstrainedDecoding` 布尔值只会启用基于 Tool Description 的 tool-call 约束，并不会把 `ContextStrategy.StructuredGeneration.schemaOrGrammar` 绑定到本次请求。
+  * Structured slot 为避免模型调用普通聊天工具会传入空工具列表 `[]`。在这种条件下开启上述布尔值会进入没有可用工具契约的约束路径，实测表现为首轮只产生 `"{"`、换行后即结束。
+  * 因此当前实现必须保持 `enableConstrainedDecoding = false`，使用专用 System Instruction、单请求会话隔离以及业务 parser/sanitizer 做结构校验。只有在 request-level `ConstraintProvider` / JSON Schema / EBNF 已真实接入且有测试覆盖后，才允许开启语法约束。
 * **专用前缀固化**：
   * AIGC 模式拥有独立的 DSL 规范提示词（如 `SVG_IMAGE_SYSTEM_INSTRUCTION`、`LOTTIE_ANIMATION_SYSTEM_INSTRUCTION`）；
   * 通过 `prefillPrefaceOnInit = true` 将专用规则一次性 Prefill 进该模式专属的会话缓存中。
@@ -150,7 +152,8 @@ sealed interface ContextStrategy {
         override val prefillPrefaceOnInit: Boolean = true,
         override val filterChannelContent: Boolean = false,
         override val maxOutputTokens: Int? = 4096,
-        override val enableConstrainedDecoding: Boolean = true,
+        // 当前 JNI 开关是 tool-call 约束，不能绑定 schemaOrGrammar。
+        override val enableConstrainedDecoding: Boolean = false,
         val maxRetryCount: Int = 2
     ) : ContextStrategy
 }
@@ -176,7 +179,7 @@ class ContextCoordinator(
     ): LmConversation {
         return when {
             mode.isStructuredGenerationMode() -> {
-                // AIGC 模式：使用独立沙箱，配置强约束与大 Token 预算
+                // AIGC 模式：使用独立沙箱与大 Token 预算；当前不启用空工具约束
                 activeAigcConversation?.close()
                 val aigcStrategy = ContextStrategy.StructuredGeneration()
                 val conv = engine.createConversation(
@@ -239,13 +242,13 @@ class ContextCoordinator(
 
 ---
 
-## 7. 本轮实现落地（2026-08-20）
+## 7. 实现落地（2026-08-20，2026-08-23 修订）
 
 本设计已从 ViewModel 内部约定升级为可执行的运行时边界，落地位置如下：
 
 | 设计能力 | 实现 | 关键行为 |
 | --- | --- | --- |
-| 模式策略 | `ContextStrategy` | DEFAULT 使用 1024 输出预算、通道过滤与普通对话；SVG/BGM/Lottie 使用 4096 输出预算、独立沙箱与约束解码。 |
+| 模式策略 | `ContextStrategy` | DEFAULT 使用 1024 输出预算、通道过滤与普通对话；SVG/BGM/Lottie 使用 4096 输出预算与独立沙箱。当前 Structured 不启用未绑定 Schema 的 tool-call constrained decoding。 |
 | 会话所有权 | `ContextCoordinator` | Chat 与 Structured 各自拥有 KV slot；session id、模式或 system instruction 变化时重建，禁止跨模式污染。 |
 | 历史恢复 | `ContextTranscript` | 打开历史或重建会话时，将持久化消息重放为 LiteRT-LM `Message`，不再出现“UI 有历史、KV 为空”的分裂状态。 |
 | 超限保护 | `ContextBudgetPolicy` + ViewModel preflight | 使用原生 `GetTokenCount()` 检查 `used + incoming + reservedOutput`；达到 85% 或硬上限前，以旧消息摘要 + 最近 turns 重建 KV，持久化历史不删除。 |
@@ -261,7 +264,34 @@ LiteRT-LM 的 Android/Desktop JNI 接口已经提供 prefill 开关；当前 iOS
 `ChatViewModel` 不再直接持有 `LmConversation`/`LmEngine`。模型初始化、模式切换、后端降级、取消和 ViewModel 销毁统一通过 `ContextCoordinator` 回收；CPU fallback 会创建全新的 engine 与 conversation，并从当前 durable transcript 重建上下文。
 ### 7.3 Structured 会话恢复约束
 
-结构化生成模式（SVG、BGM、Lottie）虽然保留历史消息用于 UI 展示和持久化，但创建或恢复 `LmConversation` 时必须传入空的 `initialMessages`。这些模式启用了 constrained decoding，历史生成 JSON 不能作为 KV Cache 中的对话历史，否则可能污染下一次生成并导致只输出不完整的 JSON 前缀。普通 DEFAULT 会话仍通过 `ContextTranscript` 回放历史；该约束同时适用于普通重建和上下文压缩重建。
+结构化生成模式（SVG、BGM、Lottie）虽然保留历史消息用于 UI 展示和持久化，但创建或恢复 `LmConversation` 时必须传入空的 `initialMessages`。历史生成 JSON 不能作为 KV Cache 中的对话历史，否则可能污染下一次生成并导致不完整 JSON 前缀。普通 DEFAULT 会话仍通过 `ContextTranscript` 回放历史；该约束同时适用于普通重建和上下文压缩重建。
 ### 7.4 AIGC 多轮请求隔离
 
-AIGC 每次请求前都必须以 `forceRecreate = true` 创建新的 `LmConversation`，即使属于同一个持久化会话。历史输出只用于 UI 和持久化，不得让上一轮 JSON 留在下一轮 constrained decoding 的 KV Cache 中。
+AIGC 每次请求前都必须以 `forceRecreate = true` 创建新的 `LmConversation`，即使属于同一个持久化会话。历史输出只用于 UI 和持久化，不得让上一轮 JSON 留在下一轮生成的 KV Cache 中。
+
+### 7.5 首轮发送与 SystemInstruction 切换事务
+
+上下文切换遵循 `deactivate old slot → select context → clear/reload durable transcript → create conversation → mark isApplied → READY` 的顺序：
+
+1. `ContextCoordinator.onModeSwitched()` 先清空 active slot，旧 conversation 不再可发送，防止 Library 跳转后快速点击把请求送入旧 SystemInstruction。
+2. 应用新的 SystemInstruction 时先清空当前 UI/数据库消息，再强制重建 native conversation，避免“UI 已清空但旧消息已进入 KV”的隐形历史。
+3. UI 和 `ChatViewModel.sendMessage()` 都只在 `ConversationContextState.isApplied == true`、native conversation 存在且运行态为 `READY` 时接受发送。
+4. 当前 user message 与生成中的 assistant placeholder 使用同一 `turn_id`。重建、压缩或 CPU fallback 回放时，`ContextTranscript` 排除整个 in-flight turn，防止当前 prompt 被 Prefill 后又由 Agent Loop 重发一次。
+5. 取消、空响应、解析失败的 turn 标记为 `exclude_from_context`；它们保留为可诊断的持久化记录，但不再污染后续 KV Cache。
+6. native 回调使用有序的无界 channel 缓冲；其实际上限仍由 `maxOutputTokens` 约束。`onDone` 关闭流后会排空已接收 chunk，避免尾部 token 因异步转发竞态而丢失。
+7. 只有 `{`、`[]` 或纯标点的终止输出视为不可用响应，展示可重试错误并以干净 transcript 重建会话。
+
+### 7.6 LLM 运行态与 Gris 水彩反馈
+
+`LlmEngineStatus` 描述当前 native engine/conversation 的瞬时生命周期，不写入会话数据库。导航栏、Library 状态 Chip 与 Chat 上下文头共享同一个状态源和 `GrisWatercolorStatusIndicator`：
+
+| 状态 | 含义 | Gris 动效语义 |
+| --- | --- | --- |
+| `UNINITIALIZED` | 尚未加载模型 | Slate 低透明静泊 |
+| `INITIALIZING` | 创建并初始化 engine | Dusty Blue 轨道式晕染 |
+| `APPLYING_CONTEXT` | 切换/重建 SystemInstruction 与 conversation | Sage / Blue 双层扩散 |
+| `READY` | 上下文已提交，可发送 | Sage 慢呼吸 |
+| `GENERATING` | 正在流式推理 | Blue / Sage 较快流动 |
+| `ERROR` | 初始化、恢复或生成失败 | Error / Slate 低频潮汐，不闪烁 |
+
+颜色、间距、形状与玻璃表面均来自 `AppTheme` token；动画只表达状态变化，不替代本地化文字标签。

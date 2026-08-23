@@ -121,6 +121,12 @@
     <string name="chat_disclaimer">%1$s weaves responses from probability. Seek truth with gentle scrutiny.</string>
     <string name="model_loading_title">Initializing Model</string>
     <string name="model_loading_subtitle">Configuring weights and preparing the local engine...</string>
+    <string name="llm_status_standby">Model standby</string>
+    <string name="llm_status_initializing">Preparing local model</string>
+    <string name="llm_status_applying_context">Diffusing new context</string>
+    <string name="llm_status_ready">System ready</string>
+    <string name="llm_status_generating">Composing response</string>
+    <string name="llm_status_error">Model needs attention</string>
 
     <!-- LLM Settings Screen -->
     <string name="llm_settings_title">Model Parameters</string>
@@ -170,6 +176,7 @@
     <string name="chat_system_engine_not_initialized">System: LM Engine not initialized or model not loaded yet. Please wait or check the model path.</string>
     <string name="chat_system_error_prefix">Error: %1$s</string>
     <string name="chat_system_error_token_limit_exceeded">The input prompt is too long. Emojis, files, or message history may have exceeded the model\'s Context Limits. Please go to the Setting page to adjust Context Limits or clear the chat history.</string>
+    <string name="chat_system_empty_response">The model ended before producing a usable response. Please retry.</string>
     <string name="chat_gpu_decode_failed_fallback_cpu">GPU mode error: switching to CPU mode.</string>
     <string name="chat_thinking_prefix">> *Thinking...*\n</string>
 
@@ -213,6 +220,7 @@
     <string name="chat_context_bgm_description">Creates JSON + MML chiptunes and renders local WAV audio</string>
     <string name="chat_context_lottie_description">Creates constrained Lottie specs and previews local JSON animations</string>
     <string name="chat_context_not_applied">Waiting for the model context</string>
+    <string name="chat_context_wait_until_ready">The model is still preparing the selected context. Please wait a moment.</string>
     <string name="chat_context_current_instruction">Current System Instruction</string>
     <string name="chat_context_expand">Show system instruction</string>
     <string name="chat_context_collapse">Hide system instruction</string>

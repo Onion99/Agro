@@ -78,10 +78,15 @@ class ContextCoordinator {
     }
 
     fun onModeSwitched(targetMode: ChatSessionMode) {
+        // A selected context is not active until openConversation succeeds.
+        // Deactivate first so a fast UI send cannot reach the previous slot.
+        activeKind = null
+        structuredSlot?.conversation?.close()
+        structuredSlot = null
+
         if (targetMode == ChatSessionMode.DEFAULT) {
-            structuredSlot?.conversation?.close()
-            structuredSlot = null
-            activeKind = SlotKind.CHAT.takeIf { chatSlot != null }
+            chatSlot?.conversation?.close()
+            chatSlot = null
         }
     }
 

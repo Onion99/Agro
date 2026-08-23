@@ -11,10 +11,7 @@ object ContextTranscript {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun toLmMessages(messages: List<ChatMessage>): List<Message> = buildList {
-        messages.forEach { message ->
-            if (message.metadata?.get("is_generating") == "true") {
-                return@forEach
-            }
+        contextEligibleMessages(messages).forEach { message ->
 
             when (message.role) {
                 ChatRole.SYSTEM -> Unit
@@ -34,9 +31,8 @@ object ContextTranscript {
      * system memory.  The durable transcript remains untouched.
      */
     fun compact(messages: List<ChatMessage>, retainTurns: Int): List<Message> {
-        val replayable = messages.filter { message ->
-            message.role != ChatRole.SYSTEM &&
-            message.metadata?.get("is_generating") != "true"
+        val replayable = contextEligibleMessages(messages).filter { message ->
+            message.role != ChatRole.SYSTEM
         }
         val keepCount = (retainTurns.coerceAtLeast(1) * 2).coerceAtMost(replayable.size)
         val omitted = replayable.dropLast(keepCount)
@@ -94,4 +90,43 @@ object ContextTranscript {
         }
         return body.take(6_000)
     }
+
+    /**
+     * Removes transient or failed turns before rebuilding native KV state.
+     *
+     * The UI appends the current user prompt and a pending assistant placeholder
+     * before inference starts. Replaying either and then sending the prompt again
+     * duplicates the first turn, so the complete in-flight pair is excluded.
+     */
+    private fun contextEligibleMessages(messages: List<ChatMessage>): List<ChatMessage> {
+        val excludedTurnIds = messages.asSequence()
+            .filter { it.metadata?.get(METADATA_EXCLUDE_FROM_CONTEXT) == "true" }
+            .mapNotNull { it.metadata?.get(METADATA_TURN_ID) }
+            .toSet()
+        val eligible = messages.filter { message ->
+            val metadata = message.metadata
+            metadata?.get(METADATA_EXCLUDE_FROM_CONTEXT) != "true" &&
+                metadata?.get(METADATA_TURN_ID) !in excludedTurnIds
+        }
+        val pendingAssistantIndex = eligible.indexOfLast { message ->
+            message.role == ChatRole.ASSISTANT &&
+                message.metadata?.get(METADATA_IS_GENERATING) == "true"
+        }
+        if (pendingAssistantIndex < 0) return eligible
+
+        val pendingTurnId = eligible[pendingAssistantIndex].metadata?.get(METADATA_TURN_ID)
+        val userIndex = (pendingAssistantIndex - 1 downTo 0).firstOrNull { index ->
+            val message = eligible[index]
+            message.role == ChatRole.USER &&
+                (pendingTurnId == null || message.metadata?.get(METADATA_TURN_ID) == pendingTurnId)
+        } ?: return eligible.filterIndexed { index, _ -> index != pendingAssistantIndex }
+
+        return eligible.filterIndexed { index, _ ->
+            index !in userIndex..pendingAssistantIndex
+        }
+    }
+
+    private const val METADATA_IS_GENERATING = "is_generating"
+    private const val METADATA_TURN_ID = "turn_id"
+    private const val METADATA_EXCLUDE_FROM_CONTEXT = "exclude_from_context"
 }

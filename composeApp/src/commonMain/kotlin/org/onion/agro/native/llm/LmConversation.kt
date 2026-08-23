@@ -1,12 +1,13 @@
 package org.onion.agro.native.llm
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.serialization.json.*
 import com.google.ai.edge.litertlm.LiteRtLmJni
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
 
 class LiteRtLmInferenceException(
     val statusCode: Int,
@@ -41,19 +42,18 @@ class LmConversation(
             messageJsonString = sanitizedMessageJson.toString(),
             extraContextJsonString = sanitizedExtraContextJson.toString(),
             onMessage = { messageJsonString ->
-                println("LmConversation: onMessage received: $messageJsonString")
                 try {
                     val messageJsonObject = Json.parseToJsonElement(messageJsonString).jsonObject
-                    
+
                     if (messageJsonObject.containsKey("content") || messageJsonObject.containsKey("channels")) {
-                        launch {
-                            send(jsonToMessage(messageJsonObject))
-                            println("LmConversation: send success")
+                        val result = trySend(jsonToMessage(messageJsonObject))
+                        if (result.isFailure) {
+                            println("LmConversation: unable to deliver response chunk: $result")
                         }
                     } else if (messageJsonObject.containsKey("tool_calls")) {
-                        launch {
-                            send(jsonToMessage(messageJsonObject))
-                            println("LmConversation: send tool_calls success")
+                        val result = trySend(jsonToMessage(messageJsonObject))
+                        if (result.isFailure) {
+                            println("LmConversation: unable to deliver tool call chunk: $result")
                         }
                     }
                 } catch (e: Exception) {
@@ -62,7 +62,6 @@ class LmConversation(
                 }
             },
             onDone = {
-                println("LmConversation: onDone called")
                 this@callbackFlow.close()
             },
             onError = { code, errorMsg ->
@@ -85,7 +84,7 @@ class LmConversation(
         awaitClose {
             // Wait for completion, process cancellation if needed via cancelProcess() explicitly handled externally
         }
-    }
+    }.buffer(Channel.UNLIMITED)
 
     override fun cancelProcess() {
         checkIsAlive()
