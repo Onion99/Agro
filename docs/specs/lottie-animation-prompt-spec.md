@@ -1,177 +1,184 @@
-# Gemma4 Native Lottie Prompt Specification
+# Gemma4 4B Lottie Scene Prompt Specification
 
-**Version:** 1.6.0
-**Updated:** 2026-08-10  
-**Owner:** `ChatViewModel.LOTTIE_ANIMATION_SYSTEM_INSTRUCTION`
+**Version:** 2.0.0
+**Updated:** 2026-08-24
+**Owner:** `LottieSceneContract`
+**Consumer:** `ChatViewModel.LOTTIE_ANIMATION_SYSTEM_INSTRUCTION`
 
-## Purpose
+## 1. Purpose
 
-Gemma4 4B must generate the complete Native Lottie JSON. The client does not select an animation template, infer a `kind`, calculate geometry from a `seed`, or build layers from an intent object. `LottieAnimationSpecParser` only sanitizes malformed model output, validates safety, and extracts metadata for rendering.
+Gemma4 4B no longer generates Native Lottie/Bodymovin AST directly. It emits a shallow
+`lottie_scene` plan containing objects, geometry, colors, and normalized motion tracks. The app then
+uses `LottieSceneCompiler` to deterministically compile that plan into the Native Lottie JSON passed
+to Compottie.
 
-The model must output exactly one JSON object. The legacy `lottie_animation_spec` intent envelope is no longer accepted.
+This split follows the model's reliable reasoning order:
 
-## Smallest Working Animation
+1. decide which visible objects exist;
+2. assign simple geometry and colors;
+3. describe one clear motion for each object.
 
-Use this one-layer breathing circle as the baseline pattern:
+The model is explicitly forbidden from generating `layers`, `shapes`, `ty`, `ks`, `a`, `k`, `s`, or
+`e`. Those fields require deep Bodymovin nesting and were the main source of structurally valid but
+non-renderable output. The compiler is generic: it does not inspect user keywords, select a fixed
+animation template, or map a `kind/style/seed` to canned artwork.
+
+## 2. Response Envelope
+
+The model must output exactly one raw JSON object:
 
 ```json
 {
-  "v": "5.7.4",
-  "fr": 30,
-  "ip": 0,
-  "op": 60,
-  "w": 240,
-  "h": 240,
-  "nm": "Breathing Circle",
-  "ddd": 0,
+  "type": "lottie_scene",
+  "schemaVersion": 1,
+  "title": "Falling Water Drops",
+  "duration": 2,
   "loop": true,
-  "assets": [],
-  "layers": [
+  "objects": [
     {
-      "ddd": 0,
-      "ind": 1,
-      "ty": 4,
-      "nm": "Circle Layer",
-      "sr": 1,
-      "ks": {
-        "o": { "a": 0, "k": 100 },
-        "r": { "a": 0, "k": 0 },
-        "p": { "a": 0, "k": [120, 120, 0] },
-        "a": { "a": 0, "k": [0, 0, 0] },
-        "s": { "a": 1, "k": [
-          { "t": 0, "s": [90, 90, 100], "e": [100, 100, 100] },
-          { "t": 30, "s": [100, 100, 100], "e": [90, 90, 100] },
-          { "t": 60, "s": [90, 90, 100], "e": [90, 90, 100] }
-        ] }
-      },
-      "ao": 0,
-      "shapes": [
-        {
-          "ty": "gr",
-          "nm": "Circle Group",
-          "it": [
-            { "ty": "el", "nm": "Circle Path", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [100, 100] }, "d": 1 },
-            { "ty": "fl", "nm": "Circle Fill", "c": { "a": 0, "k": [0.12, 0.65, 0.95, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 },
-            { "ty": "tr", "p": { "a": 0, "k": [0, 0] }, "a": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [100, 100] }, "r": { "a": 0, "k": 0 }, "o": { "a": 0, "k": 100 } }
-          ]
-        }
-      ],
-      "ip": 0,
-      "op": 60,
-      "st": 0,
-      "bm": 0
+      "name": "Drop 1",
+      "shape": "ellipse",
+      "position": [75, 20],
+      "size": [12, 34],
+      "fill": "#38BDF8",
+      "motion": {
+        "position": [[0, 75, -20], [1, 75, 260]],
+        "opacity": [[0, 0], [0.12, 100], [0.82, 100], [1, 0]]
+      }
+    },
+    {
+      "name": "Drop 2",
+      "shape": "ellipse",
+      "position": [165, 20],
+      "size": [10, 28],
+      "fill": "#60A5FA",
+      "motion": {
+        "position": [[0, 165, -45], [0.22, 165, -20], [1, 165, 260]],
+        "opacity": [[0, 0], [0.22, 0], [0.32, 100], [0.86, 100], [1, 0]]
+      }
     }
   ]
 }
 ```
 
-At 30 FPS, `op - ip = 60` is two seconds. The scale is 90% at frame 0, 100% at frame 30, and 90% at frame 60, so the loop returns to its starting state.
+No Markdown fence, comments, prose, or second object may surround the payload. A prose prefix/suffix
+is tolerated by the response extractor for recovery, but it is not part of the contract.
 
-## Sanitizer Repair Boundary
+## 3. Root Fields
 
-LottieJsonSanitizer repairs syntax damage commonly produced by a small language model before
-the strict parser and Compottie receive the payload. The repair pipeline is ordered as follows:
+| Field | Required model value | Compiler behavior |
+| --- | --- | --- |
+| `type` | `lottie_scene` | Other envelope types are rejected. |
+| `schemaVersion` | `1` | Missing is treated as 1; other versions are rejected. |
+| `title` | Non-empty display title | Trimmed to 64 characters; missing becomes `Lottie Animation`. |
+| `duration` | `2` or `3`, in seconds | Clamped to 1..4 seconds. |
+| `loop` | Boolean | Defaults to `true`. |
+| `objects` | 1..6 objects | Parser tolerates at most 12; an empty scene is rejected. |
 
-1. Remove an outer Markdown fence.
-2. Repair token omissions: unquoted keys or enum values, missing colons, numbers accidentally
-   followed by a quote, leading-decimal numbers such as .2, and missing commas/closing braces
-   between adjacent array objects.
-3. Remove duplicate/trailing commas, normalize malformed colors, and close unbalanced brackets.
-4. Parse the repaired object and normalize the Native Lottie structure: canvas/frame bounds,
-   transform vectors, percentage scale, opacity, colors, and nested fill/stroke shape items.
-5. Run LottieJsonValidator, then pass the exact sanitized string to Compottie.
+The compiler owns the canvas (`240 x 240`), frame rate (`30`), composition start (`ip=0`), frame end,
+2D flags, empty assets, layer indexes, transforms, and paint syntax.
 
-For example, these model fragments are repairable:
+## 4. Object Geometry
 
-~~~text
-"p": { "a": 0,k": [20,2] }
-{t: 1, "s": [1.1,0]          {t:2, "s": [0,0] }
-"c": {a:0,k:[.2,0,0.5,0]}
-"ty": "sh", "ks": { "k": [{ "v": [0,0], "i": [0,0], "o": [0,0] }] }
-~~~
+Every object has `name`, `shape`, and `position:[x,y]`.
 
-They become valid JSON property wrappers and chronological keyframe objects. The sanitizer does
-not invent a missing subject, choose an animation style, or load external resources. It can
-normalize malformed static `ty="sh"` point arrays into Bodymovin path objects and add a missing
-group transform, but the output must still contain drawable geometry plus fill or stroke content.
-If the payload still cannot form a JSON object or violates the safety validator, the message
-remains unsupported and the original payload is preserved for inspection.
+| `shape` | Fields | Native output |
+| --- | --- | --- |
+| `ellipse` | `size:[width,height]`, normally `fill` | `el` geometry |
+| `rect` | `size`, optional `roundness`, normally `fill` | `rc` geometry |
+| `star` | `points`, `radius`, `innerRadius`, normally `fill` | `sr` geometry |
+| `path` | local `vertices:[[x,y],...]`, `closed`, fill and/or stroke | `sh` path with zero tangents |
 
-The regression tests repairsFireAnimationAndCompottieAcceptsSanitizedJson and
-repairsPointArrayShapePathFireAnimationAndCompottieAcceptsSanitizedJson verify the complete path
-from malformed payloads through LottieMessageParser to LottieComposition.parse.
+Colors use `#RRGGBB`. `fill:"none"` and `stroke:"none"` are accepted. An open path should use
+`stroke` and `strokeWidth`; Trim Path automatically ensures a visible stroke. Sizes, coordinates,
+stroke widths, star point counts, and radii are clamped to safe render bounds.
 
-## Field Meaning
+Aliases such as `circle`, `rectangle`, and `line` are accepted by the compiler only as recovery.
+The prompt always teaches the four canonical shape names.
 
-### Root
+## 5. Motion Tracks
 
-| Field | Meaning |
-| --- | --- |
-| `v` | Lottie/exporter version. Use `5.7.4`. |
-| `fr` | Frames per second. Use 30 for simple UI motion or 60 for very smooth motion. |
-| `ip` / `op` | Composition start/end frames. Duration is `(op - ip) / fr` seconds. Keep the span at most 180 frames. |
-| `w` / `h` | Canvas dimensions in composition units. Use 240x240 by default; keep them in 64..512. |
-| `nm` | Human-readable animation title. |
-| `ddd` | 3D flag. Must be `0`; this route is 2D. |
-| `loop` | Optional app metadata. Use `true` for seamless activity and `false` for one-shot events. |
-| `assets` | Must be an empty array. No images, fonts, precompositions, or external files. |
-| `layers` | Non-empty ordered array. Later layers draw over earlier layers. |
+Track time is normalized progress from `0` to `1`, never frames or milliseconds:
 
-### Layer and Transform
+| Track | Row form | Compiled property |
+| --- | --- | --- |
+| `position` | `[time,x,y]` | layer `ks.p` |
+| `scale` | `[time,percent]` or `[time,xPercent,yPercent]` | layer `ks.s` |
+| `rotation` | `[time,degrees]` | layer `ks.r` |
+| `opacity` | `[time,0..100]` | layer `ks.o` |
+| `trim` | `[time,0..100]` | shape `tm.e` |
 
-| Field | Meaning |
-| --- | --- |
-| `ind` | Unique positive layer id. |
-| `ty` | Layer type. Use `4` for a vector shape layer. |
-| `sr` | Time stretch. Use `1`. |
-| `ip` / `op` / `st` | Layer visibility interval and start offset, in frames. |
-| `bm` | Blend mode. Use `0` for normal blending. |
-| `ao` | Auto-orientation. Use `0`. |
-| `ks.o` | Layer opacity, 0..100. |
-| `ks.r` | Layer rotation in degrees. |
-| `ks.p` | Absolute position `[x,y,z]`; center is normally `[w/2,h/2,0]`. |
-| `ks.a` | Anchor point `[x,y,z]`; a simple centered layer uses `[0,0,0]`. |
-| `ks.s` | Scale `[x,y,z]` in percentages. Use `[100,100,100]`, never `[1,1,1]`. |
+Each animated track should contain 2..5 chronological rows. The compiler:
 
-### Shape Items
+- sorts rows and removes duplicate times;
+- clamps time and values;
+- extends a missing start/end boundary using the nearest value;
+- converts progress to `round(progress * frameCount)`;
+- writes `a=1` and makes each keyframe's `e` equal the next keyframe's `s`;
+- preserves a static property when all values are equal;
+- adds a small 96% → 104% → 96% pulse to the first object only when the entire scene is static.
 
-- `ty="gr"` is a group. Its `it` array contains geometry, style, and a final `tr` group transform.
-- `ty="el"` is an ellipse/circle. `p` is local position and `s` is local `[width,height]`.
-- `ty="rc"` is a rectangle. `p` is local center, `s` is `[width,height]`, and `r` is corner radius.
-- `ty="sh"` is a custom path. `ks.k` contains vertices `v`, in-tangents `i`, out-tangents `o`, and closed flag `c`.
-- `ty="fl"` is a fill. `c` is normalized RGBA, each channel 0..1; `o` is opacity 0..100.
-- `ty="st"` is a stroke. `c` is normalized RGBA, `o` is opacity, `w` is width, `lc` is line cap (`1` butt, `2` round, `3` square), and `lj` is line join.
-- `ty="tm"` is Trim Path. `s` is start percentage, `e` is end percentage, and `o` is offset degrees. Animate `e` from 0 to 100 for draw-on motion.
-- `ty="tr"` is a group transform with local position `p`, anchor `a`, percentage scale `s`, rotation `r`, and opacity `o`. Put it after visible items in `it`.
+For a loop, scale, rotation, and opacity should normally match at progress 0 and 1. Translation may
+end elsewhere when the object is invisible at both boundaries, as in falling particles.
 
-## Keyframes and Timing
+## 6. Runtime Policy for Gemma4 4B
 
-- Static property: `{ "a": 0, "k": value }`.
-- Animated property: `{ "a": 1, "k": [ ...chronological keyframes... ] }`.
-- `t` is an absolute frame number, not milliseconds.
-- `s` is the segment start value; `e` is the segment end value. Include both for clear interpolation.
-- Scalar values use `[value]`; vectors use `[x,y]` or `[x,y,z]`.
-- `h=1` means hold/step. Omit it or use `h=0` for interpolation.
-- Optional keyframe `i` and `o` are Bezier easing handles. They are different from opacity and Trim Path offset `o`.
-- Convert time with `frame = round(milliseconds * fr / 1000)` and clamp to the composition/layer interval.
+Lottie mode has deterministic sampling caps independent of looser chat settings:
 
-## Animation Guidance
+- `temperature <= 0.25`;
+- `topP <= 0.9`;
+- `topK <= 20`;
+- output budget `1536` tokens;
+- request-scoped structured conversation with no durable response replay.
 
-1. Choose one subject and one action: pulse, rotate, move, fade, draw, or reveal.
-2. Start with one layer and one primitive. Add layers only when they clarify the action.
-3. Build geometry first, style second, and timing third.
-4. Use a readable sequence: entrance/draw `0%..25%`, main action `25%..75%`, settle `75%..100%`.
-5. Use 2..4 keyframes per animated property. Avoid random movement and avoid animating every property at once.
-6. Pulse uses scale or opacity; rotation uses `r`; movement uses `p`; fading uses `o`; drawing uses Trim Path `e`.
-7. A loop must have matching first and last visual values. A one-shot must end in a stable readable pose.
-8. Keep the artwork inside roughly 8%..92% of the canvas so strokes and overshoot are not clipped.
+Persisted Lottie sessions migrate to the current scene instruction when reopened. This prevents an
+old session snapshot from continuing to request Native Lottie after the protocol upgrade.
 
-## Forbidden Output
+## 7. Safety and Validation
 
-Do not output `lottie_animation_spec`, URLs, file paths, images, fonts, text layers, scripts, HTML, CSS, expressions, masks, effects, 3D layers, base64, `.lottie` packages, executable content, comments, or trailing commas. Keep `assets` empty, use at most 32 layers, and keep the JSON below 256 KiB.
+The scene plan rejects external resources and executable content, including URLs, file/data URIs,
+base64, images, fonts, scripts, HTML/CSS, effects, masks, expressions, Native `layers/shapes/ks`, and
+`.lottie` packages. The compiled JSON is then checked again by `LottieJsonValidator` for:
 
-## Implementation References
+- payload size at most 256 KiB;
+- empty external assets;
+- 2D supported layer types;
+- at most 32 layers;
+- at least one drawable geometry and fill/stroke pair;
+- absence of forbidden fields and values.
 
-- Prompt: `composeApp/src/commonMain/kotlin/org/onion/agro/viewmodel/ChatViewModel.kt`
-- Parser and validator: `composeApp/src/commonMain/kotlin/org/onion/agro/lottie/LottieAnimationSpecParser.kt`
+Invalid content becomes `ChatMessageContent.Unsupported`, preserving the original model payload for
+inspection.
+
+## 8. Legacy Native Lottie Compatibility
+
+Native Lottie is no longer requested from the model, but existing history and externally supplied
+Native JSON remain accepted. `LottieJsonSanitizer` continues its token/AST repair path and now also:
+
+- extracts the first JSON object from accidental prose;
+- recognizes anonymous property wrappers when group-level size plus a color vector provide enough
+  evidence to recover an ellipse and fill;
+- marks animated position/opacity/rotation properties as `a=1` when the model omitted the flag;
+- repairs segment continuity when a keyframe repeated its own `s` as `e` instead of using the next
+  keyframe value.
+
+The legacy `lottie_animation_spec` kind/template envelope remains unsupported. It is different from
+the generic `lottie_scene` object graph introduced here.
+
+## 9. Verification
+
+`LottieMessageParserTest` covers:
+
+- compact falling-water scene → compiler → validator → `LottieComposition.parse`;
+- stroked path plus normalized Trim Path → `LottieComposition.parse`;
+- the reported malformed anonymous water-drop Native JSON → sanitizer → Compottie;
+- prior malformed Native Lottie regression cases and empty-drawable rejection.
+
+## 10. Implementation References
+
+- Contract/prompt: `composeApp/src/commonMain/kotlin/org/onion/agro/lottie/LottieSceneContract.kt`
+- Compiler: `composeApp/src/commonMain/kotlin/org/onion/agro/lottie/LottieSceneCompiler.kt`
+- Route/parser/validator: `composeApp/src/commonMain/kotlin/org/onion/agro/lottie/LottieAnimationSpecParser.kt`
+- Legacy repair: `composeApp/src/commonMain/kotlin/org/onion/agro/lottie/LottieJsonSanitizer.kt`
+- Session policy: `composeApp/src/commonMain/kotlin/org/onion/agro/viewmodel/ChatViewModel.kt`
 - Message boundary: `composeApp/src/commonMain/kotlin/org/onion/agro/message/LottieMessageParser.kt`

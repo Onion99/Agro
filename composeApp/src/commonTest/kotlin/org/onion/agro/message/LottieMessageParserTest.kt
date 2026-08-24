@@ -11,6 +11,203 @@ import kotlin.test.assertTrue
 
 class LottieMessageParserTest {
     @Test
+    fun compilesCompactGemmaSceneAndCompottieAcceptsIt() {
+        val payload = """
+            {
+              "type": "lottie_scene",
+              "schemaVersion": 1,
+              "title": "Falling Water Drops",
+              "duration": 2,
+              "loop": true,
+              "objects": [
+                {
+                  "name": "Drop 1",
+                  "shape": "ellipse",
+                  "position": [75, 20],
+                  "size": [12, 34],
+                  "fill": "#38BDF8",
+                  "motion": {
+                    "position": [[0, 75, -20], [1, 75, 260]],
+                    "opacity": [[0, 0], [0.12, 100], [0.82, 100], [1, 0]]
+                  }
+                },
+                {
+                  "name": "Drop 2",
+                  "shape": "ellipse",
+                  "position": [165, 20],
+                  "size": [10, 28],
+                  "fill": "#60A5FA",
+                  "motion": {
+                    "position": [[0, 165, -45], [0.22, 165, -20], [1, 165, 260]],
+                    "opacity": [[0, 0], [0.22, 0], [0.32, 100], [0.86, 100], [1, 0]]
+                  }
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val result = LottieMessageParser.parseCompletedResponse(payload)
+        val lottie = assertIs<ChatMessageContent.LottieAnimation>(result, result.toString())
+
+        assertEquals("Falling Water Drops", lottie.title)
+        assertEquals(240, lottie.width)
+        assertEquals(240, lottie.height)
+        assertEquals(30, lottie.fps)
+        assertEquals(2_000L, lottie.durationMs)
+        assertTrue(lottie.json.contains("\"ty\":4"), lottie.json)
+        assertTrue(lottie.json.contains("\"a\":1"), lottie.json)
+        assertTrue(lottie.json.contains("\"ty\":\"el\""), lottie.json)
+        assertTrue(lottie.json.contains("\"ty\":\"fl\""), lottie.json)
+        assertTrue(lottie.json.contains("\"e\":[75,260,0]"), lottie.json)
+        assertNotNull(LottieComposition.parse(lottie.json))
+    }
+
+    @Test
+    fun compilesStrokedPathTrimSceneAndCompottieAcceptsIt() {
+        val payload = """
+            {
+              "type": "lottie_scene",
+              "schemaVersion": 1,
+              "title": "Success Check",
+              "duration": 2,
+              "loop": false,
+              "objects": [
+                {
+                  "name": "Check",
+                  "shape": "path",
+                  "position": [120, 120],
+                  "vertices": [[-45, 0], [-12, 35], [52, -38]],
+                  "closed": false,
+                  "stroke": "#22C55E",
+                  "strokeWidth": 12,
+                  "motion": { "trim": [[0, 0], [0.7, 100], [1, 100]] }
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val result = LottieMessageParser.parseCompletedResponse(payload)
+        val lottie = assertIs<ChatMessageContent.LottieAnimation>(result, result.toString())
+
+        assertTrue(lottie.json.contains("\"ty\":\"sh\""), lottie.json)
+        assertTrue(lottie.json.contains("\"ty\":\"st\""), lottie.json)
+        assertTrue(lottie.json.contains("\"ty\":\"tm\""), lottie.json)
+        assertNotNull(LottieComposition.parse(lottie.json))
+    }
+
+    @Test
+    fun repairsReportedGemmaAnonymousWaterDropNativeJson() {
+        val payload = """
+            {
+              "v": "5.8.4",
+              "fr": 30,
+              "ip": 0,
+              "op": 60,
+              "ddd": 0,
+              "loop": true,
+              "assets":[],
+              "layers":[
+                {
+                  "id": 1,
+                  "ty": "gr",
+                  "nm": "Water Drop 1",
+                  "sr": 1,
+                  "st": 0,
+                  "bm": 0,
+                  "ip": 0,
+                  "op": 60,
+                  "a": 1,
+                  "ks": {
+                    "p": {
+                      "k": [
+                        { "t": 0, "s": [120, 0], "e": [120, 0] },
+                        { "t": 60, "s": [120, 240], "e": [120, 240] }
+                      ]
+                    },
+                    "o": {
+                      "k": [
+                        { "t": 0, "s": [100], "e": [100] },
+                        { "t": 30, "s": [0], "e": [0] },
+                        { "t": 60, "s": [100], "e": [100] }
+                      ]
+                    }
+                  },
+                  "shapes": [
+                    {
+                      "ty": "gr",
+                      "it": [
+                        { "a": 0, "k": [{ "t": 0, "s": [10, 30], "e": [10, 30] }] },
+                        { "a": 0, "k": [{ "t": 0, "s": [100, 0, 255, 255], "e": [100, 0, 255, 255] }] }
+                      ],
+                      "s": { "a": 0, "k": [10, 30] }
+                    }
+                  ]
+                },
+                {
+                  "id": 2,
+                  "ty": "gr",
+                  "nm": "Water Drop 2",
+                  "sr": 1,
+                  "st": 0,
+                  "bm": 0,
+                  "ip": 0,
+                  "op": 60,
+                  "a": 1,
+                  "ks": {
+                    "p": {
+                      "k": [
+                        { "t": 0, "s": [170, 0], "e": [170, 0] },
+                        { "t": 60, "s": [170, 240], "e": [170, 240] }
+                      ]
+                    },
+                    "o": {
+                      "k": [
+                        { "t": 0, "s": [100], "e": [100] },
+                        { "t": 30, "s": [0], "e": [0] },
+                        { "t": 60, "s": [100], "e": [100] }
+                      ]
+                    }
+                  },
+                  "shapes": [
+                    {
+                      "ty": "gr",
+                      "it": [
+                        { "a": 0, "k": [{ "t": 0, "s": [10, 25], "e": [10, 25] }] },
+                        { "a": 0, "k": [{ "t": 0, "s": [0, 0, 2555], "e": [0, 0, 25] }] }
+                      ],
+                      "s": { "a": 0, "k": [10, 25] }
+                    }
+                  ]
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val result = LottieMessageParser.parseCompletedResponse(payload)
+        val lottie = assertIs<ChatMessageContent.LottieAnimation>(result, result.toString())
+
+        assertEquals(240, lottie.width)
+        assertEquals(240, lottie.height)
+        assertEquals(30, lottie.fps)
+        assertEquals(2_000L, lottie.durationMs)
+        assertTrue(lottie.json.contains("\"ty\":4"), lottie.json)
+        assertTrue(lottie.json.contains("\"ty\":\"el\""), lottie.json)
+        assertTrue(lottie.json.contains("\"ty\":\"fl\""), lottie.json)
+        assertTrue(lottie.json.contains("\"a\":1"), lottie.json)
+        assertTrue(lottie.json.contains("\"e\":[120,240,0]"), lottie.json)
+        assertNotNull(LottieComposition.parse(lottie.json))
+    }
+
+    @Test
+    fun rejectsLegacyKindTemplateIntentEnvelope() {
+        val result = LottieMessageParser.parseCompletedResponse(legacyIntentSpecJson())
+        val unsupported = assertIs<ChatMessageContent.Unsupported>(result, result.toString())
+
+        assertEquals("lottie_animation_spec", unsupported.declaredType)
+        assertEquals("unexpected_content_type", unsupported.reason)
+    }
+
+    @Test
     fun rejectsShapeFreeFireAnimationAsUnsupported() {
         val result = LottieMessageParser.parseCompletedResponse(shapeFreeFireAnimationJson())
         val unsupported = assertIs<ChatMessageContent.Unsupported>(result, result.toString())

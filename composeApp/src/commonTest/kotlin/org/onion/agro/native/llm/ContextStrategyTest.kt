@@ -21,6 +21,15 @@ class ContextStrategyTest {
     }
 
     @Test
+    fun lottieSceneGenerationUsesCompactOutputBudget() {
+        val strategy = ChatSessionMode.LOTTIE_ANIMATION.contextStrategy()
+
+        assertTrue(strategy is ContextStrategy.StructuredGeneration)
+        assertEquals(1_536, strategy.maxOutputTokens)
+        assertFalse(strategy.enableConstrainedDecoding)
+    }
+
+    @Test
     fun budgetPolicyReservesOutputBeforeTheHardBoundary() {
         val snapshot = ContextBudgetPolicy.inspect(
             usedTokens = 6_000,

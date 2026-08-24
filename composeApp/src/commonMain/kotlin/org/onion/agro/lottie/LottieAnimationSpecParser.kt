@@ -12,10 +12,10 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 
 /**
- * Parses Native Lottie JSON returned by the model.
+ * Parses the compact Gemma scene protocol and legacy Native Lottie responses.
  *
- * The historical object name is kept for the existing message/parser boundary. This parser deliberately
- * does not build animation layers, choose templates, or convert an intent spec into local geometry.
+ * The historical object name is kept for the existing message/parser boundary. New responses are compiled
+ * by [LottieSceneCompiler]; previously persisted Native Lottie payloads continue through the sanitizer.
  */
 object LottieAnimationSpecParser {
     private const val MAX_RESPONSE_BYTES = 256 * 1024
@@ -26,19 +26,25 @@ object LottieAnimationSpecParser {
     }
 
     fun parse(response: String): ParsedLottieAnimation {
-        val sanitizedJson = LottieJsonSanitizer.sanitize(response).trim()
-        requireLottie(sanitizedJson.isNotEmpty(), "invalid_lottie_json")
+        val repairedResponse = LottieJsonSanitizer.sanitize(response).trim()
+        requireLottie(repairedResponse.isNotEmpty(), "invalid_lottie_json")
+        requireLottie(
+            repairedResponse.encodeToByteArray().size <= MAX_RESPONSE_BYTES,
+            "lottie_json_too_large"
+        )
+
+        val root = parseObject(repairedResponse)
+        val sanitizedJson = when {
+            root["type"]?.stringContentOrNull() == LottieSceneContract.CONTENT_TYPE -> {
+                LottieSceneCompiler.compile(root)
+            }
+            root.containsKey("layers") || root.containsKey("v") -> repairedResponse
+            else -> throw LottieParseException("unexpected_content_type")
+        }
         requireLottie(
             sanitizedJson.encodeToByteArray().size <= MAX_RESPONSE_BYTES,
             "lottie_json_too_large"
         )
-
-        val root = parseObject(sanitizedJson)
-        requireLottie(
-            root.containsKey("layers") || root.containsKey("v"),
-            "unexpected_content_type"
-        )
-        requireLottie(root["type"]?.stringContentOrNull() != "lottie_animation_spec", "unexpected_content_type")
         LottieJsonValidator.validate(sanitizedJson)
 
         val finalRoot = parseObject(sanitizedJson)
@@ -63,7 +69,7 @@ object LottieAnimationSpecParser {
 
     fun declaredType(response: String): String? {
         return runCatching {
-            parseObject(response.trim())["type"].stringContentOrNull()
+            parseObject(LottieJsonSanitizer.sanitize(response).trim())["type"].stringContentOrNull()
         }.getOrNull()
     }
 

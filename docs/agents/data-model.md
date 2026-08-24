@@ -21,9 +21,9 @@
 - `Audio` 只持久化本地文件路径、MIME、标题、时长、采样信息、循环区间和可选
   `sourceSpecJson`，不得把 WAV/PCM 作为 Room blob 保存。BGM 缓存丢失后可依据
   `sourceSpecJson` 重新渲染。
-- `LottieAnimation` 直接持久化模型生成并经 sanitizer/validator 处理后的标准 Lottie JSON、
-  标题、画布尺寸、FPS、时长、循环标记和可选原始 payload。客户端不根据意图字段或模板
-  本地生成动画；首版不写入 `.lottie` ZIP、外部资源 URL 或 blob。
+- `LottieAnimation` 持久化经 compiler/sanitizer/validator 处理后的标准 Lottie JSON、标题、
+  画布尺寸、FPS、时长、循环标记和可选原始 payload。新生成消息的原始 payload 通常是
+  `lottie_scene`，历史消息也可能是 Native Lottie；不写入 `.lottie` ZIP、外部 URL 或 blob。
 - `Unsupported` 是前向兼容边界：未知类型、更高版本或无效载荷必须保留原始内容，
   不得让整段会话反序列化失败。
 - 纯文本消息优先通过 `ChatMessage.text(...)` 创建，避免调用端重复构造单元素列表。
@@ -50,9 +50,11 @@
 
 ## 6. Lottie 动画数据边界
 
-- Gemma4 直接输出 Native Lottie JSON；根对象包含 `v`、`fr`、`ip`、`op`、`w`、`h`、`nm`、
-  `ddd`、`assets` 和 `layers`。
-- `composeApp` 的 parser 只负责 JSON 清洗、资源/图层安全校验和元数据提取，不包含模板、
-  `kind/style/seed` 分支或本地几何合成器。
-- 公共数据层不再定义 `LottieAnimationSpec` 意图模型；Compottie 渲染、保存 `.json` 和复制
-  原始 payload 属于 `composeApp` UI/消息解析层。
+- Gemma4 输出 composeApp 私有的 `lottie_scene` v1 场景对象图；协议只承载通用图元、颜色、
+  坐标与归一化运动轨，不把 Bodymovin 的 `layers/ks/shapes` 暴露给 4B 模型。
+- `composeApp` 的 `LottieSceneCompiler` 将场景逐项编译为标准 Native Lottie；它不按用户关键词
+  或 `kind/style/seed` 选择固定模板。历史 Native Lottie 继续由 sanitizer 兼容处理。
+- 公共数据层不定义 scene/compiler 的内部模型，也不恢复旧 `LottieAnimationSpec`。公共边界仍
+  只有最终 `ChatMessageContent.LottieAnimation`；Compottie 渲染、保存与复制属于 composeApp。
+- `LottieAnimation.json` 始终是可直接交给 Compottie 的已验证 Native JSON，`sourceSpecJson`
+  则保留未经编译的模型原始响应，二者不得在持久化恢复时互换。

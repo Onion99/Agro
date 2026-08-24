@@ -42,8 +42,10 @@ fun ChatSessionMode.contextStrategy(): ContextStrategy = when (this) {
     ChatSessionMode.DEFAULT -> ContextStrategy.ChatSession()
     ChatSessionMode.SVG_IMAGE,
     ChatSessionMode.CHIPTUNE_BGM_MML,
-    ChatSessionMode.LOTTIE_ANIMATION,
     -> ContextStrategy.StructuredGeneration()
+    ChatSessionMode.LOTTIE_ANIMATION -> ContextStrategy.StructuredGeneration(
+        maxOutputTokens = 1_536,
+    )
 }
 
 enum class ContextBudgetLevel {

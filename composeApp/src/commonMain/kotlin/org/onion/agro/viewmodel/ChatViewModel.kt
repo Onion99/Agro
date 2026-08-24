@@ -62,6 +62,7 @@ import org.onion.agro.native.llm.KEY_THINK_MODE
 import org.onion.agro.message.SvgMessageParser
 import org.onion.agro.message.ChiptuneBgmMessageParser
 import org.onion.agro.message.LottieMessageParser
+import org.onion.agro.lottie.LottieSceneContract
 
 class ChatViewModel(
     private val chatHistoryRepository: ChatHistoryRepository
@@ -830,6 +831,21 @@ class ChatViewModel(
         }
     }
 
+    private fun samplerConfigForMode(mode: ChatSessionMode): SamplerConfig {
+        if (mode != ChatSessionMode.LOTTIE_ANIMATION) {
+            return SamplerConfig(
+                temperature = temperature.value.toDouble(),
+                topP = topP.value.toDouble(),
+                topK = topK.value,
+            )
+        }
+        return SamplerConfig(
+            temperature = temperature.value.coerceIn(0f, 0.25f).toDouble(),
+            topP = topP.value.coerceIn(0.1f, 0.9f).toDouble(),
+            topK = topK.value.coerceIn(1, 20),
+        )
+    }
+
     private fun String.toSessionMode(): ChatSessionMode {
         return when (this) {
             "svg_image" -> ChatSessionMode.SVG_IMAGE
@@ -876,11 +892,7 @@ class ChatViewModel(
                 systemInstruction = currentSystemInstruction(),
                 toolsJson = agentTools.getToolsDescriptionJson(),
                 initialMessages = emptyList(),
-                samplerConfig = SamplerConfig(
-                    temperature = temperature.value.toDouble(),
-                    topP = topP.value.toDouble(),
-                    topK = topK.value,
-                ),
+                samplerConfig = samplerConfigForMode(mode),
                 forceRecreate = true,
             )
         } else {
@@ -915,11 +927,7 @@ class ChatViewModel(
                     retainTurns = (strategy as ContextStrategy.ChatSession).historyRetainWindow,
                 )
             },
-            samplerConfig = SamplerConfig(
-                temperature = temperature.value.toDouble(),
-                topP = topP.value.toDouble(),
-                topK = topK.value,
-            ),
+            samplerConfig = samplerConfigForMode(mode),
             forceRecreate = true,
         )
         val after = ContextBudgetPolicy.inspect(
@@ -1047,11 +1055,7 @@ class ChatViewModel(
                 mode = mode,
                 messages = _currentChatMessages.toList(),
             ),
-            samplerConfig = SamplerConfig(
-                temperature = temperature.value.toDouble(),
-                topP = topP.value.toDouble(),
-                topK = topK.value
-            ),
+            samplerConfig = samplerConfigForMode(mode),
             forceRecreate = forceRecreate,
         )
         markConversationContextApplied(true)
@@ -1566,50 +1570,8 @@ class ChatViewModel(
                - Repeats: [ ... ]x2 or [ ... ]x4. Do NOT use * 2 or parentheses.
         """.trimIndent()
 
-        val LOTTIE_ANIMATION_SYSTEM_INSTRUCTION = """
-            You are ${BuildConfig.APP_NAME}'s dedicated Lottie animation architect and motion designer.
-
-            Generate a single valid, lightweight, self-contained Native Lottie JSON animation.
-            Respond ONLY with a single raw JSON object. Do not wrap in Markdown fences (no ```json). Do not output any conversational prose.
-
-            CANVAS & TIMELINE SPECS:
-            - Root: "w": 240, "h": 240, "fr": 30, "ip": 0, "op": 60 (2s loop) or "op": 90 (3s loop), "ddd": 0, "loop": true, "assets": [].
-            - Layers: "ind": 1..N, "ty": 4 (shape layer), "sr": 1, "ao": 0, "st": 0, "bm": 0, "ip": 0, "op": 60, "ddd": 0.
-            - Inside shapes: "ty": "gr", "it": [<geometry>, <paint>, <transform "tr">].
-
-            CRITICAL MOTION RULES FOR 4B MODELS:
-            1. MANDATORY MOTION ("a": 1):
-               - NEVER output completely static JSON where all properties have "a": 0.
-               - You MUST animate at least one property with 2 to 3 chronological keyframes ("k": [{ "t": 0, ... }, ...]).
-               - Choose the motion archetype matching the user request:
-                 * TRANSLATION / FALLING / SLIDING (Raindrops, Snow, Falling Leaves, Bouncing Ball, Rocket, Moving Object):
-                   Animate position `ks.p` along Y axis (e.g. from top [120, 20, 0] to bottom [120, 220, 0]) and animate opacity `ks.o` (0 -> 100 -> 0).
-                 * ROTATION / SPIN (Loading Spinner, Gear, Radar, Orbiting Planet, Sun Rays, Fan):
-                   Animate rotation `ks.r` from 0 to 360 (e.g. { "t": 0, "s": [0], "e": [360] }, { "t": 60, "s": [360], "e": [360] }).
-                 * SCALE / PULSE / POP (Heartbeat, Alert Icon, Breathing Circle, Star Sparkle, Badge Pop):
-                   Animate scale `ks.s` (e.g. 80 -> 120 -> 80) with matching start/end values for seamless loop.
-                 * OPACITY / BLINK / FADE (Glow, Blinking Light, Flash, Strobe):
-                   Animate opacity `ks.o` (e.g. 100 -> 20 -> 100 or 0 -> 100 -> 0).
-                 * PATH DRAW (Checkmark, Progress Ring, Line Drawing):
-                   Use Trim Path `ty: "tm"` with animated end percentage `"e"` (0 -> 100).
-
-            2. KEYFRAME CONTINUITY (s -> e):
-               - Keyframe format: { "t": <frame>, "s": [<startValues>], "e": [<endValues>] }.
-               - For keyframe i, "e" MUST equal keyframe i+1's "s".
-               - For seamless loop, values at t=0 and t=op must match (e.g. t=0 s:[80] -> t=30 s:[120] -> t=60 s:[80]).
-
-            3. VISIBILITY, VIVID COLORS & SIZES:
-               - Foreground shapes must use bright, vivid RGBA colors ("c": { "a": 0, "k": [R, G, B, 1] }).
-                 Examples: Rain/Water Blue [0.22, 0.65, 1.0, 1], Cyan [0.0, 0.85, 0.95, 1], Orange [1.0, 0.5, 0.1, 1], Green [0.15, 0.82, 0.45, 1], Purple [0.65, 0.35, 0.95, 1].
-                 NEVER use muddy dark colors where all R,G,B < 0.2.
-               - Shapes must be clearly visible on the 240x240 canvas:
-                 * Raindrops / Particles: Elongated ellipse with width 8..14 and height 24..45 (e.g. "s": { "a": 0, "k": [10, 30] }).
-                 * Circles / Icons: Diameter 60..120 (e.g. "s": { "a": 0, "k": [90, 90] }).
-                 * Rectangles / Cards: Width/height 60..140.
-
-            4. MULTI-ELEMENT & PARTICLE PATTERNS:
-               - For rain, snow, or particle streams, create 2 to 3 layers with different X coordinates (e.g. X=70, X=120, X=170) and staggered falling times (e.g. start at t=0, t=20) so multiple items fall continuously across the screen.
-        """.trimIndent()
+        val LOTTIE_ANIMATION_SYSTEM_INSTRUCTION =
+            LottieSceneContract.systemInstruction(BuildConfig.APP_NAME)
     }
 
     private fun ChatSessionMode.isStructuredGenerationMode(): Boolean {

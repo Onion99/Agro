@@ -29,6 +29,9 @@ import kotlin.math.abs
  */
 object LottieJsonSanitizer {
 
+    private val geometryShapeTypes = setOf("el", "rc", "sh", "sr")
+    private val paintShapeTypes = setOf("fl", "st", "gf", "gs")
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -74,6 +77,7 @@ object LottieJsonSanitizer {
                 .replace(Regex("\\s*```$"), "")
                 .trim()
         }
+        text = extractFirstJsonObject(text)
 
         // 2. Repair text-level syntax errors (spaced numbers, malformed colors, stray commas, unenclosed shapes, missing object closures)
         text = repairSpacedNumbers(text)
@@ -97,6 +101,41 @@ object LottieJsonSanitizer {
                 text
             }
         }.getOrDefault(text)
+    }
+
+    /** Keeps the first JSON object when a small model adds a prose prefix or suffix. */
+    private fun extractFirstJsonObject(raw: String): String {
+        val start = raw.indexOf('{')
+        if (start < 0) return raw
+
+        var depth = 0
+        var inString = false
+        var escape = false
+        for (index in start until raw.length) {
+            val char = raw[index]
+            if (escape) {
+                escape = false
+                continue
+            }
+            if (char == '\\' && inString) {
+                escape = true
+                continue
+            }
+            if (char == '"') {
+                inString = !inString
+                continue
+            }
+            if (inString) continue
+
+            when (char) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) return raw.substring(start, index + 1)
+                }
+            }
+        }
+        return raw.substring(start)
     }
 
     /**
@@ -403,6 +442,21 @@ object LottieJsonSanitizer {
         if (element == null) return staticVector3((width / 2).toFloat(), (height / 2).toFloat(), 0f)
         if (element is JsonObject) {
             val k = element["k"]
+            val keyframes = (k as? JsonArray)?.filterIsInstance<JsonObject>().orEmpty()
+            if (keyframes.isNotEmpty() && keyframes.size == (k as JsonArray).size) {
+                return sanitizeAnimatedVectorProperty(
+                    property = element,
+                    keyframes = keyframes,
+                    fallback = listOf((width / 2).toFloat(), (height / 2).toFloat(), 0f),
+                    transform = { values ->
+                        listOf(
+                            (values.getOrNull(0) ?: width / 2f) * scaleFactorX,
+                            (values.getOrNull(1) ?: height / 2f) * scaleFactorY,
+                            values.getOrNull(2) ?: 0f,
+                        )
+                    },
+                )
+            }
             if (k is JsonArray) {
                 val coords = k.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
                 if (coords.size >= 2) {
@@ -431,14 +485,53 @@ object LottieJsonSanitizer {
         return element
     }
 
+    private fun sanitizeAnimatedVectorProperty(
+        property: JsonObject,
+        keyframes: List<JsonObject>,
+        fallback: List<Float>,
+        transform: (List<Float>) -> List<Float>,
+    ): JsonObject {
+        val sanitizedFrames = keyframes.mapIndexed { index, frame ->
+            val start = frame["s"].numberVectorOrEmpty().ifEmpty { fallback }
+            val explicitEnd = frame["e"].numberVectorOrEmpty()
+            val nextStart = keyframes.getOrNull(index + 1)?.get("s").numberVectorOrEmpty()
+            val end = if (
+                nextStart.isNotEmpty() &&
+                (explicitEnd.isEmpty() || explicitEnd.sameNumbers(start))
+            ) {
+                nextStart
+            } else {
+                explicitEnd.ifEmpty { start }
+            }
+
+            buildJsonObject {
+                frame.forEach { (key, value) ->
+                    if (key != "s" && key != "e") put(key, value)
+                }
+                if (!frame.containsKey("t")) put("t", JsonPrimitive(index as Number))
+                put("s", numberArray(transform(start)))
+                put("e", numberArray(transform(end)))
+            }
+        }
+        return buildJsonObject {
+            property.forEach { (key, value) ->
+                when (key) {
+                    "a" -> put("a", JsonPrimitive(1 as Number))
+                    "k" -> put("k", buildJsonArray { sanitizedFrames.forEach(::add) })
+                    else -> put(key, value)
+                }
+            }
+            if (!property.containsKey("a")) put("a", JsonPrimitive(1 as Number))
+        }
+    }
+
     private fun sanitizeScale(element: JsonElement?): JsonElement {
         if (element == null) return staticVector3(100f, 100f, 100f)
         if (element is JsonObject) {
-            val a = element["a"]?.jsonPrimitive?.intOrNull ?: 0
             val k = element["k"]
             val isKeyframeArray = k is JsonArray && k.isNotEmpty() && k.all { it is JsonObject }
-            if (a == 1 && isKeyframeArray) {
-                val kfList = (k as JsonArray).filterIsInstance<JsonObject>()
+            if (isKeyframeArray) {
+                val kfList = k.filterIsInstance<JsonObject>()
                 val sanitizedKf = kfList.mapIndexed { idx, kf ->
                     val sList = (kf["s"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }.orEmpty()
                     val eList = (kf["e"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }.orEmpty()
@@ -491,8 +584,14 @@ object LottieJsonSanitizer {
                 }
                 return buildJsonObject {
                     element.forEach { (key, valElement) ->
-                        if (key == "k") put("k", buildJsonArray { sanitizedKf.forEach { add(it) } })
-                        else put(key, valElement)
+                        when (key) {
+                            "a" -> put("a", JsonPrimitive(1 as Number))
+                            "k" -> put("k", buildJsonArray { sanitizedKf.forEach { add(it) } })
+                            else -> put(key, valElement)
+                        }
+                    }
+                    if (!element.containsKey("a")) {
+                        put("a", JsonPrimitive(1 as Number))
                     }
                 }
             } else if (k is JsonArray) {
@@ -531,9 +630,16 @@ object LottieJsonSanitizer {
 
         val expandedItems = mutableListOf<JsonObject>()
         itArray?.forEach { child ->
-            if (child is JsonObject) {
+            if (child is JsonObject && child["ty"] != null) {
                 expandedItems.addAll(flattenAndSanitizeShapeItem(child, scaleFactorX, scaleFactorY))
             }
+        }
+        if (ty == "gr" && expandedItems.none { it.hasShapeType(geometryShapeTypes) }) {
+            recoverAnonymousGeometry(shapeGroup, itArray, scaleFactorX, scaleFactorY)
+                ?.let(expandedItems::add)
+        }
+        if (ty == "gr" && expandedItems.none { it.hasShapeType(paintShapeTypes) }) {
+            recoverAnonymousFill(itArray)?.let(expandedItems::add)
         }
         val normalizedItems = if (ty == "gr" && expandedItems.none(::isShapeTransform)) {
             expandedItems + defaultShapeTransform()
@@ -549,6 +655,62 @@ object LottieJsonSanitizer {
             put("it", buildJsonArray {
                 normalizedItems.forEach { add(it) }
             })
+        }
+    }
+
+    /**
+     * Legacy Native-Lottie recovery for Gemma output that emitted anonymous property wrappers in a
+     * group. A group-level size (or a two-value anonymous wrapper) unambiguously describes ellipse
+     * geometry; arbitrary subjects are never synthesized when no such evidence exists.
+     */
+    private fun recoverAnonymousGeometry(
+        group: JsonObject,
+        children: JsonArray?,
+        scaleFactorX: Float,
+        scaleFactorY: Float,
+    ): JsonObject? {
+        val groupSize = group["s"]
+        val anonymousSize = children
+            ?.filterIsInstance<JsonObject>()
+            ?.asSequence()
+            ?.filter { it["ty"] == null }
+            ?.map { it.firstValueVector() }
+            ?.firstOrNull { it.size == 2 }
+        val size = when {
+            groupSize != null -> rescaleShapeSize(groupSize, scaleFactorX, scaleFactorY)
+            anonymousSize != null -> staticVector2(
+                anonymousSize[0] * scaleFactorX,
+                anonymousSize[1] * scaleFactorY,
+            )
+            else -> return null
+        }
+        return buildJsonObject {
+            put("ty", JsonPrimitive("el"))
+            put("nm", JsonPrimitive("Recovered Ellipse"))
+            put("p", staticVector2(0f, 0f))
+            put("s", size)
+            put("d", JsonPrimitive(1 as Number))
+        }
+    }
+
+    private fun recoverAnonymousFill(children: JsonArray?): JsonObject? {
+        val colorValues = children
+            ?.filterIsInstance<JsonObject>()
+            ?.asSequence()
+            ?.filter { it["ty"] == null }
+            ?.map { it.firstValueVector() }
+            ?.firstOrNull { it.size >= 3 }
+            ?: return null
+        val color = sanitizeColor(buildJsonObject {
+            put("a", JsonPrimitive(0 as Number))
+            put("k", numberArray(colorValues.take(4)))
+        })
+        return buildJsonObject {
+            put("ty", JsonPrimitive("fl"))
+            put("nm", JsonPrimitive("Recovered Fill"))
+            put("c", color)
+            put("o", staticScalar(100f))
+            put("r", JsonPrimitive(1 as Number))
         }
     }
 
@@ -1040,6 +1202,15 @@ object LottieJsonSanitizer {
         if (opacityElement == null) return staticScalar(100f)
         if (opacityElement is JsonObject) {
             val k = opacityElement["k"]
+            val keyframes = (k as? JsonArray)?.filterIsInstance<JsonObject>().orEmpty()
+            if (keyframes.isNotEmpty() && keyframes.size == (k as JsonArray).size) {
+                return sanitizeAnimatedScalarProperty(
+                    property = opacityElement,
+                    keyframes = keyframes,
+                    fallback = 100f,
+                    transform = ::normalizeOpacityValue,
+                )
+            }
             if (k is JsonPrimitive) {
                 val value = k.floatOrNull ?: 100f
                 // Normalize 0.0..1.0 float opacity to 0..100, and boost near-invisible <20 opacity to readable levels
@@ -1059,9 +1230,46 @@ object LottieJsonSanitizer {
         return element ?: fallback
     }
 
+    private fun JsonElement?.numberVectorOrEmpty(): List<Float> {
+        return (this as? JsonArray)
+            ?.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
+            .orEmpty()
+    }
+
+    private fun JsonObject.firstValueVector(): List<Float> {
+        val rawKeyframes = this["k"] as? JsonArray ?: return emptyList()
+        val staticValues = rawKeyframes.numberVectorOrEmpty()
+        if (staticValues.isNotEmpty()) return staticValues
+        return (rawKeyframes.firstOrNull() as? JsonObject)
+            ?.get("s")
+            .numberVectorOrEmpty()
+    }
+
+    private fun JsonObject.hasShapeType(types: Set<String>): Boolean {
+        return this["ty"]?.jsonPrimitive?.content in types
+    }
+
+    private fun List<Float>.sameNumbers(other: List<Float>): Boolean {
+        if (size != other.size) return false
+        return indices.all { index -> abs(this[index] - other[index]) < 0.0001f }
+    }
+
+    private fun numberArray(values: List<Float>): JsonArray {
+        return buildJsonArray { values.forEach { add(formatNumber(it)) } }
+    }
+
     private fun sanitizeScalarProperty(element: JsonElement?, fallback: Float): JsonElement {
         val property = element as? JsonObject ?: return staticScalar(fallback)
         val k = property["k"]
+        val keyframes = (k as? JsonArray)?.filterIsInstance<JsonObject>().orEmpty()
+        if (keyframes.isNotEmpty() && keyframes.size == (k as JsonArray).size) {
+            return sanitizeAnimatedScalarProperty(
+                property = property,
+                keyframes = keyframes,
+                fallback = fallback,
+                transform = { it.coerceIn(-1_440f, 1_440f) },
+            )
+        }
         val scalar = when (k) {
             is JsonPrimitive -> k.floatOrNull
             is JsonArray -> (k.firstOrNull() as? JsonPrimitive)?.floatOrNull
@@ -1082,6 +1290,54 @@ object LottieJsonSanitizer {
                 put("a", JsonPrimitive(0 as Number))
             }
         }
+    }
+
+    private fun sanitizeAnimatedScalarProperty(
+        property: JsonObject,
+        keyframes: List<JsonObject>,
+        fallback: Float,
+        transform: (Float) -> Float,
+    ): JsonObject {
+        val sanitizedFrames = keyframes.mapIndexed { index, frame ->
+            val start = frame["s"].numberVectorOrEmpty().firstOrNull() ?: fallback
+            val explicitEnd = frame["e"].numberVectorOrEmpty().firstOrNull()
+            val nextStart = keyframes.getOrNull(index + 1)
+                ?.get("s")
+                .numberVectorOrEmpty()
+                .firstOrNull()
+            val end = if (
+                nextStart != null &&
+                (explicitEnd == null || kotlin.math.abs(explicitEnd - start) < 0.0001f)
+            ) {
+                nextStart
+            } else {
+                explicitEnd ?: start
+            }
+
+            buildJsonObject {
+                frame.forEach { (key, value) ->
+                    if (key != "s" && key != "e") put(key, value)
+                }
+                if (!frame.containsKey("t")) put("t", JsonPrimitive(index as Number))
+                put("s", numberArray(listOf(transform(start))))
+                put("e", numberArray(listOf(transform(end))))
+            }
+        }
+        return buildJsonObject {
+            property.forEach { (key, value) ->
+                when (key) {
+                    "a" -> put("a", JsonPrimitive(1 as Number))
+                    "k" -> put("k", buildJsonArray { sanitizedFrames.forEach(::add) })
+                    else -> put(key, value)
+                }
+            }
+            if (!property.containsKey("a")) put("a", JsonPrimitive(1 as Number))
+        }
+    }
+
+    private fun normalizeOpacityValue(value: Float): Float {
+        val normalized = if (value in 0.0001f..1f) value * 100f else value
+        return normalized.coerceIn(0f, 100f)
     }
 
     private fun staticVector2(x: Float, y: Float): JsonObject {

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-24] - 重构 Gemma4 4B Lottie 场景生成与确定性编译路线
+- [重构] 将 `ChatViewModel` 的 Lottie 主生成协议从完整 Native Bodymovin AST 改为浅层 `lottie_scene` v1；新增 `LottieSceneContract`，让 Gemma4 4B 按“对象→几何/颜色→运动轨”短链输出，并禁止直接生成 `layers/ks/shapes/a/k/s/e`。
+- [新增] 新增通用 `LottieSceneCompiler`，将 ellipse/rect/star/path、fill/stroke 及 position/scale/rotation/opacity/trim 归一化轨确定性编译为 240×240、30 FPS 的标准 Native Lottie；无关键词、`kind/style/seed` 或固定模板分支。
+- [修改] Lottie 模式启用 `temperature<=0.25`、`topP<=0.9`、`topK<=20` 与 1536-token 输出预算，并在恢复旧 Lottie 会话时迁移到当前 scene contract，避免历史 Native 提示词继续生效。
+- [修复] `LottieJsonSanitizer` 支持提取模型回复中的首个 JSON object、根据组级尺寸与匿名颜色向量恢复 ellipse/fill，并补齐 animated position/opacity/rotation 的 `a=1` 和关键帧 `s→e` 连续性，使用户报告的水滴 JSON 可通过 Compottie 渲染。
+- [测试] 扩展 `LottieMessageParserTest` 与 `ContextStrategyTest`，覆盖 compact scene、path Trim Path、报告的 malformed 水滴 Native JSON、Compottie 解析以及 Lottie 输出预算；Java 21 下 Desktop Kotlin 编译和定向测试通过。
+- [文档] 更新 `docs/specs/lottie-animation-prompt-spec.md`、`docs/designs/gemma4-lottie-json-compottie-route-plan.md` 与 `docs/agents/data-model.md`，记录 v2 协议、编译不变量、兼容边界和持久化语义。
+
 ## [2026-08-23] - Gris 艺术水彩与乔布斯极简美学：重塑 LLM 运行态指示器与状态胶囊
 - [重构] 深度融合《Gris》艺术语言与乔布斯极简哲学，全面重写 `GrisWatercolorStatusIndicator` 与 `GrisWatercolorStatusChip`。
 - [新增] 指示器引入神圣几何星轨仪（0.75dp 极细星轨微环、四象限微星芒锚点、巡游星尘卫星 Comet Particle）、多层有机水彩墨晕（Lissajous 调和漂移）与发光纯澈星核。
