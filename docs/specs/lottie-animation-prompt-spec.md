@@ -1,6 +1,6 @@
 # Gemma4 4B Lottie Scene Prompt Specification
 
-**Version:** 2.0.0
+**Version:** 2.1.0
 **Updated:** 2026-08-24
 **Owner:** `LottieSceneContract`
 **Consumer:** `ChatViewModel.LOTTIE_ANIMATION_SYSTEM_INSTRUCTION`
@@ -136,49 +136,65 @@ old session snapshot from continuing to request Native Lottie after the protocol
 
 ## 7. Safety and Validation
 
-The scene plan rejects external resources and executable content, including URLs, file/data URIs,
-base64, images, fonts, scripts, HTML/CSS, effects, masks, expressions, Native `layers/shapes/ks`, and
-`.lottie` packages. The compiled JSON is then checked again by `LottieJsonValidator` for:
+`LottieSceneResponseParser` accepts at most 256 KiB of UTF-8 input and counts bytes without allocating
+an intermediate `ByteArray`. Clean raw objects take the zero-copy extraction path; a brace-aware
+single scan tolerates an accidental Markdown/prose wrapper. The extracted object is parsed strictly
+exactly once. Malformed JSON is rejected rather than guessed or rewritten.
 
-- payload size at most 256 KiB;
-- empty external assets;
-- 2D supported layer types;
-- at most 32 layers;
-- at least one drawable geometry and fill/stroke pair;
-- absence of forbidden fields and values.
+Safety is enforced by closed compilation instead of recursively validating a model-authored Native
+AST. `LottieSceneCompiler` reads only the documented scalar, color, geometry, and motion fields;
+unknown keys and values are never copied into the output. Consequently:
 
-Invalid content becomes `ChatMessageContent.Unsupported`, preserving the original model payload for
+- `assets` is always generated as an empty array;
+- every layer is a compiler-owned 2D shape layer;
+- object count, path vertices, track rows, names, coordinates, and duration are bounded;
+- geometry and fill/stroke nodes are generated together by construction;
+- URLs, scripts, images, masks, effects, expressions, and other Native fields have no output route.
+
+This makes a second output parse and a recursive `LottieJsonValidator` pass redundant. Invalid scene
+content becomes `ChatMessageContent.Unsupported`, preserving the original model payload for
 inspection.
 
-## 8. Legacy Native Lottie Compatibility
+## 8. Compatibility and Migration
 
-Native Lottie is no longer requested from the model, but existing history and externally supplied
-Native JSON remain accepted. `LottieJsonSanitizer` continues its token/AST repair path and now also:
+The response boundary accepts only `lottie_scene` v1. Native Lottie and malformed Bodymovin model
+responses are rejected with `unexpected_content_type`; the removed token/AST sanitizer is not a
+fallback generation route. The legacy `lottie_animation_spec` envelope is also rejected while its
+declared type is preserved in `ChatMessageContent.Unsupported`.
 
-- extracts the first JSON object from accidental prose;
-- recognizes anonymous property wrappers when group-level size plus a color vector provide enough
-  evidence to recover an ellipse and fill;
-- marks animated position/opacity/rotation properties as `a=1` when the model omitted the flag;
-- repairs segment continuity when a keyframe repeated its own `s` as `e` instead of using the next
-  keyframe value.
+Existing persisted animations do not need migration: `ChatMessageContent.LottieAnimation.json`
+already contains the previously compiled Native JSON and is rendered directly, without passing back
+through the response parser. `sourceSpecJson` remains audit data and is not recompiled during history
+restore. Persisted Lottie sessions still migrate to the current scene prompt before the next model
+request.
 
-The legacy `lottie_animation_spec` kind/template envelope remains unsupported. It is different from
-the generic `lottie_scene` object graph introduced here.
+## 9. Performance Contract
 
-## 9. Verification
+The hot path is `single input parse → compiler-owned JsonObject → single serialization`. It does not
+run regex repair, reparse compiled output, allocate UTF-8 byte arrays for normal responses, or parse a
+failure a second time to discover `declaredType`.
+
+The targeted Desktop/JBR 21 probe in `LottiePipelinePerformanceProbeTest` uses 40 warm-up calls
+followed by 500 identical two-object scene compilations. On the 2026-08-24 development machine, the committed
+v2.0 path measured 1393 ms and repeated v2.1 runs measured 116–171 ms: about 8.1–12.0× throughput and
+87.7%–91.7% lower elapsed time. This is a comparative microbenchmark, not a cross-device latency
+guarantee.
+
+## 10. Verification
 
 `LottieMessageParserTest` covers:
 
-- compact falling-water scene → compiler → validator → `LottieComposition.parse`;
+- compact falling-water scene → compiler → `LottieComposition.parse`;
 - stroked path plus normalized Trim Path → `LottieComposition.parse`;
-- the reported malformed anonymous water-drop Native JSON → sanitizer → Compottie;
-- prior malformed Native Lottie regression cases and empty-drawable rejection.
+- one-pass fenced/prose extraction, including braces inside strings;
+- closed projection of unknown Native/external fields;
+- explicit rejection of malformed JSON, Native Lottie responses, legacy envelopes, and unsupported
+  schema versions.
 
-## 10. Implementation References
+## 11. Implementation References
 
 - Contract/prompt: `composeApp/src/commonMain/kotlin/org/onion/agro/lottie/LottieSceneContract.kt`
 - Compiler: `composeApp/src/commonMain/kotlin/org/onion/agro/lottie/LottieSceneCompiler.kt`
-- Route/parser/validator: `composeApp/src/commonMain/kotlin/org/onion/agro/lottie/LottieAnimationSpecParser.kt`
-- Legacy repair: `composeApp/src/commonMain/kotlin/org/onion/agro/lottie/LottieJsonSanitizer.kt`
+- Response parser: `composeApp/src/commonMain/kotlin/org/onion/agro/lottie/LottieSceneResponseParser.kt`
 - Session policy: `composeApp/src/commonMain/kotlin/org/onion/agro/viewmodel/ChatViewModel.kt`
 - Message boundary: `composeApp/src/commonMain/kotlin/org/onion/agro/message/LottieMessageParser.kt`

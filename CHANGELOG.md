@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-24] - 深度优化 Lottie 场景解析与编译热路径
+- [重构] 删除仅服务于旧 Native Bodymovin 响应的 `LottieJsonSanitizer`（1395 行）以及旧 `LottieAnimationSpecParser`/`LottieJsonValidator`，新增 `LottieSceneResponseParser`，将新响应边界收敛为仅接受 `lottie_scene` v1。
+- [优化] 有效场景改为单次严格 JSON 解析、编译器持有输出 `JsonObject`、单次序列化；移除多轮 Regex 扫描、输出重复解析/递归校验、常规响应的 UTF-8 ByteArray 分配，以及失败路径为读取 `declaredType` 触发的二次清洗解析。
+- [修改] 安全策略改为闭集编译：`LottieSceneCompiler` 只映射已知图元/运动字段，未知 Native AST、URL 或脚本字段直接丢弃；历史已持久化 `LottieAnimation.json` 继续直接渲染，新模型 Native/malformed 响应则明确拒绝。
+- [测试] 重写 `LottieMessageParserTest`，覆盖 Compottie 渲染、围栏提取、闭集投影、静态 fallback 与协议失败边界；新增性能探针，同机 JBR 21 定向测试进程中 500 次双水滴场景由 1393 ms 降至 116–171 ms（约 8.1–12.0×，耗时下降 87.7%–91.7%）。
+- [文档] 将 `docs/specs/lottie-animation-prompt-spec.md` 与 `docs/designs/gemma4-lottie-json-compottie-route-plan.md` 更新至 v2.1.0，并同步 `docs/agents/data-model.md` 的持久化与兼容边界。
+
 ## [2026-08-24] - 重构 Gemma4 4B Lottie 场景生成与确定性编译路线
 - [重构] 将 `ChatViewModel` 的 Lottie 主生成协议从完整 Native Bodymovin AST 改为浅层 `lottie_scene` v1；新增 `LottieSceneContract`，让 Gemma4 4B 按“对象→几何/颜色→运动轨”短链输出，并禁止直接生成 `layers/ks/shapes/a/k/s/e`。
 - [新增] 新增通用 `LottieSceneCompiler`，将 ellipse/rect/star/path、fill/stroke 及 position/scale/rotation/opacity/trim 归一化轨确定性编译为 240×240、30 FPS 的标准 Native Lottie；无关键词、`kind/style/seed` 或固定模板分支。

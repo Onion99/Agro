@@ -21,39 +21,18 @@ object LottieSceneCompiler {
     private const val MAX_PATH_VERTICES = 32
 
     private val defaultColor = SceneColor(0.22f, 0.74f, 0.96f, 1f)
-    private val forbiddenKeys = setOf(
-        "assets",
-        "base64",
-        "chars",
-        "css",
-        "ef",
-        "expressions",
-        "fonts",
-        "html",
-        "images",
-        "ks",
-        "layers",
-        "masksProperties",
-        "script",
-        "shapes",
-    )
-    private val forbiddenValueFragments = listOf(
-        "http://",
-        "https://",
-        "file://",
-        "data:",
-        ".lottie",
-        "base64",
-    )
 
-    fun compile(root: JsonObject): String {
+    internal fun compile(root: JsonObject): JsonObject {
         validateRoot(root)
         val scene = parseScene(root)
-        val objects = scene.objects.toMutableList()
-        if (objects.none(SceneObject::hasVisibleMotion)) {
-            objects[0] = objects[0].copy(
-                motion = objects[0].motion.copy(scale = fallbackPulseTrack()),
-            )
+        val objects = if (scene.objects.any(SceneObject::hasVisibleMotion)) {
+            scene.objects
+        } else {
+            scene.objects.toMutableList().apply {
+                this[0] = this[0].copy(
+                    motion = this[0].motion.copy(scale = fallbackPulseTrack()),
+                )
+            }
         }
 
         val frameCount = (scene.durationSeconds * FPS)
@@ -75,20 +54,15 @@ object LottieSceneCompiler {
                     add(buildLayer(sceneObject, index + 1, frameCount))
                 }
             })
-        }.toString()
+        }
     }
 
     private fun validateRoot(root: JsonObject) {
-        requireScene(
-            root["type"].stringOrNull() == LottieSceneContract.CONTENT_TYPE,
-            "unexpected_content_type",
-        )
         requireScene(
             (root["schemaVersion"].intOrNull() ?: LottieSceneContract.SCHEMA_VERSION) ==
                 LottieSceneContract.SCHEMA_VERSION,
             "unsupported_schema_version",
         )
-        requireScene(!containsForbiddenContent(root), "forbidden_lottie_scene_content")
     }
 
     private fun parseScene(root: JsonObject): SceneSpec {
@@ -541,19 +515,6 @@ object LottieSceneCompiler {
         )
     }
 
-    private fun containsForbiddenContent(element: JsonElement): Boolean {
-        return when (element) {
-            is JsonObject -> element.any { (key, value) ->
-                key in forbiddenKeys || containsForbiddenContent(value)
-            }
-            is JsonArray -> element.any(::containsForbiddenContent)
-            is JsonPrimitive -> {
-                val value = element.contentOrNull?.lowercase().orEmpty()
-                forbiddenValueFragments.any(value::contains)
-            }
-        }
-    }
-
     private fun fallbackPulseTrack(): List<TrackPoint> = listOf(
         TrackPoint(0f, listOf(96f, 96f)),
         TrackPoint(0.5f, listOf(104f, 104f)),
@@ -691,9 +652,7 @@ object LottieSceneCompiler {
         val scale: List<Float>,
         val motion: SceneMotion,
     ) {
-        fun hasVisibleMotion(): Boolean = motion.tracks.any { track ->
-            track.size >= 2 && track.drop(1).any { !it.values.sameValues(track.first().values) }
-        }
+        fun hasVisibleMotion(): Boolean = motion.hasVisibleMotion()
     }
 
     private data class SceneMotion(
@@ -703,8 +662,21 @@ object LottieSceneCompiler {
         val opacity: List<TrackPoint> = emptyList(),
         val trim: List<TrackPoint> = emptyList(),
     ) {
-        val tracks: List<List<TrackPoint>>
-            get() = listOf(position, scale, rotation, opacity, trim)
+        fun hasVisibleMotion(): Boolean =
+            position.hasTrackValueChange() ||
+                scale.hasTrackValueChange() ||
+                rotation.hasTrackValueChange() ||
+                opacity.hasTrackValueChange() ||
+                trim.hasTrackValueChange()
+    }
+
+    private fun List<TrackPoint>.hasTrackValueChange(): Boolean {
+        if (size < 2) return false
+        val firstValues = first().values
+        for (index in 1 until size) {
+            if (!this[index].values.sameValues(firstValues)) return true
+        }
+        return false
     }
 
     private data class RawTrackPoint(val time: Float, val values: List<Float>)
