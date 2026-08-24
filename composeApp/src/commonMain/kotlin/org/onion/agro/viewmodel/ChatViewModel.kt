@@ -184,9 +184,9 @@ class ChatViewModel(
     var lmAudioBackendNumThreads = mutableStateOf(-1)
 
     // Model Parameter Adjustments
-    var temperature = mutableStateOf(0.7f)
+    var temperature = mutableStateOf(1.0f)
     var topP = mutableStateOf(0.9f)
-    var topK = mutableStateOf(40)
+    var topK = mutableStateOf(70)
     var enableThinking = mutableStateOf(false)
     var enableSpeculativeDecoding = mutableStateOf(false)
     var systemPrompt = mutableStateOf("You are  ${BuildConfig.APP_NAME}, an analytical and precise local intelligence. Prioritize factual accuracy and concise formatting. Maintain a calm, neutral tone.")
@@ -840,9 +840,9 @@ class ChatViewModel(
             )
         }
         return SamplerConfig(
-            temperature = temperature.value.coerceIn(0f, 0.25f).toDouble(),
+            temperature = temperature.value.coerceIn(0f, 1.0f).toDouble(),
             topP = topP.value.coerceIn(0.1f, 0.9f).toDouble(),
-            topK = topK.value.coerceIn(1, 20),
+            topK = topK.value.coerceIn(1, 70),
         )
     }
 

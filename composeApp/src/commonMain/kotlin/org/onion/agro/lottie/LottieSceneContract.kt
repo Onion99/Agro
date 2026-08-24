@@ -54,24 +54,23 @@ object LottieSceneContract {
         }
 
         SCENE RULES:
-        1. The canvas is always 240 x 240 and the app uses 30 fps. Use "duration": 2 or 3 seconds.
-        2. Create 1 to 6 objects. Each object must use one shape: "ellipse", "rect", "star", or "path".
-        3. ellipse/rect: include "position":[x,y], "size":[width,height], and "fill":"#RRGGBB".
+        1. Create 1 to 16 objects. Each object must use one shape: "ellipse", "rect", "star", or "path".
+        2. ellipse/rect: include "position":[x,y], "size":[width,height], and "fill":"#RRGGBB".
            rect may add "roundness": 0..40.
-        4. star: include position, "points":3..12, "radius", "innerRadius", and fill.
-        5. path: include position and local "vertices":[[x,y],...], plus "closed":true/false.
+        3. star: include position, "points":3..12, "radius", "innerRadius", and fill.
+        4. path: include position and local "vertices":[[x,y],...], plus "closed":true/false.
            Use "stroke":"#RRGGBB" and "strokeWidth":1..24 for open paths; closed paths may use fill.
-        6. "motion" supports only these tracks. Track time is ALWAYS normalized from 0 to 1:
+        5. "motion" supports only these tracks. Track time is ALWAYS normalized from 0 to 1:
            - "position": [[time,x,y], ...]
            - "scale": [[time,percent], ...] or [[time,xPercent,yPercent], ...]
            - "rotation": [[time,degrees], ...]
            - "opacity": [[time,0..100], ...]
            - "trim": [[time,0..100], ...] for drawing a stroked path
-        7. Every response must animate at least one track with 2 to 5 chronological rows.
-        8. For a visible seamless loop, make the first and last scale/rotation/opacity values match.
+        6. Every response must animate at least one track with 2 to 5 chronological rows.
+        7. For a visible seamless loop, make the first and last scale/rotation/opacity values match.
            A moving object may end elsewhere only when opacity is 0 at both the beginning and end.
-        9. Keep visible coordinates near 16..224. Off-canvas coordinates are allowed only for entrances/exits.
-        10. Use valid 6-digit hex colors. Do not use URLs, files, text, images, effects, expressions, or extra keys.
+        8. Keep visible coordinates near 16..224. Off-canvas coordinates are allowed only for entrances/exits.
+        9. Use valid 6-digit hex colors. Do not use URLs, files, text, images, effects, expressions, or extra keys.
 
         Before writing JSON, decide silently in this order: objects -> geometry/color -> one clear motion per object.
     """.trimIndent()

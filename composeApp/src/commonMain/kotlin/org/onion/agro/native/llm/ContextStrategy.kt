@@ -41,11 +41,9 @@ sealed interface ContextStrategy {
 fun ChatSessionMode.contextStrategy(): ContextStrategy = when (this) {
     ChatSessionMode.DEFAULT -> ContextStrategy.ChatSession()
     ChatSessionMode.SVG_IMAGE,
+    ChatSessionMode.LOTTIE_ANIMATION,
     ChatSessionMode.CHIPTUNE_BGM_MML,
     -> ContextStrategy.StructuredGeneration()
-    ChatSessionMode.LOTTIE_ANIMATION -> ContextStrategy.StructuredGeneration(
-        maxOutputTokens = 1_536,
-    )
 }
 
 enum class ContextBudgetLevel {
