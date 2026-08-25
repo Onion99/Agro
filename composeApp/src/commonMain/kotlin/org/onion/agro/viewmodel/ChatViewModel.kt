@@ -92,10 +92,8 @@ class ChatViewModel(
     private val _toastEvent = MutableSharedFlow<String>(extraBufferCapacity = 64)
     val toastEvent: SharedFlow<String> = _toastEvent.asSharedFlow()
 
-    fun showToast(message: String) {
-        viewModelScope.launch {
-            _toastEvent.emit(message)
-        }
+    suspend fun showToast(message: String) {
+        _toastEvent.emit(message)
     }
 
     var diffusionModelPath = mutableStateOf("")

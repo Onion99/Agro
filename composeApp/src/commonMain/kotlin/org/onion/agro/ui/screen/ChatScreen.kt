@@ -332,8 +332,7 @@ fun ChatScreen(
             InputArea(
                 text = text,
                 isGenerating = chatViewModel.isGenerating.value,
-                canSend = conversationContext.isApplied &&
-                    llmEngineStatus == LlmEngineStatus.READY,
+                canSend = true/*conversationContext.isApplied && llmEngineStatus == LlmEngineStatus.READY*/,
                 onAttachClick = {
                     coroutineScope.launch {
                         snackbarHostState.showSnackbar(getString(Res.string.feature_not_available))
@@ -341,9 +340,7 @@ fun ChatScreen(
                 },
                 onSendClick = {
                     if (chatViewModel.isGenerating.value) {
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar(getString(Res.string.error_no_interrupt_api))
-                        }
+
                     } else {
                         if (text.isNotEmpty()) {
                             chatViewModel.sendMessage(text)
