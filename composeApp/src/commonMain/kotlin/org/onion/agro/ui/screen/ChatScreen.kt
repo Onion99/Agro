@@ -339,16 +339,10 @@ fun ChatScreen(
                     }
                 },
                 onSendClick = {
-                    if (chatViewModel.isGenerating.value) {
-
-                    } else {
-                        if (text.isNotEmpty()) {
-                            chatViewModel.sendMessage(text)
-                            text = ""
-                            keyboardController?.hide()
-                            focusManager.clearFocus()
-                        }
-                    }
+                    chatViewModel.sendMessage(text)
+                    text = ""
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
                 },
                 onNewChatClick = {
                     chatViewModel.startNewConversation()
