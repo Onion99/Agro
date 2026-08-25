@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-25] - 优化生成取消与会话切换同步
+- [修复] `ChatViewModel.stopGeneration` 使用互斥取消屏障与 `cancelAndJoin()` 等待旧推理退出，初始化、设置应用、历史打开、消息发送和新会话切换不再与旧生成任务并发操作 native conversation。
+- [修复] 取消时按 `turn_id` 将 user 消息与带生成标记的 assistant 占位消息作为完整 turn 从 UI 和数据库删除，避免取消输入长期占用可见历史或后续上下文。
+- [修复] Chat 输入区生成中的停止图标直接调用 `ChatViewModel.stopGeneration()`，不再误走 `sendMessage()` 导致取消逻辑从未执行。
+- [修复] 手动取消后不再复用已被 LiteRT-LM 标记为不可安全复用的 conversation，而是从排除取消 turn 后的持久化历史强制重建上下文。
+- [修改] Compose 生成状态和消息列表统一在 Main dispatcher 更新，取消 turn 的数据库清理统一在 IO dispatcher 执行。
+- [文档] 更新 `docs/designs/app-context-management-design.md`，记录生成取消屏障、线程边界与运行态恢复规则。
+
 ## [2026-08-24] - 深度优化 Lottie 场景解析与编译热路径
 - [重构] 删除仅服务于旧 Native Bodymovin 响应的 `LottieJsonSanitizer`（1395 行）以及旧 `LottieAnimationSpecParser`/`LottieJsonValidator`，新增 `LottieSceneResponseParser`，将新响应边界收敛为仅接受 `lottie_scene` v1。
 - [优化] 有效场景改为单次严格 JSON 解析、编译器持有输出 `JsonObject`、单次序列化；移除多轮 Regex 扫描、输出重复解析/递归校验、常规响应的 UTF-8 ByteArray 分配，以及失败路径为读取 `declaredType` 触发的二次清洗解析。

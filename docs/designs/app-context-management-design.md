@@ -281,7 +281,18 @@ AIGC 每次请求前都必须以 `forceRecreate = true` 创建新的 `LmConversa
 6. native 回调使用有序的无界 channel 缓冲；其实际上限仍由 `maxOutputTokens` 约束。`onDone` 关闭流后会排空已接收 chunk，避免尾部 token 因异步转发竞态而丢失。
 7. 只有 `{`、`[]` 或纯标点的终止输出视为不可用响应，展示可重试错误并以干净 transcript 重建会话。
 
-### 7.6 LLM 运行态与 Gris 水彩反馈
+### 7.6 生成取消屏障
+
+`ChatViewModel` 将生成取消作为会话切换前的同步屏障：
+
+1. 所有停止请求通过同一个 `Mutex` 串行化，首次请求会立即将 `isGenerating` 和 `isInferenceOn` 置为 `false`，后续重复请求不会再次清理消息。
+2. 仅定位带有 `is_generating=true` 的 assistant 占位消息，并通过相同 `turn_id` 定位对应 user 消息；手动停止时将这一完整 turn 从 UI 与数据库删除，不再假设列表最后一项一定属于当前生成。
+3. 调用 `ContextCoordinator.cancelActive()` 后，必须通过 `responseGenerationJob.cancelAndJoin()` 等待旧推理协程结束，才允许初始化模型、应用设置、打开会话或重建 conversation。
+4. Compose 状态和消息列表只在 Main dispatcher 修改；取消 turn 的删除与持久化只在 IO dispatcher 执行。
+5. LiteRT-LM 不支持取消后继续复用同一个 conversation。若停止操作本身未触发其他上下文切换，则旧任务退出并删除取消 turn 后，必须从清理后的 durable transcript 强制重建 conversation，再恢复为 `READY`；重建期间使用 `APPLYING_CONTEXT`，失败则进入 `ERROR`。
+6. Chat 输入区在 `isGenerating=true` 时将发送按钮切换为停止按钮，点击事件必须直接调用 `ChatViewModel.stopGeneration()`，不得再次进入 `sendMessage()` 的就绪状态校验分支。
+
+### 7.7 LLM 运行态与 Gris 水彩反馈
 
 `LlmEngineStatus` 描述当前 native engine/conversation 的瞬时生命周期，不写入会话数据库。导航栏、Library 状态 Chip 与 Chat 上下文头共享同一个状态源和 `GrisWatercolorStatusIndicator`：
 

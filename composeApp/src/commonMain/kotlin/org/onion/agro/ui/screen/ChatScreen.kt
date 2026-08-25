@@ -188,6 +188,7 @@ import agro.composeapp.generated.resources.lottie_save_failed
 import agro.composeapp.generated.resources.lottie_save_json
 import agro.composeapp.generated.resources.lottie_saved
 import agro.composeapp.generated.resources.user_image
+import kotlinx.coroutines.IO
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
@@ -339,11 +340,14 @@ fun ChatScreen(
                     }
                 },
                 onSendClick = {
-                    chatViewModel.sendMessage(text)
-                    text = ""
-                    keyboardController?.hide()
-                    focusManager.clearFocus()
+                    if (text.isNotEmpty()) {
+                        chatViewModel.sendMessage(text)
+                        text = ""
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                    }
                 },
+                onStopClick = chatViewModel::stopGeneration,
                 onNewChatClick = {
                     chatViewModel.startNewConversation()
                     text = ""
@@ -2198,6 +2202,7 @@ fun InputArea(
     canSend: Boolean,
     onAttachClick: () -> Unit,
     onSendClick: () -> Unit,
+    onStopClick: () -> Unit,
     onNewChatClick: () -> Unit,
     onTextChange: (String) -> Unit
 ) {
@@ -2303,7 +2308,7 @@ fun InputArea(
                         }
 
                         IconButton(
-                            onClick = onSendClick,
+                            onClick = if (isGenerating) onStopClick else onSendClick,
                             enabled = isGenerating || canSend,
                             modifier = Modifier
                                 .background(
@@ -2412,7 +2417,7 @@ fun InputArea(
                         }
 
                         IconButton(
-                            onClick = onSendClick,
+                            onClick = if (isGenerating) onStopClick else onSendClick,
                             enabled = isGenerating || canSend,
                             modifier = Modifier
                                 .background(

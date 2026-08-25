@@ -17,6 +17,7 @@ import com.onion.model.PersistentToolCall
 import com.onion.model.PersistentToolResponse
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +26,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import com.google.ai.edge.litertlm.LiteRtLmJni
 import com.google.ai.edge.litertlm.SamplerConfig
 import io.github.vinceglb.filekit.FileKit
@@ -355,9 +358,7 @@ class ChatViewModel(
             loadingModelState.emit(1)
             var initialized = false
             try {
-                if (isGenerating.value) {
-                    stopGeneration()
-                }
+                stopGenerationAndWait()
                 _llmEngineStatus.value = LlmEngineStatus.INITIALIZING
                 isLlmModelLoading.value = true
                 val currentLlmPath = llmPath.value
@@ -397,9 +398,7 @@ class ChatViewModel(
             loadingModelState.emit(1)
             var applied = false
             try {
-                if (isGenerating.value) {
-                    stopGeneration()
-                }
+                stopGenerationAndWait()
 
                 val needsEngineReinit = !contextCoordinator.isEngineReady() ||
                         activeModelPath != currentLlmPath ||
@@ -469,6 +468,15 @@ class ChatViewModel(
     }
 
     private var responseGenerationJob: Job? = null
+    private val generationStopMutex = Mutex()
+
+    private data class CancelledGenerationCleanup(
+        val sessionId: String?,
+        val assistantMessage: ChatMessage?,
+        val userMessage: ChatMessage?,
+        val recreateConversation: Boolean,
+    )
+
     private var isInferenceOn: Boolean = false
     private val defaultNegative = ""
     // ========================================================================================
@@ -510,7 +518,7 @@ class ChatViewModel(
         }
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                if (isGenerating.value) stopGeneration()
+                stopGenerationAndWait()
                 val session = chatHistoryRepository.getSession(sessionId) ?: run {
                     _llmEngineStatus.value = if (_conversationContext.value.isApplied) {
                         LlmEngineStatus.READY
@@ -583,7 +591,7 @@ class ChatViewModel(
         }
 
         viewModelScope.launch {
-            if (isGenerating.value) stopGeneration()
+            stopGenerationAndWait()
             val sessionId = ensureActiveSession(message)
             val messageDraft = ChatMessage.text(
                 text = message,
@@ -635,10 +643,8 @@ class ChatViewModel(
             LlmEngineStatus.UNINITIALIZED
         }
         viewModelScope.launch(Dispatchers.IO) {
-            if (isGenerating.value) {
-                stopGeneration()
-            }
             try {
+                stopGenerationAndWait()
                 if (contextCoordinator.isEngineReady()) {
                     _llmEngineStatus.value = LlmEngineStatus.APPLYING_CONTEXT
                 }
@@ -699,37 +705,113 @@ class ChatViewModel(
         }
     }
 
+    /**
+     * Requests cancellation without blocking the UI caller. Conversation
+     * transitions use [stopGenerationAndWait] directly as a cancellation
+     * barrier before replacing native resources.
+     */
     fun stopGeneration() {
-        val wasGenerating = isGenerating.value
-        isGenerating.value = false
-        if (wasGenerating && llmPath.value.isNotBlank()) {
-            contextCoordinator.cancelActive()
+        viewModelScope.launch {
+            stopGenerationAndWait()
         }
-        responseGenerationJob?.cancel()
-        val lastIndex = _currentChatMessages.lastIndex
-        if (wasGenerating && lastIndex >= 0) {
-            val removedMessage = _currentChatMessages.removeAt(lastIndex)
-            val removedTurnId = removedMessage.metadata?.get(METADATA_TURN_ID)
+    }
+
+    private suspend fun stopGenerationAndWait() = generationStopMutex.withLock {
+        val generationJob = responseGenerationJob
+        val cleanup = withContext(Dispatchers.Main) {
+            val shouldStop = isGenerating.value || generationJob?.isActive == true
+            if (!shouldStop) return@withContext null
+            val recreateConversation =
+                _llmEngineStatus.value == LlmEngineStatus.GENERATING
+
+            // Flip observable state before waiting so repeated stop requests
+            // cannot clean up more than one turn.
+            isGenerating.value = false
+            isInferenceOn = false
+
+            val assistantIndex = _currentChatMessages.indexOfLast { message ->
+                message.role == ChatRole.ASSISTANT &&
+                    message.metadata?.get(METADATA_IS_GENERATING) == "true"
+            }
+            if (assistantIndex < 0) {
+                return@withContext CancelledGenerationCleanup(
+                    sessionId = activeSessionId.value,
+                    assistantMessage = null,
+                    userMessage = null,
+                    recreateConversation = recreateConversation,
+                )
+            }
+
+            val assistantMessage = _currentChatMessages.removeAt(assistantIndex)
+            val turnId = assistantMessage.metadata?.get(METADATA_TURN_ID)
             val userIndex = _currentChatMessages.indexOfLast { message ->
                 message.role == ChatRole.USER &&
-                    removedTurnId != null &&
-                    message.metadata?.get(METADATA_TURN_ID) == removedTurnId
+                    turnId != null &&
+                    message.metadata?.get(METADATA_TURN_ID) == turnId
             }
-            val excludedUserMessage = if (userIndex >= 0) {
-                _currentChatMessages[userIndex].copy(
-                    metadata = _currentChatMessages[userIndex].metadata.orEmpty() +
-                        (METADATA_EXCLUDE_FROM_CONTEXT to "true")
-                ).also { updated ->
-                    _currentChatMessages[userIndex] = updated
-                }
+            val userMessage = if (userIndex >= 0) {
+                _currentChatMessages.removeAt(userIndex)
             } else {
                 null
             }
-            activeSessionId.value?.let { sessionId ->
-                viewModelScope.launch(Dispatchers.IO) {
-                    chatHistoryRepository.deleteMessage(sessionId, removedMessage.id)
-                    excludedUserMessage?.let { chatHistoryRepository.saveMessage(sessionId, it) }
+            CancelledGenerationCleanup(
+                sessionId = activeSessionId.value,
+                assistantMessage = assistantMessage,
+                userMessage = userMessage,
+                recreateConversation = recreateConversation,
+            )
+        } ?: return@withLock
+
+        withContext(Dispatchers.IO) {
+            contextCoordinator.cancelActive()
+            generationJob?.cancelAndJoin()
+        }
+        if (responseGenerationJob === generationJob) {
+            responseGenerationJob = null
+        }
+
+        withContext(Dispatchers.IO) {
+            val sessionId = cleanup.sessionId ?: return@withContext
+            cleanup.assistantMessage?.let { message ->
+                chatHistoryRepository.deleteMessage(sessionId, message.id)
+            }
+            cleanup.userMessage?.let { message ->
+                chatHistoryRepository.deleteMessage(sessionId, message.id)
+            }
+        }
+
+        if (cleanup.recreateConversation) {
+            recreateConversationAfterCancellation()
+        }
+    }
+
+    private suspend fun recreateConversationAfterCancellation() {
+        withContext(Dispatchers.Main) {
+            markConversationContextApplied(false)
+            _llmEngineStatus.value = LlmEngineStatus.APPLYING_CONTEXT
+        }
+
+        try {
+            val conversation = withContext(Dispatchers.IO) {
+                recreateLmConversation(forceRecreate = true)
+            }
+            withContext(Dispatchers.Main) {
+                _llmEngineStatus.value = if (conversation != null) {
+                    LlmEngineStatus.READY
+                } else {
+                    LlmEngineStatus.UNINITIALIZED
                 }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            e.printStackTrace()
+            withContext(Dispatchers.IO) {
+                contextCoordinator.closeActiveConversation()
+            }
+            withContext(Dispatchers.Main) {
+                markConversationContextApplied(false)
+                _llmEngineStatus.value = LlmEngineStatus.ERROR
             }
         }
     }
