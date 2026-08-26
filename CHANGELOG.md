@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-26] - 修复 iOS Kotlin/Native 编译
+- [修复] `BgmAudioFileStore` 移除 commonMain 中的 JVM `System.getProperty` 调用，优先使用 FileKit 缓存目录，并以 Okio 跨平台临时目录兜底。
+- [修复] `LiteRtLmJni.ios.kt` 改用 LiteRT LM C API 创建、设置并释放不透明的 `LiteRtLmSamplerParams`，不再把它作为可分配结构体访问，恢复 iOS Simulator 与 device 的 Kotlin/Native 编译。
+- [修复] 将 iOS LiteRT archive、动态库和 Apple SDK Framework 依赖从 iOS framework 链接任务迁移至 `litertlm.def` 的目标专属 `linkerOpts`，避免 Kotlin/Native 将裸 `-framework`、`-l` 参数识别为无效编译参数。
+- [修复] 在 LiteRT iOS CInterop 依赖中加入 `AudioToolbox`，解析 fully linked archive 中 miniaudio CoreAudio 后端的 `AudioUnit` 与 `AudioComponent` 符号。
+- [修复] `validateIosLiteRtLmNativeLibs` 在链接前识别被同步为文本的 Git LFS 指针动态库，并提示拉取 LiteRT-LM 的 LFS 二进制资产。
+- [文档] 更新 `docs/specs/ios-litertlm-platform.md`，记录 sampler 参数的 C API 所有权和 Kotlin/Native ABI 边界。
+
 ## [2026-08-26] - GitHub README 项目宣传图
 - [新增] 基于桌面端与移动端产品截图生成 `docs/screenshot/github_readme_hero.png`，以 Ethereal Minimalism 视觉语言展示 Agro 的本地智能与跨平台体验。
 - [新增] 追加杂志拼贴、沉浸全景与极简画廊三个 README 宣传图候选版本，便于在不同信息密度与品牌语气之间选择。

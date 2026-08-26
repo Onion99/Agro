@@ -96,6 +96,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.TileMode
 import com.onion.theme.style.glassSurface
 import com.onion.theme.style.watercolorGradient
+import kotlinx.coroutines.IO
 
 private const val QWEN_URL = "https://huggingface.co/litert-community/Qwen3-4B/resolve/main/qwen3_4b_channelwise_int8_float32kv.litertlm?download=true"
 private const val GEMMA_URL = "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm?download=true"

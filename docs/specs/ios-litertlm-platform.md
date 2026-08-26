@@ -1,6 +1,6 @@
 # iOS LiteRT LM Native Bridge
 
-Date: 2026-07-20
+Date: 2026-08-26
 
 ## Scope
 
@@ -12,6 +12,7 @@ This note records the iOS native bridge for `LiteRtLmJni`.
 - `composeApp` no longer registers the old Kotlin/Native cinterop for `sdloader.def`.
 - iOS framework builds no longer link the legacy `stable-diffusion.cpp` static libraries from Gradle.
 - `composeApp/src/nativeInterop/cinterop/litertlm.def` maps the LiteRT LM C API from `cpp/lite-rt-lm/c/engine.h` and `cpp/lite-rt-lm/c/conversation.h`.
+- `litertlm.def` declares target-specific LiteRT archive, prebuilt dylib, and Apple SDK dependencies (`Foundation`, `Accelerate`, `AudioToolbox`, `Metal`, and `MetalPerformanceShaders`) through `linkerOpts.ios_simulator_arm64` and `linkerOpts.ios_arm64`. `AudioToolbox` resolves miniaudio's CoreAudio backend symbols in the fully linked LiteRT archive. These options must not be passed as raw `-framework` or `-l` arguments on the Kotlin/Native framework link task, where they are parsed as invalid compiler arguments.
 - Kotlin/Native cinterop must include both `cpp/lite-rt-lm/c` and `cpp/lite-rt-lm`: the direct `c` include keeps `headers = engine.h conversation.h` resolvable, while the native root include resolves `conversation.h`'s internal `#include "c/engine.h"`.
 - iOS framework linking expects a native library named `liblitertlm_c_api.a` or `liblitertlm_c_api.dylib` in both `cpp/libs/ios-device` and `cpp/libs/ios-simulator`.
 - The active iOS target matrix is `iosArm64` and `iosSimulatorArm64`; `iosX64` is intentionally not registered.
@@ -19,6 +20,7 @@ This note records the iOS native bridge for `LiteRtLmJni`.
 - The Compose convention plugin must configure `stabilityConfigurationFiles`, not the removed single-file `stabilityConfigurationFile` property, while keeping `stability_config.conf` as the sole input.
 - `iosArm64Main` and `iosSimulatorArm64Main` must explicitly depend on the shared `iosMain` source set so `src/iosMain/kotlin` actual declarations are visible to Kotlin/Native expect/actual matching.
 - `validateIosLiteRtLmNativeLibs` runs on macOS before iOS link tasks and fails early if the required native library is missing. It is implemented as a custom task with path and library-name inputs so it does not capture `Project` from a `doLast` closure under Gradle configuration cache.
+- The same validation rejects Git LFS pointer text copied as a `.dylib` and directs developers to pull the LiteRT-LM submodule's LFS objects before linking.
 - `buildIosLiteRtLmNativeLibs` builds the device arm64 archive and simulator arm64 archive directly; it does not build `ios_x86_64` or merge simulator archives with `lipo`.
 - iOS archive tasks must not mutate the `cpp/lite-rt-lm` submodule. They rsync the submodule into `composeApp/build/litertlm-ios-workspace`, apply the parent-repo patch `cpp/patches/lite-rt-lm-ios-native-link.patch`, and run Bazel from that temporary workspace.
 - The patched iOS workspace defaults to Bazel target `//c:engine_fully_linked` and copies `bazel-bin/c/engine_fully_linked_lipo.a` as `liblitertlm_c_api.a`. The raw `//c:engine` `cc_library` archive only contains direct C API objects and leaves transitive Abseil, LiteRT, TensorFlow Lite, Rust, and parser objects unresolved for Kotlin/Native.
@@ -38,6 +40,7 @@ This note records the iOS native bridge for `LiteRtLmJni`.
 - iOS streaming now consumes the C API `LiteRtLmStreamChunk` callback shape. Text and error strings are copied to Kotlin strings inside the callback because the native chunk is only valid for the callback duration.
 - iOS synchronous and streaming message sends pass the C API `LiteRtLmConversationOptionalArgs*` argument. The current common API maps only `visualTokenBudget` into optional args for streaming; unsupported optional capabilities are passed as `NULL`/disabled defaults.
 - iOS conversation creation maps `overwritePromptTemplate` to `litert_lm_conversation_config_set_prompt_template` when a non-blank prompt template is provided.
+- iOS sampler configuration creates the opaque `LiteRtLmSamplerParams` through `litert_lm_sampler_params_create`, applies values through the exported setter functions, and releases it after the session config copies those values. Kotlin/Native must not allocate or dereference this opaque C type.
 
 ## Native Contract
 

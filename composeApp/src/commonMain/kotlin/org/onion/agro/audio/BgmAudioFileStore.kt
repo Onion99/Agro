@@ -5,14 +5,15 @@ import io.github.vinceglb.filekit.cacheDir
 import io.github.vinceglb.filekit.path
 import okio.FileSystem
 import okio.Path.Companion.toPath
+import okio.SYSTEM
 
 object BgmAudioFileStore {
     fun write(title: String, sourceSpecJson: String, wavBytes: ByteArray): String {
         val cacheRoot = runCatching { FileKit.cacheDir.path }.getOrNull()
             ?.takeIf { it.isNotBlank() }
-            ?: System.getProperty("java.io.tmpdir")
-            ?: "."
-        val directory = cacheRoot.toPath() / "generated-bgm"
+            ?.toPath()
+            ?: FileSystem.SYSTEM_TEMPORARY_DIRECTORY
+        val directory = cacheRoot / "generated-bgm"
         FileSystem.SYSTEM.createDirectories(directory)
         val safeTitle = title
             .trim()

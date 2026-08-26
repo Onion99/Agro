@@ -1,3 +1,6 @@
 headers = engine.h conversation.h
 headerFilter = engine.h conversation.h
 package = com.google.ai.edge.litertlm.cinterop
+
+linkerOpts.ios_simulator_arm64 = -force_load cpp/libs/ios-simulator/liblitertlm_c_api.a -Lcpp/libs/ios-simulator -rpath @executable_path/Frameworks -framework Foundation -framework Accelerate -framework AudioToolbox -framework Metal -framework MetalPerformanceShaders -lGemmaModelConstraintProvider -lLiteRt -lLiteRtMetalAccelerator -lLiteRtTopKMetalSampler
+linkerOpts.ios_arm64 = -force_load cpp/libs/ios-device/liblitertlm_c_api.a -Lcpp/libs/ios-device -rpath @executable_path/Frameworks -framework Foundation -framework Accelerate -framework AudioToolbox -framework Metal -framework MetalPerformanceShaders -lGemmaModelConstraintProvider -lLiteRt -lLiteRtMetalAccelerator -lLiteRtTopKMetalSampler
