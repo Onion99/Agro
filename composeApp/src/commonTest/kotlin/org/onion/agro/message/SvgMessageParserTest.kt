@@ -55,6 +55,15 @@ class SvgMessageParserTest {
         val link = SvgMessageParser.parseStoredSvg(
             "<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><image href='https://example.com/a.png'/></svg>"
         )
+        val multilineCssUrl = SvgMessageParser.parseStoredSvg(
+            """
+            <svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'>
+                <rect width='10' height='10' style='fill:url(
+                    https://example.com/fill.svg
+                )'/>
+            </svg>
+            """.trimIndent()
+        )
 
         assertEquals(
             "forbidden_svg_element",
@@ -63,6 +72,10 @@ class SvgMessageParserTest {
         assertEquals(
             "forbidden_svg_external_resource",
             assertIs<ChatMessageContent.Unsupported>(link).reason
+        )
+        assertEquals(
+            "forbidden_svg_external_resource",
+            assertIs<ChatMessageContent.Unsupported>(multilineCssUrl).reason
         )
     }
 

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-26] - 修复 iOS GitHub Actions Kotlin/Native 构建
+- [修复] `BgmAudioFileStore` 移除 `commonMain` 中的 JVM `System` 兜底，并统一通过 FileKit 缓存目录与 `systemFileSystem` expect/actual 边界读写音频文件。
+- [修复] 为 Room 与模型加载路径补齐 `kotlinx.coroutines.IO` 公共扩展导入，并确认 Chat 路径沿用同一导入方式；下载模块改用各 KMP 目标均可用的 `Dispatchers.Default`，避免干净 metadata 构建被缓存依赖差异掩盖。
+- [修复] `LiteRtLmJni.ios.kt` 按当前 LiteRT LM C API 将 sampler 参数作为 opaque handle 管理，通过 create/set/delete 函数配置并释放资源，不再尝试直接分配不可见结构体。
+- [修复] `SvgMessageParser` 以跨平台字符类替代 JVM 专属 `RegexOption.DOT_MATCHES_ALL`，保留多行外部资源检测语义。
+- [测试] Java 21 下通过 `:composeApp:compileCommonMainKotlinMetadata` 与 `SvgMessageParserTest` Desktop 定向测试；Windows 主机无法执行 iOS cinterop，最终 `compileKotlinIosArm64` 仍需 macOS GitHub Actions 验证。
+- [文档] 更新 `docs/specs/ios-litertlm-platform.md`，记录 opaque sampler 生命周期、公共文件系统和协程 dispatcher 约束。
+
 ## [2026-08-26] - GitHub README 项目宣传图
 - [新增] 基于桌面端与移动端产品截图生成 `docs/screenshot/github_readme_hero.png`，以 Ethereal Minimalism 视觉语言展示 Agro 的本地智能与跨平台体验。
 - [新增] 追加杂志拼贴、沉浸全景与极简画廊三个 README 宣传图候选版本，便于在不同信息密度与品牌语气之间选择。

@@ -33,7 +33,10 @@ This note records the iOS native bridge for `LiteRtLmJni`.
 - GitHub Actions iOS builds install Bazelisk, restore the Bazel disk cache, and rewrite the repository-root `.bazelrc.user` before invoking Gradle. The iOS Bazel tasks must not inherit local developer paths such as `G:/_b` or Windows-only `BAZEL_VC` values.
 - `buildReleaseIpa` packages the `.app` from `buildReleaseArchive` using a cacheable custom Gradle task. The task receives `app.name` through an `@Input Property<String>` during configuration; `@TaskAction` must not call `project.property("app.name")`, because execution-time `Project` access is incompatible with configuration cache and can fail to resolve the dynamic property.
 - `LiteRtLmJni` now has an iOS `actual` implementation that calls the LiteRT LM C API for engine creation, conversation creation, synchronous message sending, streaming message sending, cancellation, and release.
+- The iOS bridge treats `LiteRtLmSamplerParams` as the opaque C handle declared by `engine.h`: it creates the handle with `litert_lm_sampler_params_create`, configures it through the exported setter functions, copies it into the session config, and releases it with `litert_lm_sampler_params_delete`. Kotlin/Native must not allocate or access fields of this opaque type directly.
 - iOS model selection uses FileKit and returns the selected `.litertlm` path.
+- Common BGM file storage resolves its cache root through FileKit and performs I/O through the platform `systemFileSystem` expect/actual boundary; it does not use JVM `System` APIs from `commonMain`.
+- `commonMain` call sites that use the public coroutine IO extension must explicitly import `kotlinx.coroutines.IO`. Modules whose resolved common coroutine API does not expose that extension use `Dispatchers.Default` to remain portable across Kotlin/Native targets.
 - `sendLmMessageAsync` uses a Kotlin/Native `StableRef` as callback state and disposes it on final/error stream callbacks.
 - iOS streaming now consumes the C API `LiteRtLmStreamChunk` callback shape. Text and error strings are copied to Kotlin strings inside the callback because the native chunk is only valid for the callback duration.
 - iOS synchronous and streaming message sends pass the C API `LiteRtLmConversationOptionalArgs*` argument. The current common API maps only `visualTokenBudget` into optional args for streaming; unsupported optional capabilities are passed as `NULL`/disabled defaults.
@@ -45,7 +48,7 @@ This note records the iOS native bridge for `LiteRtLmJni`.
 - `LiteRtLmJni.ios.kt` stores native pointers as `Long` handles to keep the common API aligned with Android and Desktop.
 - `LmEngine` remains responsible for deleting engine handles through `deleteLmEngine`.
 - `LmConversation` remains responsible for deleting conversation handles through `deleteLmConversation`.
-- `SamplerConfig` is mapped to the C API `LiteRtLmSamplerParams` using `kLiteRtLmSamplerTypeTopP`, matching the JNI implementation.
+- `SamplerConfig` is mapped to an opaque C API `LiteRtLmSamplerParams` handle using `kLiteRtLmSamplerTypeTopP`, matching the JNI implementation; the session config copies the values before the temporary sampler handle is deleted.
 - Kotlin/Native C interop calls must stay aligned with `cpp/lite-rt-lm/c/engine.h` and `cpp/lite-rt-lm/c/conversation.h`, including added trailing parameters such as `LiteRtLmConversationOptionalArgs*`.
 
 ## Current Limitations

@@ -20,7 +20,7 @@ class DownloadManagerImpl(
     private val maxConcurrentDownloads: Int = 3
 ) : DownloadManager {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mutex = Mutex()
 
     // In-memory tasks map
@@ -161,7 +161,7 @@ class DownloadManagerImpl(
     }
 
     private fun startDownloadJob(task: DownloadTask) {
-        val job = scope.launch(Dispatchers.IO) {
+        val job = scope.launch(Dispatchers.Default) {
             executeDownload(task)
         }
         activeJobs[task.id] = job

@@ -71,6 +71,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import com.onion.theme.state.ContentType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
 import agro.composeapp.generated.resources.Res
 import agro.composeapp.generated.resources.*

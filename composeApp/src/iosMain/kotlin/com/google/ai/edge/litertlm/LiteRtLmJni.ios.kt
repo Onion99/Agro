@@ -5,7 +5,6 @@ import cnames.structs.LiteRtLmConversationOptionalArgs
 import cnames.structs.LiteRtLmEngine
 import cnames.structs.LiteRtLmSessionConfig
 import cnames.structs.LiteRtLmStreamChunk
-import com.google.ai.edge.litertlm.cinterop.LiteRtLmSamplerParams
 import com.google.ai.edge.litertlm.cinterop.kLiteRtLmSamplerTypeTopP
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_cancel_process
 import com.google.ai.edge.litertlm.cinterop.litert_lm_conversation_config_create
@@ -38,6 +37,12 @@ import com.google.ai.edge.litertlm.cinterop.litert_lm_engine_settings_set_max_nu
 import com.google.ai.edge.litertlm.cinterop.litert_lm_engine_settings_set_max_num_tokens
 import com.google.ai.edge.litertlm.cinterop.litert_lm_json_response_delete
 import com.google.ai.edge.litertlm.cinterop.litert_lm_json_response_get_string
+import com.google.ai.edge.litertlm.cinterop.litert_lm_sampler_params_create
+import com.google.ai.edge.litertlm.cinterop.litert_lm_sampler_params_delete
+import com.google.ai.edge.litertlm.cinterop.litert_lm_sampler_params_set_seed
+import com.google.ai.edge.litertlm.cinterop.litert_lm_sampler_params_set_temperature
+import com.google.ai.edge.litertlm.cinterop.litert_lm_sampler_params_set_top_k
+import com.google.ai.edge.litertlm.cinterop.litert_lm_sampler_params_set_top_p
 import com.google.ai.edge.litertlm.cinterop.litert_lm_session_config_create
 import com.google.ai.edge.litertlm.cinterop.litert_lm_session_config_delete
 import com.google.ai.edge.litertlm.cinterop.litert_lm_session_config_set_sampler_params
@@ -53,10 +58,8 @@ import kotlinx.cinterop.CPointed
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.StableRef
-import kotlinx.cinterop.alloc
 import kotlinx.cinterop.asStableRef
 import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.ptr
 import kotlinx.cinterop.staticCFunction
 import kotlinx.cinterop.toCPointer
 import kotlinx.cinterop.toKString
@@ -316,16 +319,26 @@ internal actual object LiteRtLmJni {
         val sampler = samplerConfig as? SamplerConfig ?: return null
         val sessionConfig = litert_lm_session_config_create()
             ?: throw LiteRtLmJniException("Failed to create LiteRT LM session config.")
-        memScoped {
-            val samplerParams = alloc<LiteRtLmSamplerParams>()
-            samplerParams.type = kLiteRtLmSamplerTypeTopP
-            samplerParams.top_k = sampler.topK
-            samplerParams.top_p = sampler.topP.toFloat()
-            samplerParams.temperature = sampler.temperature.toFloat()
-            samplerParams.seed = sampler.seed
-            litert_lm_session_config_set_sampler_params(sessionConfig, samplerParams.ptr)
+        try {
+            val samplerParams = litert_lm_sampler_params_create(kLiteRtLmSamplerTypeTopP)
+                ?: throw LiteRtLmJniException("Failed to create LiteRT LM sampler parameters.")
+            try {
+                litert_lm_sampler_params_set_top_k(samplerParams, sampler.topK)
+                litert_lm_sampler_params_set_top_p(samplerParams, sampler.topP.toFloat())
+                litert_lm_sampler_params_set_temperature(
+                    samplerParams,
+                    sampler.temperature.toFloat()
+                )
+                litert_lm_sampler_params_set_seed(samplerParams, sampler.seed)
+                litert_lm_session_config_set_sampler_params(sessionConfig, samplerParams)
+            } finally {
+                litert_lm_sampler_params_delete(samplerParams)
+            }
+            return sessionConfig
+        } catch (error: Throwable) {
+            litert_lm_session_config_delete(sessionConfig)
+            throw error
         }
-        return sessionConfig
     }
 
     private fun createOptionalArgs(
