@@ -86,48 +86,19 @@
 
 ```mermaid
 graph TD
-    subgraph UI_Layer ["表现层 (UI & ViewModels)"]
-        A["composeApp - Common UI"]
-        B["AppTheme / Ethereal System"]
-        C["ChatViewModel / MainViewModel"]
-        D["Adaptive Navigation"]
-        A --> B
-        A --> C
-        A --> D
-    end
-
-    subgraph Domain_Core ["业务与智能体核心层 (Domain & Agent Runtime)"]
-        E["AgentLoopRunner"]
-        F["AgentTools (QuickJS / Network / Search)"]
-        G["ContextCoordinator"]
-        H["LottieSceneCompiler / 8-Bit BGM Synth / SvgParser"]
-        E --> F
-        G --> H
-    end
-
-    subgraph Native_AI ["端侧 AI 运行时 (Native LiteRT Engine)"]
-        I["LmEngine / LmConversation"]
-        J["LiteRtLmJni / cinterop Bridge"]
-        K["Google LiteRT-LM C++ Core"]
-        L["Metal / WebGPU Dawn / Vulkan / OpenCL"]
-        I --> J
-        J --> K
-        K --> L
-    end
-
-    subgraph Data_Storage ["数据与持久化层 (Data & Persistence)"]
-        M["ChatHistoryRepository"]
-        N["Room KMP + SQLite Bundled"]
-        O["Ktor 3 Network Client"]
-        M --> N
-    end
-
-    %% 跨层调用与数据流
-    C --> E
-    C --> G
-    G --> I
-    C --> M
-    F --> O
+    UI[Compose Multiplatform UI Layer<br>Ethereal Minimalist Design / Gris Watercolor] --> VM[ChatViewModel & ContextCoordinator]
+    VM --> CS[ContextStrategy & Token Budget]
+    VM --> Parser[Multimedia Engine<br>LottieSceneCompiler / MML Synth / SVG Sanitizer]
+    
+    VM --> Bridge[Native Bridge Layer]
+    Bridge -->|JVM JNI / Direct Pointers| DesktopJNI[Desktop / Android C++ JNI]
+    Bridge -->|Kotlin/Native cinterop| iOSCAPI[iOS C-API Bridge]
+    
+    DesktopJNI --> Engine[Google LiteRT-LM Native Engine]
+    iOSCAPI --> Engine
+    
+    Engine --> Acc[Hardware Accelerators<br>Metal / WebGPU Dawn / OpenCL]
+    Engine --> LocalModel[(On-Device Task / Bin Models<br>Gemma 2 / 3 / 4, etc.)]
 ```
 
 ### 📁 模块一览表
