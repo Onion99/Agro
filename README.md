@@ -86,7 +86,7 @@
 
 ```mermaid
 graph TD
-    UI[Compose Multiplatform UI Layer<br>Ethereal Minimalist Design / Gris Watercolor] --> VM[ChatViewModel & ContextCoordinator]
+    UI[Compose Multiplatform UI Layer] --> VM[ChatViewModel & ContextCoordinator]
     VM --> CS[ContextStrategy & Token Budget]
     VM --> Parser[Multimedia Engine<br>LottieSceneCompiler / MML Synth / SVG Sanitizer]
     
