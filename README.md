@@ -87,30 +87,47 @@
 ```mermaid
 graph TD
     subgraph UI_Layer ["表现层 (UI & ViewModels)"]
-        A[composeApp - Common UI] --> B[AppTheme / Ethereal System]
-        A --> C[ChatViewModel / MainViewModel]
-        A --> D[Adaptive Navigation]
+        A["composeApp - Common UI"]
+        B["AppTheme / Ethereal System"]
+        C["ChatViewModel / MainViewModel"]
+        D["Adaptive Navigation"]
+        A --> B
+        A --> C
+        A --> D
     end
 
     subgraph Domain_Core ["业务与智能体核心层 (Domain & Agent Runtime)"]
-        C --> E[AgentLoopRunner]
-        E --> F[AgentTools (QuickJS / Network / Search)]
-        C --> G[ContextCoordinator]
-        G --> H[LottieSceneCompiler / 8-Bit BGM Synth / SvgParser]
+        E["AgentLoopRunner"]
+        F["AgentTools (QuickJS / Network / Search)"]
+        G["ContextCoordinator"]
+        H["LottieSceneCompiler / 8-Bit BGM Synth / SvgParser"]
+        E --> F
+        G --> H
     end
 
     subgraph Native_AI ["端侧 AI 运行时 (Native LiteRT Engine)"]
-        G --> I[LmEngine / LmConversation]
-        I --> J[LiteRtLmJni / cinterop Bridge]
-        J --> K[Google LiteRT-LM C++ Core]
-        K --> L[Metal / WebGPU Dawn / Vulkan / OpenCL]
+        I["LmEngine / LmConversation"]
+        J["LiteRtLmJni / cinterop Bridge"]
+        K["Google LiteRT-LM C++ Core"]
+        L["Metal / WebGPU Dawn / Vulkan / OpenCL"]
+        I --> J
+        J --> K
+        K --> L
     end
 
     subgraph Data_Storage ["数据与持久化层 (Data & Persistence)"]
-        C --> M[ChatHistoryRepository]
-        M --> N[Room KMP + SQLite Bundled]
-        F --> O[Ktor 3 Network Client]
+        M["ChatHistoryRepository"]
+        N["Room KMP + SQLite Bundled"]
+        O["Ktor 3 Network Client"]
+        M --> N
     end
+
+    %% 跨层调用与数据流
+    C --> E
+    C --> G
+    G --> I
+    C --> M
+    F --> O
 ```
 
 ### 📁 模块一览表
