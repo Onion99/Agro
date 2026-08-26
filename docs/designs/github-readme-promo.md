@@ -13,8 +13,8 @@
 
 ## 素材与产物
 
-- 参考素材：`docs/screenshot/desktop_home.png`、`desktop_chat.webp`、`desktop_library.webp`、`mobile_home.png`、`mobile_chat.png`。
-- 最终产物：`docs/screenshot/github_readme_hero.png`。
+- 参考素材：`docs/screenshot/desktop_home.webp`、`desktop_chat.webp`、`desktop_library.webp`、`mobile_home.webp`、`mobile_chat.webp`。
+- 最终采用：`docs/screenshot/github_readme_hero_v7_matrix.webp`。
 - 输出尺寸：1718 × 915 px，约 1.88:1，适合 README 横幅展示。
 
 ## 生成提示摘要
@@ -23,12 +23,19 @@
 
 ## 候选版本
 
-- `github_readme_hero.png`：原始层叠主视觉，桌面聊天界面为核心，移动端界面集中在右侧前景。
-- `github_readme_hero_v2_editorial.png`：杂志式非对称拼贴，品牌文案位于左侧，首页、设置与资料库形成层叠编辑版式。
-- `github_readme_hero_v3_panorama.png`：沉浸式全景构图，以聊天界面覆盖中心，水彩流线连接桌面端与移动端。
-- `github_readme_hero_v4_gallery.png`：极简画廊式构图，三张桌面界面与两张移动界面采用正视、规整的展台排列。
-- `github_readme_hero_v6_typographic.png`：巨幅排版海报构图，以超大半透明 `Agro` 字样和水平界面序列建立强烈品牌识别。
-- `github_readme_hero_v7_matrix.png`：模块化产品矩阵构图，以工程网格和四个功能区域集中呈现跨端能力。
-- `github_readme_hero_v8_watercolor_journey.png`：水彩旅程构图，以 Gris 风格的鼠尾草绿至灰蓝河流与轨道线连接不同设备界面。
+- `github_readme_hero.webp`：原始层叠主视觉，桌面聊天界面为核心，移动端界面集中在右侧前景。
+- `github_readme_hero_v3_panorama.webp`：沉浸式全景构图，以聊天界面覆盖中心，水彩流线连接桌面端与移动端。
+- `github_readme_hero_v4_gallery.webp`：极简画廊式构图，三张桌面界面与两张移动界面采用正视、规整的展台排列。
+- `github_readme_hero_v6_typographic.webp`：巨幅排版海报构图，以超大半透明 `Agro` 字样和水平界面序列建立强烈品牌识别。
+- `github_readme_hero_v7_matrix.webp`：模块化产品矩阵构图，以工程网格和四个功能区域集中呈现跨端能力；当前 README 使用此版本。
+- `github_readme_hero_v8_watercolor_journey.webp`：水彩旅程构图，以 Gris 风格的鼠尾草绿至灰蓝河流与轨道线连接不同设备界面。
 
 所有候选版本沿用相同品牌文本与界面保真约束，通过编辑感、沉浸感、秩序感、暮色氛围、巨幅排版、模块矩阵和水彩叙事，为 README 首屏提供不同的信息密度和视觉语气。
+
+## README 内容结构
+
+- 使用中文说明项目定位、核心能力、平台支持与联网边界。
+- 通过桌面端和移动端截图展示聊天页与资源库的响应式布局。
+- 提供 JDK 21、Bazelisk、Git LFS、Android NDK 与各桌面平台工具链要求。
+- 提供桌面端、Android、iOS 的运行命令，以及测试、打包和首次原生构建提示。
+- 记录主要模块、技术栈、贡献约束与 GPL-3.0 许可证入口。
