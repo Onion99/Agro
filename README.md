@@ -55,14 +55,14 @@
 ### 桌面端体验 (Desktop Layout)
 | 对话界面 (Chat) | 首页展示 (Home) |
 | :---: | :---: |
-| ![Desktop Chat](docs/screenshot/desktop_chat.webp) | ![Desktop Home](docs/screenshot/desktop_home.webp) |
+| ![Desktop Chat](docs/screenshot/desktop_chat.webp) | ![Desktop Home](docs/screenshot/desktop_home.gif) |
 | **资料库 (Library)** | **设置面板 (Settings)** |
 | ![Desktop Library](docs/screenshot/desktop_library.webp) | ![Desktop Setting](docs/screenshot/desktop_setting.webp) |
 
 ### 移动端体验 (Mobile Layout)
 | 移动对话 (Mobile Chat) | 移动首页 (Mobile Home) | 移动资料库 (Mobile Library) | 移动设置 (Mobile Settings) |
 | :---: | :---: | :---: | :---: |
-| ![Mobile Chat](docs/screenshot/mobile_chat.webp) | ![Mobile Home](docs/screenshot/mobile_home.webp) | ![Mobile Library](docs/screenshot/mobile_library.webp) | ![Mobile Setting](docs/screenshot/mobile_setting.webp) |
+| ![Mobile Chat](docs/screenshot/mobile_chat.gif) | ![Mobile Home](docs/screenshot/mobile_home.gif) | ![Mobile Library](docs/screenshot/mobile_library.gif) | ![Mobile Setting](docs/screenshot/mobile_setting.gif) |
 
 ---
 
