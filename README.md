@@ -1,41 +1,4 @@
-#### Building from Source (Advanced)
-
-```bash
-# Clone the repository
-# Install Protobuf https://github.com/protocolbuffers/protobuf/releases
-# add path to system environment D:\MyApp\Code\protoc-25.9-win64\bin
-protoc --version
-
-# rust https://rustup.rs  downAndRun rustup-init.exe
-rustc -V
-
-# flatbuffers https://github.com/google/flatbuffers
-flatc
-
-# Bazel winget install Bazel.Bazelisk / brew install bazelisk https://github.com/bazelbuild/bazel/releases
-# Bazelisk  https://github.com/bazelbuild/bazelisk
-bazel
-
-# Install Visual Studio 2022 https://visualstudio.microsoft.com/zh-hans/visual-cpp-build-tools/ → select C++ developer
-Nice Version https://learn.microsoft.com/zh-cn/visualstudio/install/create-a-network-installation-of-visual-studio?view=vs-2022#download-the-visual-studio-bootstrapper-to-create-the-layout
-
-# Android Studio development optimization
-cpp/lite-rt-lm/composeApp/.cxx - right click module - Mark Directory as - Excluded
-
-# Build for Desktop
-./gradlew :composeApp:run
-
-# Build for Android
-./gradlew :composeApp:assembleDebug
-```
-
-### Debug
-
-```bash
-
-### windows crash log
-win + r
-eventvwr
-```
-
+<p align="center">
+  <img src="docs/screenshot/github_readme_hero_v7_matrix.png.png" alt="Agro — Local Intelligence" width="100%" />
+</p>
 

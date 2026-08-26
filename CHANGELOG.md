@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-26] - GitHub README 项目宣传图
+- [新增] 基于桌面端与移动端产品截图生成 `docs/screenshot/github_readme_hero.png`，以 Ethereal Minimalism 视觉语言展示 Agro 的本地智能与跨平台体验。
+- [新增] 追加杂志拼贴、沉浸全景与极简画廊三个 README 宣传图候选版本，便于在不同信息密度与品牌语气之间选择。
+- [新增] 追加暮色玻璃、巨幅排版、模块化产品矩阵与水彩旅程四个 README 宣传图候选版本，扩展深色、高品牌感、技术型与艺术型展示方向。
+- [修改] 在 `README.md` 顶部引用宣传图，用作 GitHub 仓库首屏主视觉。
+- [文档] 新增 `docs/designs/github-readme-promo.md`，记录宣传图目标、构图、素材、视觉约束与生成提示摘要。
+
 ## [2026-08-25] - 优化生成取消与会话切换同步
 - [修复] `ChatViewModel.stopGeneration` 使用互斥取消屏障与 `cancelAndJoin()` 等待旧推理退出，初始化、设置应用、历史打开、消息发送和新会话切换不再与旧生成任务并发操作 native conversation。
 - [修复] 取消时按 `turn_id` 将 user 消息与带生成标记的 assistant 占位消息作为完整 turn 从 UI 和数据库删除，避免取消输入长期占用可见历史或后续上下文。
