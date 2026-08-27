@@ -259,7 +259,7 @@ fun ModelScreen() {
             ) {
                 ModelColumnCard(
                     vendor = "Mistral AI",
-                    title = "Ministral-3-3B",
+                    title = stringResource(Res.string.model_ministral3_title),
                     desc = stringResource(Res.string.model_ministral3_desc),
                     contextWindow = "4k",
                     vram = "8GB",
@@ -274,7 +274,7 @@ fun ModelScreen() {
                 )
                 ModelColumnCard(
                     vendor = "Google",
-                    title = "Gemma 4 4B",
+                    title = stringResource(Res.string.model_gemma4_title),
                     desc = stringResource(Res.string.model_gemma4_desc),
                     contextWindow = "32k",
                     vram = "8GB",
@@ -318,7 +318,7 @@ fun ModelScreen() {
                     modifier = Modifier.weight(w1),
                     interactionSource = interact1,
                     vendor = "Mistral AI",
-                    title = "Ministral-3-3B",
+                    title = stringResource(Res.string.model_ministral3_title),
                     desc = stringResource(Res.string.model_ministral3_desc),
                     contextWindow = "4k",
                     vram = "8GB",
@@ -335,7 +335,7 @@ fun ModelScreen() {
                     modifier = Modifier.weight(w2),
                     interactionSource = interact2,
                     vendor = "Google",
-                    title = "Gemma 4 4B",
+                    title = stringResource(Res.string.model_gemma4_title),
                     desc = stringResource(Res.string.model_gemma4_desc),
                     contextWindow = "32k",
                     vram = "8GB",
