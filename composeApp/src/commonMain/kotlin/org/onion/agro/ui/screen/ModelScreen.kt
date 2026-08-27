@@ -262,7 +262,7 @@ fun ModelScreen() {
                     title = "Ministral-3-3B",
                     desc = stringResource(Res.string.model_ministral3_desc),
                     contextWindow = "4k",
-                    vram = "4GB",
+                    vram = "8GB",
                     imageResource = Res.drawable.model_ministral_card,
                     isActive = activeId == "ministral",
                     isLoading = loadingState == 1 && activeId == "ministral",
@@ -276,7 +276,7 @@ fun ModelScreen() {
                     vendor = "Google",
                     title = "Gemma 4 4B",
                     desc = stringResource(Res.string.model_gemma4_desc),
-                    contextWindow = "8k",
+                    contextWindow = "32k",
                     vram = "8GB",
                     imageResource = Res.drawable.model_gemma_card,
                     isActive = activeId == "gemma",
@@ -321,7 +321,7 @@ fun ModelScreen() {
                     title = "Ministral-3-3B",
                     desc = stringResource(Res.string.model_ministral3_desc),
                     contextWindow = "4k",
-                    vram = "4GB",
+                    vram = "8GB",
                     imageResource = Res.drawable.model_ministral_card,
                     isActive = activeId == "ministral",
                     isLoading = loadingState == 1 && activeId == "ministral",
@@ -337,7 +337,7 @@ fun ModelScreen() {
                     vendor = "Google",
                     title = "Gemma 4 4B",
                     desc = stringResource(Res.string.model_gemma4_desc),
-                    contextWindow = "8k",
+                    contextWindow = "32k",
                     vram = "8GB",
                     imageResource = Res.drawable.model_gemma_card,
                     isActive = activeId == "gemma",
@@ -685,7 +685,7 @@ private fun ModelColumnCard(
                         }
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "VRAM REQUIRED",
+                                text = "RAM REQUIRED",
                                 style = AppTheme.typography.labelMedium.copy(fontSize = 10.sp, letterSpacing = 2.sp),
                                 color = AppTheme.colors.onSurface.copy(alpha = 0.5f)
                             )
