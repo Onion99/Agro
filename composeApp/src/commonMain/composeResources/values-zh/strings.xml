@@ -98,6 +98,9 @@
     <string name="model_qwen3_title">通义千问 Qwen 3 4B</string>
     <string name="model_qwen3_tagline">多语言，针对推理优化</string>
     <string name="model_qwen3_desc">由阿里云开发的高性能多语言模型，在推理与日常对话方面进行了深度优化。</string>
+    <string name="model_ministral3_title">Ministral-3-3B</string>
+    <string name="model_ministral3_tagline">端侧优化，强劲推理</string>
+    <string name="model_ministral3_desc">由 Mistral AI 开发的高性能 3B 端侧指令模型，针对端侧推理与日常对话深度优化。</string>
     <string name="model_gemma4_title">Gemma 4 4B</string>
     <string name="model_gemma4_tagline">谷歌新一代开放智能</string>
     <string name="model_gemma4_desc">由谷歌开发的下一代轻量级开放模型，专为先进推理、指令遵循与创意生成而设计。</string>

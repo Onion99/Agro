@@ -99,6 +99,9 @@
     <string name="model_qwen3_title">Qwen 3 4B</string>
     <string name="model_qwen3_tagline">Multilingual, optimized for reasoning</string>
     <string name="model_qwen3_desc">A high-performance multilingual model optimized for reasoning and chat. Developed by Alibaba Cloud.</string>
+    <string name="model_ministral3_title">Ministral-3-3B</string>
+    <string name="model_ministral3_tagline">Edge-optimized reasoning &amp; instruct model</string>
+    <string name="model_ministral3_desc">A state-of-the-art 3B instruction model developed by Mistral AI, optimized for on-device reasoning and chat.</string>
     <string name="model_gemma4_title">Gemma 4 4B</string>
     <string name="model_gemma4_tagline">Google's next-generation intelligence</string>
     <string name="model_gemma4_desc">Google's next-generation open model, offering advanced reasoning, instruction following, and creative capabilities in a compact size.</string>

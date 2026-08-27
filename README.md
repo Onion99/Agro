@@ -46,7 +46,7 @@ Unlike conventional AI tools that depend on remote cloud APIs, Agro brings the e
 
 | Capability | Implementation Details |
 | --- | --- |
-| **Local LLMs** | Loads LiteRT-LM compatible `.litertlm` bundles. Built-in one-click downloads for Qwen 3 4B & Gemma 4 4B, with support for custom models |
+| **Local LLMs** | Loads LiteRT-LM compatible `.litertlm` bundles. Built-in one-click downloads for Ministral-3-3B & Gemma 4 4B, with support for custom models |
 | **Streaming Chat** | Incremental token streaming, thinking/reasoning channels, mid-generation cancellation, auto CPU fallback upon GPU errors, runtime telemetry |
 | **Context Management** | Segregated channels for conversational chat and structured synthesis; reads native token counts, performs budget estimation, history replay, and pruning |
 | **Agent Loop** | Model tool call request → Host execution → Structured payload feedback → Continued inference (up to 10 iterations by default) |

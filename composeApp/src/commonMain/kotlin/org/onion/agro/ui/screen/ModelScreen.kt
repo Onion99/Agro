@@ -98,7 +98,7 @@ import com.onion.theme.style.glassSurface
 import com.onion.theme.style.watercolorGradient
 import kotlinx.coroutines.IO
 
-private const val QWEN_URL = "https://huggingface.co/litert-community/Qwen3-4B/resolve/main/qwen3_4b_channelwise_int8_float32kv.litertlm?download=true"
+private const val MINISTRAL_URL = "https://huggingface.co/litert-community/Ministral-3-3B-Instruct-2512/resolve/main/Ministral-3-3B-Instruct-2512_q4_block32_ekv4096.litertlm?download=true"
 private const val GEMMA_URL = "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm?download=true"
 
 @Composable
@@ -129,7 +129,7 @@ private fun formatEta(seconds: Long): String {
     }
 }
 
-private const val QWEN_EXPECTED_SIZE = 5672370176L
+private const val MINISTRAL_EXPECTED_SIZE = 2340982768L
 private const val GEMMA_EXPECTED_SIZE = 3659530240L
 
 @Composable
@@ -183,17 +183,17 @@ fun ModelScreen() {
     val downloadTasks by downloadManager.tasksFlow.collectAsState(emptyList())
 
     val cacheDirPath = remember { FileKit.cacheDir.path ?: "" }
-    val qwenFilePath = remember(cacheDirPath) { "$cacheDirPath/qwen3_4b_channelwise_int8_float32.litertlm" }
+    val ministralFilePath = remember(cacheDirPath) { "$cacheDirPath/Ministral-3-3B-Instruct-2512_q4_block32_ekv4096.litertlm" }
     val gemmaFilePath = remember(cacheDirPath) { "$cacheDirPath/gemma-4-E4B.litertlm" }
 
-    val qwenTask = remember(downloadTasks) { downloadTasks.firstOrNull { it.url == QWEN_URL || it.filePath == qwenFilePath } }
+    val ministralTask = remember(downloadTasks) { downloadTasks.firstOrNull { it.url == MINISTRAL_URL || it.filePath == ministralFilePath } }
     val gemmaTask = remember(downloadTasks) { downloadTasks.firstOrNull { it.url == GEMMA_URL || it.filePath == gemmaFilePath } }
 
-    val qwenExists = remember(downloadTasks) {
-        if (qwenTask != null) {
-            qwenTask.status == DownloadStatus.COMPLETED
+    val ministralExists = remember(downloadTasks) {
+        if (ministralTask != null) {
+            ministralTask.status == DownloadStatus.COMPLETED
         } else {
-            PlatformFileUtil.getFileSize(qwenFilePath) >= QWEN_EXPECTED_SIZE
+            PlatformFileUtil.getFileSize(ministralFilePath) >= MINISTRAL_EXPECTED_SIZE
         }
     }
     val gemmaExists = remember(downloadTasks) {
@@ -208,7 +208,7 @@ fun ModelScreen() {
 
     val activeId = remember(currentPath) {
         when {
-            currentPath.contains("qwen", ignoreCase = true) -> "qwen"
+            currentPath.contains("ministral", ignoreCase = true) -> "ministral"
             currentPath.contains("gemma", ignoreCase = true) -> "gemma"
             currentPath.isNotEmpty() -> "custom"
             else -> ""
@@ -258,19 +258,19 @@ fun ModelScreen() {
                     .verticalScroll(rememberScrollState())
             ) {
                 ModelColumnCard(
-                    vendor = "Alibaba",
-                    title = "Qwen 3 4B",
-                    desc = stringResource(Res.string.model_qwen3_desc),
-                    contextWindow = "32k",
-                    vram = "8GB",
-                    imageResource = Res.drawable.model_qwen_card,
-                    isActive = activeId == "qwen",
-                    isLoading = loadingState == 1 && activeId == "qwen",
+                    vendor = "Mistral AI",
+                    title = "Ministral-3-3B",
+                    desc = stringResource(Res.string.model_ministral3_desc),
+                    contextWindow = "4k",
+                    vram = "4GB",
+                    imageResource = Res.drawable.model_ministral_card,
+                    isActive = activeId == "ministral",
+                    isLoading = loadingState == 1 && activeId == "ministral",
                     isDesktop = false,
-                    isDownloaded = qwenExists,
-                    downloadTask = qwenTask,
-                    onDownloadClick = { onDownloadClick(QWEN_URL, qwenFilePath, qwenTask) },
-                    onClick = { onLoadClick(qwenFilePath) }
+                    isDownloaded = ministralExists,
+                    downloadTask = ministralTask,
+                    onDownloadClick = { onDownloadClick(MINISTRAL_URL, ministralFilePath, ministralTask) },
+                    onClick = { onLoadClick(ministralFilePath) }
                 )
                 ModelColumnCard(
                     vendor = "Google",
@@ -317,19 +317,19 @@ fun ModelScreen() {
                 ModelColumnCard(
                     modifier = Modifier.weight(w1),
                     interactionSource = interact1,
-                    vendor = "Alibaba",
-                    title = "Qwen 3 4B",
-                    desc = stringResource(Res.string.model_qwen3_desc),
-                    contextWindow = "32k",
-                    vram = "8GB",
-                    imageResource = Res.drawable.model_qwen_card,
-                    isActive = activeId == "qwen",
-                    isLoading = loadingState == 1 && activeId == "qwen",
+                    vendor = "Mistral AI",
+                    title = "Ministral-3-3B",
+                    desc = stringResource(Res.string.model_ministral3_desc),
+                    contextWindow = "4k",
+                    vram = "4GB",
+                    imageResource = Res.drawable.model_ministral_card,
+                    isActive = activeId == "ministral",
+                    isLoading = loadingState == 1 && activeId == "ministral",
                     isDesktop = true,
-                    isDownloaded = qwenExists,
-                    downloadTask = qwenTask,
-                    onDownloadClick = { onDownloadClick(QWEN_URL, qwenFilePath, qwenTask) },
-                    onClick = { onLoadClick(qwenFilePath) }
+                    isDownloaded = ministralExists,
+                    downloadTask = ministralTask,
+                    onDownloadClick = { onDownloadClick(MINISTRAL_URL, ministralFilePath, ministralTask) },
+                    onClick = { onLoadClick(ministralFilePath) }
                 )
                 ModelColumnCard(
                     modifier = Modifier.weight(w2),
