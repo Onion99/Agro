@@ -33,15 +33,16 @@ jobs:
           echo "new_tag=$NEW_TAG_CLEAN" >> $GITHUB_OUTPUT
           echo "New tag: $NEW_TAG_CLEAN"
           
-          # Get the latest release tag (previous release)
-          LATEST_RELEASE_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 2 | tail -n 1)
-          if [ -z "$LATEST_RELEASE_TAG" ]; then
-            # If no previous release, use the first commit
-            LATEST_RELEASE_TAG=$(git rev-list --max-parents=0 HEAD)
+          # Get the previous release tag (2nd in version-sorted tag list)
+          PREV_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed -n '2p')
+          if [ -n "$PREV_TAG" ]; then
+            BASE_REF="$PREV_TAG"
+          else
+            # If no previous release tag, compare from root commit
+            BASE_REF=$(git rev-list --max-parents=0 HEAD)
           fi
-          LATEST_TAG_CLEAN=${LATEST_RELEASE_TAG#v}
-          echo "latest_tag=$LATEST_TAG_CLEAN" >> $GITHUB_OUTPUT
-          echo "Latest release tag: $LATEST_TAG_CLEAN"
+          echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
+          echo "Base ref for compare: $BASE_REF"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v5
@@ -51,7 +52,7 @@ jobs:
       - name: Prepare release notes
         env:
           NEW_TAG: ${{ steps.tags.outputs.new_tag }}
-          LATEST_TAG: ${{ steps.tags.outputs.latest_tag }}
+          BASE_REF: ${{ steps.tags.outputs.base_ref }}
         run: |
           # Extract changelog section for new tag
           CHANGELOG_SECTION=""
@@ -73,7 +74,7 @@ jobs:
           fi
           
           # Add full changelog link
-          FULL_CHANGELOG="Full Changelog: [v${LATEST_TAG}...v${NEW_TAG}](https://github.com/Onion99/Agro/compare/v${LATEST_TAG}...v${NEW_TAG})"
+          FULL_CHANGELOG="Full Changelog: [${BASE_REF}...v${NEW_TAG}](https://github.com/Onion99/Agro/compare/${BASE_REF}...v${NEW_TAG})"
           
           # Process RELEASE_NOTES.md and replace __VERSION__
           RELEASE_NOTES=$(sed "s/__VERSION__/${NEW_TAG}/g" RELEASE_NOTES.md)
@@ -99,8 +100,10 @@ jobs:
 
       - name: Create release
         uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: ${{ steps.tags.outputs.new_tag }}
+          name: v${{ steps.tags.outputs.new_tag }}
           tag_name: v${{ steps.tags.outputs.new_tag }}
           body_path: release_notes.md
           files: release_files/*

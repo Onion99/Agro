@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-08-27
+- [新增] 新增 `litert-community/Ministral-3-3B-Instruct-2512` 模型预设与参数调优，丰富轻量端侧本地推理选择。
+- [重构] 重塑 Gris 艺术水彩与极简美学设计：引入全新神圣几何星轨指示器与流光微晶毛玻璃状态胶囊。
+- [优化] 深度重构 Gemma4 4B Lottie 动效场景生成、闭集投影与确定性编译热路径，消除黑屏并显著提升解析性能。
+- [新增] 接入 8-bit Chiptune BGM MML 生成与跨平台播放能力，强化音频多通道对齐与容错自愈。
+- [修复] 优化 Chat 推理并发控制与互斥取消屏障，确保会话切换与取消清理的事务一致性。
+- [修复] 隔离结构化生成与自由对话的历史回放上下文，杜绝 KV cache 污染。
+- [修复] 修复 iOS Kotlin/Native 编译与 CInterop 链接选项，恢复 iOS Simulator 与真机原生构建。
+- [优化] 完善全平台（Android、iOS、macOS、Windows、Linux）打包配置与 CI 构建链路。
+
 ## [2026-08-26] - 修复 iOS Kotlin/Native 编译
 - [修复] `BgmAudioFileStore` 移除 commonMain 中的 JVM `System.getProperty` 调用，优先使用 FileKit 缓存目录，并以 Okio 跨平台临时目录兜底。
 - [修复] `LiteRtLmJni.ios.kt` 改用 LiteRT LM C API 创建、设置并释放不透明的 `LiteRtLmSamplerParams`，不再把它作为可分配结构体访问，恢复 iOS Simulator 与 device 的 Kotlin/Native 编译。
