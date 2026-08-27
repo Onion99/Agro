@@ -322,7 +322,7 @@ fun ModelScreen() {
                     desc = stringResource(Res.string.model_ministral3_desc),
                     contextWindow = "4k",
                     vram = "8GB",
-                    imageResource = Res.drawable.model_ministral_card,
+                    imageResource = Res.drawable.model_qwen_card,
                     isActive = activeId == "ministral",
                     isLoading = loadingState == 1 && activeId == "ministral",
                     isDesktop = true,
