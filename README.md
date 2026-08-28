@@ -208,6 +208,7 @@ Open `iosApp/iosApp.xcworkspace` in Xcode, select your Target/Simulator for code
     - [JetBrains Compose Multiplatform](https://www.jetbrains.com/lp/compose-multiplatform/) — Cross-platform declarative UI framework
     - [Compottie](https://github.com/alexzhirkevich/compottie) — Lottie renderer for Compose Multiplatform
     - [ComposeMediaPlayer](https://github.com/kdroidFilter/ComposeMediaPlayer) — Lightweight cross-platform media player
+    - [Compose Rich Editor](https://github.com/MohamedRejeb/Compose-Rich-Editor) — Rich text editor for Compose Multiplatform
     - [QuickJS-kt](https://github.com/dokar3/quickjs-kt) — Embedded Kotlin JavaScript engine
     - [Coil](https://github.com/coil-kt/coil) — Asynchronous image loading for Kotlin
     - [Koin](https://insert-koin.io/) & [Ktor](https://ktor.io/) — Modern DI & asynchronous networking stack

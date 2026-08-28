@@ -208,6 +208,7 @@ Xcode で `iosApp/iosApp.xcworkspace` を開き、ターゲット／シミュレ
     - [JetBrains Compose Multiplatform](https://www.jetbrains.com/lp/compose-multiplatform/) — クロスプラットフォーム宣言的 UI フレームワーク
     - [Compottie](https://github.com/alexzhirkevich/compottie) — Compose Multiplatform 向け Lottie レンダラー
     - [ComposeMediaPlayer](https://github.com/kdroidFilter/ComposeMediaPlayer) — 軽量マルチプラットフォームメディアプレイヤー
+    - [Compose Rich Editor](https://github.com/MohamedRejeb/Compose-Rich-Editor) — Compose Multiplatform 向けリッチテキストエディター
     - [QuickJS-kt](https://github.com/dokar3/quickjs-kt) — 組込み Kotlin JavaScript エンジン
     - [Coil](https://github.com/coil-kt/coil) — Kotlin 非同期画像読み込みライブラリ
     - [Koin](https://insert-koin.io/) & [Ktor](https://ktor.io/) — 依存性注入およびモダンな非同期ネットワークフレームワーク

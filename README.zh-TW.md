@@ -208,6 +208,7 @@ git lfs pull
     - [JetBrains Compose Multiplatform](https://www.jetbrains.com/lp/compose-multiplatform/) — 跨平台聲明式 UI 框架
     - [Compottie](https://github.com/alexzhirkevich/compottie) — Compose Multiplatform Lottie 渲染器
     - [ComposeMediaPlayer](https://github.com/kdroidFilter/ComposeMediaPlayer) — 輕量級跨平台媒體播放引擎
+    - [Compose Rich Editor](https://github.com/MohamedRejeb/Compose-Rich-Editor) — Compose Multiplatform 富文本編輯器
     - [QuickJS-kt](https://github.com/dokar3/quickjs-kt) — 嵌入式 Kotlin JavaScript 引擎
     - [Coil](https://github.com/coil-kt/coil) — Kotlin 非同步圖片載入庫
     - [Koin](https://insert-koin.io/) & [Ktor](https://ktor.io/) — 依賴注入與現代化非同步網路框架
