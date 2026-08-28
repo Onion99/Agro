@@ -55,6 +55,7 @@ internal expect object LiteRtLmJni {
     )
 
     fun getLmConversationTokenCount(conversationPointer: Long): Int
+    fun getLmConversationBenchmarkInfo(conversationPointer: Long): BenchmarkInfo
 
     fun cancelLmConversation(conversationPointer: Long)
     fun deleteLmConversation(conversationPointer: Long)

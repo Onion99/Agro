@@ -1,17 +1,22 @@
 package org.onion.agro.ui.screen
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,12 +43,21 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -75,6 +89,7 @@ import agro.composeapp.generated.resources.llm_setting_cognitive_features
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 import org.onion.agro.viewmodel.ChatViewModel
+import org.onion.agro.viewmodel.BenchmarkUiState
 import ui.theme.AppTheme
 import com.onion.theme.state.ContentType
 import com.onion.theme.style.glassSurface
@@ -82,6 +97,49 @@ import com.onion.theme.style.watercolorGradient
 import agro.composeapp.generated.resources.llm_setting_btn_apply
 import agro.composeapp.generated.resources.llm_setting_btn_reset
 import kotlin.math.roundToInt
+
+enum class SettingTab {
+    PARAMETERS,
+    BENCHMARKS
+}
+
+private val SpeedIcon: ImageVector = ImageVector.Builder(
+    name = "Speed",
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f
+).path(
+    fill = SolidColor(Color.White),
+    pathFillType = PathFillType.NonZero
+) {
+    moveTo(20.38f, 8.57f)
+    lineToRelative(-1.23f, 1.85f)
+    curveToRelative(0.48f, 2.37f, -0.05f, 5.09f, -0.22f, 7.58f)
+    horizontalLineTo(5.07f)
+    curveToRelative(-0.17f, -2.49f, -0.7f, -5.21f, -0.22f, -7.58f)
+    lineTo(3.62f, 8.57f)
+    curveTo(2.35f, 11.45f, 2.45f, 15.11f, 3.35f, 19f)
+    curveToRelative(0.35f, 0.6f, 1.0f, 1.0f, 1.72f, 1.0f)
+    horizontalLineToRelative(13.85f)
+    curveToRelative(0.72f, 0.0f, 1.37f, -0.4f, 1.74f, -1.0f)
+    curveToRelative(0.9f, -3.89f, 1.0f, -7.55f, -0.28f, -10.43f)
+    close()
+    moveTo(10.59f, 15.41f)
+    curveToRelative(0.78f, 0.78f, 2.05f, 0.78f, 2.83f, 0.0f)
+    lineToRelative(5.66f, -8.49f)
+    lineToRelative(-8.49f, 5.66f)
+    curveToRelative(-0.78f, 0.78f, -0.78f, 2.05f, 0.0f, 2.83f)
+    close()
+}.build()
+
+private fun formatContextSize(tokens: Int): String {
+    return when {
+        tokens >= 1024 -> "${tokens / 1024}K"
+        tokens > 0 -> "$tokens"
+        else -> "--"
+    }
+}
 
 @Composable
 fun SettingScreen() {
@@ -94,6 +152,10 @@ fun SettingScreen() {
     val maxTokens by chatViewModel.lmMaxNumTokens
     val contextShift by chatViewModel.systemContextShift
     val sysPrompt by chatViewModel.systemPrompt
+    val lmBackend by chatViewModel.lmBackend
+    val benchmarkState by chatViewModel.benchmarkUiState.collectAsState()
+
+    var selectedTab by remember { mutableStateOf(SettingTab.PARAMETERS) }
 
     val containerPadding = if (AppTheme.contentType == ContentType.Dual) {
         AppTheme.spacing.containerPaddingDesktop
@@ -112,117 +174,222 @@ fun SettingScreen() {
                 .verticalScroll(rememberScrollState())
                 .padding(containerPadding)
         ) {
-            // Header
-            Text(
-                text = stringResource(Res.string.llm_settings_title),
-                style = AppTheme.typography.headlineLarge.copy(
-                    fontWeight = FontWeight.Light,
-                    letterSpacing = (-0.5).sp
-                ),
-                color = AppTheme.colors.primary
-            )
-            Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
-            Text(
-                text = stringResource(Res.string.llm_settings_subtitle),
-                style = AppTheme.typography.bodyMedium,
-                color = AppTheme.colors.tertiary.copy(alpha = 0.8f)
-            )
-
-            Spacer(modifier = Modifier.height(AppTheme.spacing.xl))
-
-            // Bento Grid
-            if (AppTheme.contentType == ContentType.Dual) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)
-                    ) {
-                        TemperatureCard(chatViewModel, temp)
-                        TopPCard(chatViewModel, topPVal)
-                        TopKCard(chatViewModel, topKVal)
+            // Tab Switcher
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .drawBehind {
+                        val strokeWidth = 1.dp.toPx()
+                        val y = size.height - strokeWidth / 2
+                        drawLine(
+                            color = Color.LightGray.copy(alpha = 0.25f),
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = strokeWidth
+                        )
+                    },
+                horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.xl)
+            ) {
+                TabButton(
+                    title = stringResource(Res.string.llm_settings_tab_parameters),
+                    selected = selectedTab == SettingTab.PARAMETERS,
+                    onClick = { selectedTab = SettingTab.PARAMETERS }
+                )
+                TabButton(
+                    title = stringResource(Res.string.llm_settings_tab_benchmarks),
+                    selected = selectedTab == SettingTab.BENCHMARKS,
+                    onClick = {
+                        selectedTab = SettingTab.BENCHMARKS
+                        chatViewModel.refreshHardwareStats()
                     }
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)
-                    ) {
-                        ContextLimitsCard(chatViewModel, maxTokens, contextShift)
-                        CognitiveFeaturesCard(chatViewModel, enableThinking, enableSpeculativeDecoding)
-                        SystemBlueprintCard(chatViewModel, sysPrompt)
-                    }
-                }
-            } else {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)
-                ) {
-                    TemperatureCard(chatViewModel, temp)
-                    TopPCard(chatViewModel, topPVal)
-                    TopKCard(chatViewModel, topKVal)
-                    ContextLimitsCard(chatViewModel, maxTokens, contextShift)
-                    CognitiveFeaturesCard(chatViewModel, enableThinking, enableSpeculativeDecoding)
-                    SystemBlueprintCard(chatViewModel, sysPrompt)
-                }
+                )
             }
 
             Spacer(modifier = Modifier.height(AppTheme.spacing.xl))
 
-            // Bottom Action Area
-            Spacer(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(AppTheme.colors.outlineVariant.copy(alpha = 0.2f))
-            )
-
-            Spacer(modifier = Modifier.height(AppTheme.spacing.lg))
-
-            val isSingle = AppTheme.contentType == ContentType.Single
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = if (isSingle) Arrangement.spacedBy(AppTheme.spacing.md) else Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedButton(
-                    onClick = {
-                        chatViewModel.resetSettings()
-                    },
-                    modifier = if (isSingle) Modifier.weight(1f) else Modifier,
-                    shape = AppTheme.shape.full,
-                    border = BorderStroke(1.dp, AppTheme.colors.outline.copy(alpha = 0.4f)),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = AppTheme.colors.tertiary
-                    )
-                ) {
+            when (selectedTab) {
+                SettingTab.PARAMETERS -> {
+                    // Header
                     Text(
-                        text = stringResource(Res.string.llm_setting_btn_reset),
-                        style = AppTheme.typography.labelMedium,
-                        maxLines = 1
+                        text = stringResource(Res.string.llm_settings_title),
+                        style = AppTheme.typography.headlineLarge.copy(
+                            fontWeight = FontWeight.Light,
+                            letterSpacing = (-0.5).sp
+                        ),
+                        color = AppTheme.colors.primary
                     )
+                    Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
+                    Text(
+                        text = stringResource(Res.string.llm_settings_subtitle),
+                        style = AppTheme.typography.bodyMedium,
+                        color = AppTheme.colors.tertiary.copy(alpha = 0.8f)
+                    )
+
+                    Spacer(modifier = Modifier.height(AppTheme.spacing.xl))
+
+                    // Bento Grid
+                    if (AppTheme.contentType == ContentType.Dual) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)
+                            ) {
+                                TemperatureCard(chatViewModel, temp)
+                                TopPCard(chatViewModel, topPVal)
+                                TopKCard(chatViewModel, topKVal)
+                            }
+
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)
+                            ) {
+                                ContextLimitsCard(chatViewModel, maxTokens, contextShift)
+                                CognitiveFeaturesCard(chatViewModel, enableThinking, enableSpeculativeDecoding)
+                                SystemBlueprintCard(chatViewModel, sysPrompt)
+                            }
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)
+                        ) {
+                            TemperatureCard(chatViewModel, temp)
+                            TopPCard(chatViewModel, topPVal)
+                            TopKCard(chatViewModel, topKVal)
+                            ContextLimitsCard(chatViewModel, maxTokens, contextShift)
+                            CognitiveFeaturesCard(chatViewModel, enableThinking, enableSpeculativeDecoding)
+                            SystemBlueprintCard(chatViewModel, sysPrompt)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(AppTheme.spacing.xl))
+
+                    // Bottom Action Area
+                    Spacer(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(AppTheme.colors.outlineVariant.copy(alpha = 0.2f))
+                    )
+
+                    Spacer(modifier = Modifier.height(AppTheme.spacing.lg))
+
+                    val isSingle = AppTheme.contentType == ContentType.Single
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = if (isSingle) Arrangement.spacedBy(AppTheme.spacing.md) else Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                chatViewModel.resetSettings()
+                            },
+                            modifier = if (isSingle) Modifier.weight(1f) else Modifier,
+                            shape = AppTheme.shape.full,
+                            border = BorderStroke(1.dp, AppTheme.colors.outline.copy(alpha = 0.4f)),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = AppTheme.colors.tertiary
+                            )
+                        ) {
+                            Text(
+                                text = stringResource(Res.string.llm_setting_btn_reset),
+                                style = AppTheme.typography.labelMedium,
+                                maxLines = 1
+                            )
+                        }
+
+                        if (!isSingle) {
+                            Spacer(modifier = Modifier.width(AppTheme.spacing.md))
+                        }
+
+                        Button(
+                            onClick = {
+                                chatViewModel.applyConversationSettings()
+                            },
+                            modifier = if (isSingle) Modifier.weight(1f) else Modifier,
+                            shape = AppTheme.shape.full,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = AppTheme.colors.primary,
+                                contentColor = AppTheme.colors.onPrimary
+                            )
+                        ) {
+                            Text(
+                                text = stringResource(Res.string.llm_setting_btn_apply),
+                                style = AppTheme.typography.labelMedium,
+                                maxLines = 1
+                            )
+                        }
+                    }
                 }
 
-                if (!isSingle) {
-                    Spacer(modifier = Modifier.width(AppTheme.spacing.md))
-                }
-
-                Button(
-                    onClick = {
-                        chatViewModel.applyConversationSettings()
-                    },
-                    modifier = if (isSingle) Modifier.weight(1f) else Modifier,
-                    shape = AppTheme.shape.full,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AppTheme.colors.primary,
-                        contentColor = AppTheme.colors.onPrimary
-                    )
-                ) {
+                SettingTab.BENCHMARKS -> {
+                    // Header
                     Text(
-                        text = stringResource(Res.string.llm_setting_btn_apply),
-                        style = AppTheme.typography.labelMedium,
-                        maxLines = 1
+                        text = stringResource(Res.string.llm_benchmark_title),
+                        style = AppTheme.typography.headlineLarge.copy(
+                            fontWeight = FontWeight.Light,
+                            letterSpacing = (-0.5).sp
+                        ),
+                        color = AppTheme.colors.primary
+                    )
+                    Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
+                    Text(
+                        text = stringResource(Res.string.llm_benchmark_subtitle),
+                        style = AppTheme.typography.bodyMedium,
+                        color = AppTheme.colors.tertiary.copy(alpha = 0.8f)
+                    )
+
+                    Spacer(modifier = Modifier.height(AppTheme.spacing.xl))
+
+                    // Benchmarks Bento Grid
+                    if (AppTheme.contentType == ContentType.Dual) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)
+                        ) {
+                            ThroughputTestCard(
+                                benchmarkState = benchmarkState,
+                                maxTokens = maxTokens,
+                                onRunTest = { chatViewModel.runBenchmarkTest() },
+                                onCancelTest = { chatViewModel.cancelBenchmarkTest() },
+                                modifier = Modifier.weight(1f)
+                            )
+                            HardwareUtilizationCard(
+                                benchmarkState = benchmarkState,
+                                backend = lmBackend,
+                                maxTokens = maxTokens,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)
+                        ) {
+                            ThroughputTestCard(
+                                benchmarkState = benchmarkState,
+                                maxTokens = maxTokens,
+                                onRunTest = { chatViewModel.runBenchmarkTest() },
+                                onCancelTest = { chatViewModel.cancelBenchmarkTest() }
+                            )
+                            HardwareUtilizationCard(
+                                benchmarkState = benchmarkState,
+                                backend = lmBackend,
+                                maxTokens = maxTokens
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(AppTheme.spacing.lg))
+
+                    // Live Output Preview & Test Prompt Card
+                    BenchmarkLiveOutputCard(
+                        benchmarkState = benchmarkState,
+                        onPromptChange = { chatViewModel.updateBenchmarkPrompt(it) },
+                        onRunTestWithPrompt = { chatViewModel.runBenchmarkTest(it) }
                     )
                 }
             }
@@ -667,6 +834,553 @@ fun EtherealSwitch(
                 .offset(x = thumbOffset)
                 .size(18.dp)
                 .background(thumbCol, CircleShape)
+        )
+    }
+}
+
+@Composable
+private fun TabButton(
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val textColor by animateColorAsState(
+        if (selected) AppTheme.colors.primary else AppTheme.colors.tertiary.copy(alpha = 0.7f)
+    )
+    val indicatorColor by animateColorAsState(
+        if (selected) AppTheme.colors.primary else Color.Transparent
+    )
+
+    Column(
+        modifier = Modifier
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(bottom = AppTheme.spacing.xs),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = title,
+            style = AppTheme.typography.titleSmall.copy(
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                fontSize = 15.sp
+            ),
+            color = textColor
+        )
+        Spacer(modifier = Modifier.height(AppTheme.spacing.xs))
+        Box(
+            modifier = Modifier
+                .width(48.dp)
+                .height(2.dp)
+                .background(indicatorColor, AppTheme.shape.full)
+        )
+    }
+}
+
+@Composable
+fun ThroughputTestCard(
+    benchmarkState: BenchmarkUiState,
+    maxTokens: Int,
+    onRunTest: () -> Unit,
+    onCancelTest: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .glassSurface(
+                shape = AppTheme.shape.xxl,
+                alpha = AppTheme.elevation.glassSurfaceAlpha,
+                borderAlpha = AppTheme.elevation.glassBorderAlpha
+            )
+            .padding(AppTheme.spacing.xl)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.md)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(AppTheme.shape.md)
+                            .background(AppTheme.colors.primaryContainer.copy(alpha = 0.3f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = SpeedIcon,
+                            contentDescription = "Speed",
+                            tint = AppTheme.colors.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Text(
+                        text = stringResource(Res.string.llm_benchmark_throughput_title),
+                        style = AppTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = AppTheme.colors.onSurface
+                    )
+                }
+
+                if (benchmarkState.isRunning) {
+                    Button(
+                        onClick = onCancelTest,
+                        shape = AppTheme.shape.full,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AppTheme.colors.errorContainer.copy(alpha = 0.8f),
+                            contentColor = AppTheme.colors.onErrorContainer
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = stringResource(Res.string.llm_benchmark_stop),
+                            style = AppTheme.typography.labelMedium
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = onRunTest,
+                        shape = AppTheme.shape.full,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AppTheme.colors.primaryContainer.copy(alpha = 0.45f),
+                            contentColor = AppTheme.colors.primary
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = stringResource(Res.string.llm_benchmark_run_test),
+                            style = AppTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(AppTheme.spacing.xl))
+
+            // Center large number display
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = AppTheme.spacing.md),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                val displayText = if (benchmarkState.decodeTokensPerSecond > 0) {
+                    "${benchmarkState.decodeTokensPerSecond}"
+                } else if (benchmarkState.isRunning) {
+                    "..."
+                } else {
+                    "--"
+                }
+
+                Text(
+                    text = displayText,
+                    style = AppTheme.typography.headlineLarge.copy(
+                        fontSize = 64.sp,
+                        lineHeight = 64.sp,
+                        fontWeight = FontWeight.Light,
+                        letterSpacing = (-1).sp
+                    ),
+                    color = AppTheme.colors.onSurface
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(Res.string.llm_benchmark_tokens_per_second),
+                    style = AppTheme.typography.bodyMedium,
+                    color = AppTheme.colors.onSurfaceVariant.copy(alpha = 0.75f)
+                )
+
+                if (benchmarkState.prefillTokensPerSecond > 0) {
+                    Spacer(modifier = Modifier.height(AppTheme.spacing.xs))
+                    Text(
+                        text = stringResource(Res.string.llm_benchmark_prefill_speed, benchmarkState.prefillTokensPerSecond),
+                        style = AppTheme.typography.labelSmall,
+                        color = AppTheme.colors.primary.copy(alpha = 0.85f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(AppTheme.spacing.lg))
+
+            // Divider
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(AppTheme.colors.outlineVariant.copy(alpha = 0.2f))
+            )
+
+            Spacer(modifier = Modifier.height(AppTheme.spacing.md))
+
+            // Footer
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val latencyText = if (benchmarkState.latencyMs > 0) {
+                    stringResource(Res.string.llm_benchmark_latency, benchmarkState.latencyMs)
+                } else {
+                    "Latency: --"
+                }
+                val contextVal = if (benchmarkState.contextTokens > 0) benchmarkState.contextTokens else maxTokens
+                val contextText = stringResource(Res.string.llm_benchmark_context, formatContextSize(contextVal))
+
+                Text(
+                    text = latencyText,
+                    style = AppTheme.typography.labelSmall,
+                    color = AppTheme.colors.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+                Text(
+                    text = contextText,
+                    style = AppTheme.typography.labelSmall,
+                    color = AppTheme.colors.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun HardwareUtilizationCard(
+    benchmarkState: BenchmarkUiState,
+    backend: String,
+    maxTokens: Int,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .glassSurface(
+                shape = AppTheme.shape.xxl,
+                alpha = AppTheme.elevation.glassSurfaceAlpha,
+                borderAlpha = AppTheme.elevation.glassBorderAlpha
+            )
+            .padding(AppTheme.spacing.xl)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.md)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(AppTheme.shape.md)
+                            .background(AppTheme.colors.secondaryContainer.copy(alpha = 0.3f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Memory,
+                            contentDescription = "Hardware",
+                            tint = AppTheme.colors.secondary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Text(
+                        text = stringResource(Res.string.llm_benchmark_hardware_title),
+                        style = AppTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = AppTheme.colors.onSurface
+                    )
+                }
+
+                // Backend badge
+                Box(
+                    modifier = Modifier
+                        .clip(AppTheme.shape.full)
+                        .background(AppTheme.colors.secondaryContainer.copy(alpha = 0.35f))
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = backend.uppercase(),
+                        style = AppTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = AppTheme.colors.secondary
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(AppTheme.spacing.xl))
+
+            // Progress Items
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)
+            ) {
+                // 1. Engine Compute
+                BenchmarkProgressBar(
+                    label = stringResource(Res.string.llm_benchmark_gpu_compute),
+                    valueText = if (benchmarkState.isRunning) "Active (95%)" else "Idle (0%)",
+                    progress = if (benchmarkState.isRunning) 0.95f else 0.04f,
+                    barColor = AppTheme.colors.secondary
+                )
+
+                // 2. Context KV Cache
+                val totalTokens = benchmarkState.prefillTokenCount + benchmarkState.decodeTokenCount
+                val capacity = if (benchmarkState.contextTokens > 0) benchmarkState.contextTokens else maxTokens
+                val contextProgress = (totalTokens.toFloat() / capacity.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
+                val contextPercent = (contextProgress * 100).roundToInt()
+                BenchmarkProgressBar(
+                    label = stringResource(Res.string.llm_benchmark_vram_context),
+                    valueText = if (totalTokens > 0) "$contextPercent% ($totalTokens/$capacity)" else "0% (0/$capacity)",
+                    progress = if (totalTokens > 0) contextProgress.coerceAtLeast(0.04f) else 0.02f,
+                    barColor = AppTheme.colors.primary
+                )
+
+                // 3. System RAM
+                val ramProgress = if (benchmarkState.maxRamMb > 0) {
+                    (benchmarkState.usedRamMb.toFloat() / benchmarkState.maxRamMb.toFloat()).coerceIn(0f, 1f)
+                } else 0.25f
+                val ramPercent = (ramProgress * 100).roundToInt()
+                val ramText = if (benchmarkState.maxRamMb > 0) {
+                    "$ramPercent% (${benchmarkState.usedRamMb}/${benchmarkState.maxRamMb} MB)"
+                } else {
+                    "${benchmarkState.usedRamMb} MB"
+                }
+                BenchmarkProgressBar(
+                    label = stringResource(Res.string.llm_benchmark_system_ram),
+                    valueText = ramText,
+                    progress = ramProgress,
+                    barColor = AppTheme.colors.tertiary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BenchmarkProgressBar(
+    label: String,
+    valueText: String,
+    progress: Float,
+    barColor: Color
+) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = spring(stiffness = Spring.StiffnessLow)
+    )
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = AppTheme.typography.labelSmall,
+                color = AppTheme.colors.onSurfaceVariant
+            )
+            Text(
+                text = valueText,
+                style = AppTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                color = AppTheme.colors.onSurface
+            )
+        }
+        Spacer(modifier = Modifier.height(AppTheme.spacing.xs))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(AppTheme.shape.full)
+                .background(AppTheme.colors.surfaceVariant.copy(alpha = 0.5f))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(animatedProgress)
+                    .clip(AppTheme.shape.full)
+                    .background(barColor)
+            )
+        }
+    }
+}
+
+@Composable
+fun BenchmarkLiveOutputCard(
+    benchmarkState: BenchmarkUiState,
+    onPromptChange: (String) -> Unit,
+    onRunTestWithPrompt: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .glassSurface(
+                shape = AppTheme.shape.xxl,
+                alpha = AppTheme.elevation.glassSurfaceAlpha,
+                borderAlpha = AppTheme.elevation.glassBorderAlpha
+            )
+            .padding(AppTheme.spacing.xl)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.md)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(AppTheme.shape.md)
+                        .background(AppTheme.colors.tertiaryContainer.copy(alpha = 0.3f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.EditNote,
+                        contentDescription = "Output",
+                        tint = AppTheme.colors.tertiary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Column {
+                    Text(
+                        text = stringResource(Res.string.llm_benchmark_live_output),
+                        style = AppTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = AppTheme.colors.onSurface
+                    )
+                    Text(
+                        text = stringResource(Res.string.llm_benchmark_prompt_label),
+                        style = AppTheme.typography.bodySmall,
+                        color = AppTheme.colors.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(AppTheme.spacing.md))
+
+            // Presets
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)
+            ) {
+                val presetAi = "Explain the fundamentals of artificial intelligence and machine learning concisely."
+                val presetRelativity = "Explain the theory of relativity and its core principles concisely."
+                val presetStory = "Write a brief 100-word science fiction opening scene about discovering an alien signal."
+
+                val presetAiLabel = stringResource(Res.string.llm_benchmark_prompt_preset_ai)
+                val presetRelativityLabel = stringResource(Res.string.llm_benchmark_prompt_preset_relativity)
+                val presetStoryLabel = stringResource(Res.string.llm_benchmark_prompt_preset_story)
+
+                BenchmarkPresetChip(
+                    text = presetAiLabel,
+                    isSelected = benchmarkState.testPrompt == presetAi,
+                    onClick = { onPromptChange(presetAi) }
+                )
+                BenchmarkPresetChip(
+                    text = presetRelativityLabel,
+                    isSelected = benchmarkState.testPrompt == presetRelativity,
+                    onClick = { onPromptChange(presetRelativity) }
+                )
+                BenchmarkPresetChip(
+                    text = presetStoryLabel,
+                    isSelected = benchmarkState.testPrompt == presetStory,
+                    onClick = { onPromptChange(presetStory) }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(AppTheme.spacing.md))
+
+            // Editable prompt field
+            OutlinedTextField(
+                value = benchmarkState.testPrompt,
+                onValueChange = onPromptChange,
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = AppTheme.typography.bodyMedium,
+                shape = AppTheme.shape.md,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = AppTheme.colors.primary,
+                    unfocusedBorderColor = AppTheme.colors.outlineVariant.copy(alpha = 0.4f),
+                    focusedContainerColor = AppTheme.colors.surfaceContainerLowest.copy(alpha = 0.5f),
+                    unfocusedContainerColor = AppTheme.colors.surfaceContainerLowest.copy(alpha = 0.5f)
+                ),
+                maxLines = 2
+            )
+
+            Spacer(modifier = Modifier.height(AppTheme.spacing.lg))
+
+            // Streamed output surface
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+                    .clip(AppTheme.shape.md)
+                    .background(AppTheme.colors.surfaceVariant.copy(alpha = 0.35f))
+                    .border(1.dp, AppTheme.colors.outlineVariant.copy(alpha = 0.25f), AppTheme.shape.md)
+                    .padding(AppTheme.spacing.md)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                if (benchmarkState.liveOutputText.isNotEmpty()) {
+                    Text(
+                        text = benchmarkState.liveOutputText,
+                        style = AppTheme.typography.bodySmall.copy(
+                            lineHeight = 20.sp,
+                            letterSpacing = 0.2.sp
+                        ),
+                        color = AppTheme.colors.onSurface
+                    )
+                } else if (benchmarkState.isRunning) {
+                    Text(
+                        text = stringResource(Res.string.llm_benchmark_running),
+                        style = AppTheme.typography.bodySmall,
+                        color = AppTheme.colors.primary.copy(alpha = 0.8f)
+                    )
+                } else if (benchmarkState.errorMessage != null) {
+                    Text(
+                        text = benchmarkState.errorMessage,
+                        style = AppTheme.typography.bodySmall,
+                        color = AppTheme.colors.error
+                    )
+                } else {
+                    Text(
+                        text = "Click \"Run Test\" above to start throughput analysis. Generated tokens will stream here in real time.",
+                        style = AppTheme.typography.bodySmall,
+                        color = AppTheme.colors.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BenchmarkPresetChip(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val bg = if (isSelected) AppTheme.colors.primaryContainer.copy(alpha = 0.35f) else AppTheme.colors.surfaceVariant.copy(alpha = 0.3f)
+    val border = if (isSelected) AppTheme.colors.primary else AppTheme.colors.outlineVariant.copy(alpha = 0.3f)
+    val textCol = if (isSelected) AppTheme.colors.primary else AppTheme.colors.onSurfaceVariant
+
+    Box(
+        modifier = Modifier
+            .clip(AppTheme.shape.full)
+            .background(bg)
+            .border(1.dp, border, AppTheme.shape.full)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text = text,
+            style = AppTheme.typography.labelSmall,
+            color = textCol,
+            maxLines = 1
         )
     }
 }

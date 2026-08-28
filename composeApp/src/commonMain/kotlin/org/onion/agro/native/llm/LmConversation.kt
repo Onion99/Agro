@@ -7,6 +7,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.serialization.json.*
 import com.google.ai.edge.litertlm.LiteRtLmJni
+import com.google.ai.edge.litertlm.BenchmarkInfo
 import kotlinx.coroutines.CancellationException
 
 class LiteRtLmInferenceException(
@@ -92,6 +93,11 @@ class LmConversation(
     }
 
     override fun tokenCount(): Int = LiteRtLmJni.getLmConversationTokenCount(handle)
+
+    fun getBenchmarkInfo(): BenchmarkInfo {
+        checkIsAlive()
+        return LiteRtLmJni.getLmConversationBenchmarkInfo(handle)
+    }
 
     override fun close() {
         if (isAlive) {

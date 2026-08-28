@@ -18,7 +18,7 @@ class LmEngine(
     val cacheDir: String = "",
     val mainBackendNumThreads: Int = 4,
     val audioBackendNumThreads: Int = 4,
-    val enableBenchmark: Boolean = false,
+    val enableBenchmark: Boolean = true,
     val enableSpeculativeDecoding: Boolean? = null,
     val mainNpuNativeLibraryDir: String = "",
     val visionNpuNativeLibraryDir: String = "",

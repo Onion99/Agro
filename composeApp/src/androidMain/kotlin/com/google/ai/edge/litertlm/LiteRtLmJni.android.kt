@@ -150,6 +150,9 @@ internal actual object LiteRtLmJni {
     actual fun getLmConversationTokenCount(conversationPointer: Long): Int =
         nativeConversationGetTokenCount(conversationPointer)
 
+    actual fun getLmConversationBenchmarkInfo(conversationPointer: Long): BenchmarkInfo =
+        nativeConversationGetBenchmarkInfo(conversationPointer)
+
     private external fun nativeCreateEngine(
         modelPath: String, backend: String, visionBackend: String, audioBackend: String,
         maxNumTokens: Int, maxNumImages: Int, cacheDir: String, enableBenchmark: Boolean,
@@ -182,6 +185,7 @@ internal actual object LiteRtLmJni {
 
     private external fun nativeConversationCancelProcess(conversationPointer: Long)
     private external fun nativeConversationGetTokenCount(conversationPointer: Long): Int
+    private external fun nativeConversationGetBenchmarkInfo(conversationPointer: Long): BenchmarkInfo
     private external fun nativeDeleteConversation(conversationPointer: Long)
     private external fun nativeDeleteEngine(enginePointer: Long)
 }

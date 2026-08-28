@@ -267,6 +267,35 @@ internal actual object LiteRtLmJni {
             conversationPointer.toNativePointer<LiteRtLmConversation>("LiteRT LM conversation")
         )
 
+    actual fun getLmConversationBenchmarkInfo(conversationPointer: Long): BenchmarkInfo {
+        if (conversationPointer == 0L) {
+            return BenchmarkInfo(0.0, 0.0, 0, 0, 0.0, 0.0)
+        }
+        val conversation = conversationPointer.toNativePointer<LiteRtLmConversation>("LiteRT LM conversation")
+        val info = litert_lm_conversation_get_benchmark_info(conversation)
+            ?: return BenchmarkInfo(0.0, 0.0, 0, 0, 0.0, 0.0)
+        return try {
+            val initTime = litert_lm_benchmark_info_get_total_init_time_in_second(info)
+            val ttft = litert_lm_benchmark_info_get_time_to_first_token(info)
+            val numPrefill = litert_lm_benchmark_info_get_num_prefill_turns(info)
+            val lastPrefillCount = if (numPrefill > 0) litert_lm_benchmark_info_get_prefill_token_count_at(info, numPrefill - 1) else 0
+            val lastPrefillSpeed = if (numPrefill > 0) litert_lm_benchmark_info_get_prefill_tokens_per_sec_at(info, numPrefill - 1) else 0.0
+            val numDecode = litert_lm_benchmark_info_get_num_decode_turns(info)
+            val lastDecodeCount = if (numDecode > 0) litert_lm_benchmark_info_get_decode_token_count_at(info, numDecode - 1) else 0
+            val lastDecodeSpeed = if (numDecode > 0) litert_lm_benchmark_info_get_decode_tokens_per_sec_at(info, numDecode - 1) else 0.0
+            BenchmarkInfo(
+                totalInitTimeMs = initTime * 1000.0,
+                timeToFirstToken = ttft,
+                lastPrefillTokenCount = lastPrefillCount,
+                lastDecodeTokenCount = lastDecodeCount,
+                lastPrefillTokensPerSecond = lastPrefillSpeed,
+                lastDecodeTokensPerSecond = lastDecodeSpeed
+            )
+        } finally {
+            litert_lm_benchmark_info_delete(info)
+        }
+    }
+
     private fun createEngine(
         modelPath: String,
         backend: String,

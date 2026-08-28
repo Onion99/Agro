@@ -66,6 +66,8 @@ import org.onion.agro.message.SvgMessageParser
 import org.onion.agro.message.ChiptuneBgmMessageParser
 import org.onion.agro.message.LottieMessageParser
 import org.onion.agro.lottie.LottieSceneContract
+import org.onion.agro.utils.getAppMemoryUsageMb
+import com.google.ai.edge.litertlm.BenchmarkInfo
 
 class ChatViewModel(
     private val chatHistoryRepository: ChatHistoryRepository
@@ -219,6 +221,197 @@ class ChatViewModel(
             } catch (e: Exception) {
                 systemPrompt.value = "You are ${BuildConfig.APP_NAME}, an analytical and precise local intelligence. Prioritize factual accuracy and concise formatting. Maintain a calm, neutral tone."
             }
+        }
+    }
+
+    // ========================================================================================
+    //                              Benchmark State & Actions
+    // ========================================================================================
+    private var benchmarkJob: Job? = null
+    private var benchmarkConversation: LmConversation? = null
+    private val _benchmarkUiState = MutableStateFlow(BenchmarkUiState())
+    val benchmarkUiState: StateFlow<BenchmarkUiState> = _benchmarkUiState
+
+    fun updateBenchmarkPrompt(prompt: String) {
+        _benchmarkUiState.value = _benchmarkUiState.value.copy(testPrompt = prompt)
+    }
+
+    fun refreshHardwareStats() {
+        val (usedRam, maxRam) = getAppMemoryUsageMb()
+        _benchmarkUiState.value = _benchmarkUiState.value.copy(
+            usedRamMb = usedRam,
+            maxRamMb = maxRam,
+            contextTokens = lmMaxNumTokens.value
+        )
+    }
+
+    fun runBenchmarkTest(customPrompt: String? = null) {
+        if (_benchmarkUiState.value.isRunning) return
+        if (isGenerating.value) {
+            viewModelScope.launch {
+                showToast("Chat generation is in progress. Please wait for it to finish.")
+            }
+            return
+        }
+        val currentLlmPath = llmPath.value
+        if (currentLlmPath.isBlank()) {
+            viewModelScope.launch {
+                showToast(getString(Res.string.error_select_correct_llm_model))
+            }
+            return
+        }
+
+        val promptContent = (customPrompt ?: _benchmarkUiState.value.testPrompt).ifBlank {
+            "Explain the theory of relativity and its core principles concisely."
+        }
+
+        val (usedRam, maxRam) = getAppMemoryUsageMb()
+
+        _benchmarkUiState.value = _benchmarkUiState.value.copy(
+            isRunning = true,
+            errorMessage = null,
+            liveOutputText = "",
+            contextTokens = lmMaxNumTokens.value,
+            usedRamMb = usedRam,
+            maxRamMb = maxRam
+        )
+
+        benchmarkJob = viewModelScope.launch(Dispatchers.IO) {
+            var activeSession: LmConversation? = null
+            try {
+                // Ensure engine is ready (reuse existing engine if already initialized)
+                val engine = if (contextCoordinator.isEngineReady()) {
+                    contextCoordinator.currentEngine()!!
+                } else {
+                    _llmEngineStatus.value = LlmEngineStatus.INITIALIZING
+                    val newEngine = createLmEngine(currentLlmPath, lmBackend.value)
+                    newEngine.initialize()
+                    contextCoordinator.attachEngine(newEngine)
+                    updateActiveLmEngineState(currentLlmPath, lmBackend.value)
+                    _llmEngineStatus.value = LlmEngineStatus.READY
+                    newEngine
+                }
+
+                // Session Isolation: Create a completely independent conversation
+                // that is not registered in ContextCoordinator's slots and does not affect chat history
+                val session = engine.createConversation(
+                    systemInstruction = "You are a helpful and concise benchmark assistant.",
+                    initialMessages = emptyList(),
+                    toolsDescriptionJsonString = "[]",
+                    strategy = ContextStrategy.ChatSession(maxOutputTokens = 256),
+                    samplerConfig = SamplerConfig(
+                        temperature = 0.7,
+                        topP = 0.9,
+                        topK = 40
+                    )
+                )
+                activeSession = session
+                benchmarkConversation = session
+
+                val startTime = Clock.System.now().toEpochMilliseconds()
+                var firstTokenTime: Long? = null
+                var tokenChunkCount = 0
+                val stringBuilder = StringBuilder()
+
+                val messageFlow = session.sendMessageAsync(
+                    message = org.onion.agro.native.llm.Message.user(promptContent),
+                    extraContext = emptyMap()
+                )
+
+                messageFlow.collect { message ->
+                    val now = Clock.System.now().toEpochMilliseconds()
+                    val tokenTime = firstTokenTime ?: now.also { firstTokenTime = it }
+                    val text = message.contents.toString()
+                    if (text.isNotEmpty()) {
+                        stringBuilder.append(text)
+                        tokenChunkCount += 1
+                    }
+
+                    val elapsedSinceFirstToken = (now - tokenTime).coerceAtLeast(1)
+                    val liveTtft = (tokenTime - startTime).coerceAtLeast(0)
+                    val liveTokensPerSec = if (tokenChunkCount > 0 && elapsedSinceFirstToken > 0) {
+                        (tokenChunkCount.toDouble() / (elapsedSinceFirstToken.toDouble() / 1000.0))
+                    } else 0.0
+
+                    _benchmarkUiState.value = _benchmarkUiState.value.copy(
+                        liveOutputText = stringBuilder.toString(),
+                        decodeTokensPerSecond = (liveTokensPerSec * 10).roundToInt() / 10.0,
+                        latencyMs = liveTtft,
+                        decodeTokenCount = tokenChunkCount
+                    )
+                }
+
+                val finishTime = Clock.System.now().toEpochMilliseconds()
+                val ttftDuration = ((firstTokenTime ?: finishTime) - startTime).coerceAtLeast(0)
+                val generationDuration = (finishTime - (firstTokenTime ?: finishTime)).coerceAtLeast(1)
+
+                // Query C++ native benchmark info from litertlm.cc (nativeConversationGetBenchmarkInfo)
+                val nativeBenchmarkInfo = runCatching { session.getBenchmarkInfo() }.getOrNull()
+
+                val finalDecodeTokensPerSec = if (nativeBenchmarkInfo != null && nativeBenchmarkInfo.lastDecodeTokensPerSecond > 0) {
+                    nativeBenchmarkInfo.lastDecodeTokensPerSecond
+                } else if (tokenChunkCount > 0) {
+                    tokenChunkCount.toDouble() / (generationDuration.toDouble() / 1000.0)
+                } else 0.0
+
+                val finalPrefillTokensPerSec = nativeBenchmarkInfo?.lastPrefillTokensPerSecond ?: 0.0
+                val finalLatencyMs = if (nativeBenchmarkInfo != null && nativeBenchmarkInfo.timeToFirstToken > 0) {
+                    (nativeBenchmarkInfo.timeToFirstToken * 1000).toLong()
+                } else {
+                    ttftDuration
+                }
+                val finalPrefillTokens = nativeBenchmarkInfo?.lastPrefillTokenCount ?: 0
+                val finalDecodeTokens = if (nativeBenchmarkInfo != null && nativeBenchmarkInfo.lastDecodeTokenCount > 0) {
+                    nativeBenchmarkInfo.lastDecodeTokenCount
+                } else {
+                    tokenChunkCount
+                }
+                val initTime = nativeBenchmarkInfo?.totalInitTimeMs ?: 0.0
+
+                val (currentUsedRam, currentMaxRam) = getAppMemoryUsageMb()
+
+                _benchmarkUiState.value = _benchmarkUiState.value.copy(
+                    isRunning = false,
+                    hasCompletedTest = true,
+                    decodeTokensPerSecond = (finalDecodeTokensPerSec * 10).roundToInt() / 10.0,
+                    prefillTokensPerSecond = (finalPrefillTokensPerSec * 10).roundToInt() / 10.0,
+                    latencyMs = finalLatencyMs,
+                    prefillTokenCount = finalPrefillTokens,
+                    decodeTokenCount = finalDecodeTokens,
+                    initTimeMs = initTime,
+                    liveOutputText = stringBuilder.toString(),
+                    usedRamMb = currentUsedRam,
+                    maxRamMb = currentMaxRam
+                )
+            } catch (e: CancellationException) {
+                _benchmarkUiState.value = _benchmarkUiState.value.copy(
+                    isRunning = false,
+                    errorMessage = "Benchmark cancelled."
+                )
+            } catch (e: Throwable) {
+                e.printStackTrace()
+                _benchmarkUiState.value = _benchmarkUiState.value.copy(
+                    isRunning = false,
+                    errorMessage = e.message ?: "Benchmark failed."
+                )
+            } finally {
+                // Ensure the isolated conversation is closed and destroyed cleanly
+                try {
+                    activeSession?.close()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+                benchmarkConversation = null
+            }
+        }
+    }
+
+    fun cancelBenchmarkTest() {
+        benchmarkJob?.cancel()
+        try {
+            benchmarkConversation?.cancelProcess()
+        } catch (e: Exception) {
+            // ignore
         }
     }
 
@@ -464,6 +657,7 @@ class ChatViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        cancelBenchmarkTest()
         contextCoordinator.closeAll()
     }
 
@@ -1051,7 +1245,7 @@ class ChatViewModel(
             maxNumTokens = lmMaxNumTokens.value,
             maxNumImages = lmMaxNumImages.value,
             cacheDir = FileKit.cacheDir.path,
-            enableBenchmark = false,
+            enableBenchmark = true,
             enableSpeculativeDecoding = enableSpeculativeDecoding.value,
             mainNpuNativeLibraryDir = "",
             visionNpuNativeLibraryDir = "",
@@ -1660,3 +1854,21 @@ class ChatViewModel(
                 this == ChatSessionMode.LOTTIE_ANIMATION
     }
 }
+
+data class BenchmarkUiState(
+    val isRunning: Boolean = false,
+    val decodeTokensPerSecond: Double = 0.0,
+    val prefillTokensPerSecond: Double = 0.0,
+    val latencyMs: Long = 0,
+    val contextTokens: Int = 0,
+    val prefillTokenCount: Int = 0,
+    val decodeTokenCount: Int = 0,
+    val initTimeMs: Double = 0.0,
+    val liveOutputText: String = "",
+    val errorMessage: String? = null,
+    val hasCompletedTest: Boolean = false,
+    val testPrompt: String = "Explain the theory of relativity and its core principles concisely.",
+    val usedRamMb: Long = 0,
+    val maxRamMb: Long = 0,
+)
+
