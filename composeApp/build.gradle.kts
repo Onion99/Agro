@@ -234,7 +234,7 @@ android {
         applicationId = project.property("app.id").toString()
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 2
+        versionCode = 3
         versionName = libs.versions.app.version.get()
         resValue("string", "app_name", project.property("app.name").toString())
         ndk {
