@@ -2,14 +2,9 @@ package org.onion.agro.native.llm
 
 import com.onion.model.ChatMessage
 import com.onion.model.ChatRole
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
 
 /** Converts durable UI history into the smaller, model-facing transcript. */
 object ContextTranscript {
-    private val json = Json { ignoreUnknownKeys = true }
-
     fun toLmMessages(messages: List<ChatMessage>): List<Message> = buildList {
         contextEligibleMessages(messages).forEach { message ->
 
@@ -19,9 +14,6 @@ object ContextTranscript {
                     .takeIf { it.isNotBlank() }
                     ?.let { add(Message.user(it)) }
                 ChatRole.ASSISTANT -> addAssistantMessage(message)
-                ChatRole.TOOL -> message.plainText
-                    .takeIf { it.isNotBlank() }
-                    ?.let { add(Message.tool(listOf(ToolResponse("tool", it)))) }
             }
         }
     }
@@ -48,31 +40,30 @@ object ContextTranscript {
 
     private fun MutableList<Message>.addAssistantMessage(message: ChatMessage) {
         val text = message.plainText
-        val toolCalls = message.toolCalls.mapNotNull { call ->
-            val arguments = runCatching {
-                json.parseToJsonElement(call.arguments).jsonObject
-            }.getOrElse { JsonObject(emptyMap()) }
-            ToolCall(call.name, arguments)
+        val toolCalls = message.toolCalls.map { call ->
+            ToolCall(call.name, call.arguments)
         }
-        if (toolCalls.isNotEmpty()) {
-            add(
-                Message.model(
-                    contents = Contents.of(text),
-                    toolCalls = toolCalls,
-                )
+        val toolResponses = message.toolResponses.map { response ->
+            ToolResponse(
+                name = response.name,
+                response = response.response,
             )
-        } else if (text.isNotBlank()) {
-            add(Message.model(text))
         }
+        val hasCompleteToolExchange = text.isNotBlank() &&
+            toolCalls.isNotEmpty() &&
+            toolCalls.size == toolResponses.size &&
+            toolCalls.zip(toolResponses).all { (call, response) ->
+                call.name == response.name
+            }
 
-        if (message.toolResponses.isNotEmpty()) {
-            add(
-                Message.tool(
-                    message.toolResponses.map { response ->
-                        ToolResponse(response.name, response.response)
-                    }
-                )
-            )
+        if (hasCompleteToolExchange) {
+            add(Message.model(toolCalls = toolCalls))
+            add(Message.tool(toolResponses))
+            add(Message.model(text))
+        } else if (text.isNotBlank()) {
+            // Incomplete durable tool metadata cannot form a valid native turn.
+            // Keep the user-visible answer while omitting the broken exchange.
+            add(Message.model(text))
         }
     }
 

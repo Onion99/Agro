@@ -96,8 +96,8 @@ data class ChatToolLogEntity(
     @ColumnInfo(name = "session_id") val sessionId: String,
     @ColumnInfo(name = "message_id") val messageId: String,
     @ColumnInfo(name = "tool_name") val toolName: String,
-    val arguments: String,
-    val response: String,
+    @ColumnInfo(name = "arguments") val argumentsJson: String,
+    @ColumnInfo(name = "response") val responseJson: String,
     val status: String,
     @ColumnInfo(name = "started_at_millis") val startedAtMillis: Long,
     @ColumnInfo(name = "completed_at_millis") val completedAtMillis: Long?

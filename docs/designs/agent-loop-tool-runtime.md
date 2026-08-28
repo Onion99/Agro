@@ -32,7 +32,7 @@
 5. 逐个执行工具:
    - 执行前发送 `ToolStarted`。
    - 通过 `AgentToolExecutor.executeTool()` 获取结构化结果。
-   - 将结果序列化为 `ToolResponse.response`。
+   - 通过 `ToolExecutionResult.toJson()` 直接构造 `ToolResponse.response: JsonObject`。
    - 执行后发送 `ToolFinished`。
 6. 用所有工具结果构造 `Message.tool(responses)`，回到第 1 步。
 
@@ -72,7 +72,9 @@
 }
 ```
 
-该结构同时用于模型回灌、聊天消息 `toolResponses` 持久化和 `chat_tool_logs.response` 审计记录。
+该 `JsonObject` 同时用于模型回灌和聊天消息 `toolResponses`；repository 只在写入 Room TEXT 列与
+`chat_tool_logs.response` 审计列时执行一次 JSON 编码。运行时不提供字符串结果 API，也不在历史
+重放阶段重新解析嵌套 JSON。
 
 ## 6. ViewModel 边界
 
@@ -108,4 +110,3 @@
 - 空 JS 在执行前失败。
 - agent loop 在无工具调用时结束。
 - agent loop 在工具调用后将 `Message.tool()` 回灌给模型并继续到最终完成。
-

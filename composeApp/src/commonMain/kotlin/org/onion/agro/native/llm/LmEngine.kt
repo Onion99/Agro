@@ -74,17 +74,10 @@ class LmEngine(
     ): LmConversation {
         mutex.withLock {
             checkInitialized()
-            val messageJsonString = if (systemInstruction != null || initialMessages.isNotEmpty()) {
-                val messagesJson = buildJsonArray {
-                    systemInstruction?.let {
-                        add(Message.system(it).toJson())
-                    }
-                    initialMessages.forEach {
-                        add(it.toJson())
-                    }
-                }
-                messagesJson.toString()
-            } else "[]"
+            val messageJsonString = buildConversationMessageJsonString(
+                systemInstruction = systemInstruction,
+                initialMessages = initialMessages,
+            )
 
             val ptr = LiteRtLmJni.createLmConversation(
                 enginePointer = handle!!,
@@ -111,4 +104,20 @@ class LmEngine(
     private fun checkInitialized() {
         check(isInitialized()) { "Engine is not initialized." }
     }
+}
+
+internal fun buildConversationMessageJsonString(
+    systemInstruction: String?,
+    initialMessages: List<Message>,
+): String {
+    if (systemInstruction == null && initialMessages.isEmpty()) return "[]"
+
+    return buildJsonArray {
+        systemInstruction?.let {
+            add(Message.system(it).toJson())
+        }
+        initialMessages.forEach {
+            add(it.toJson())
+        }
+    }.sanitizeForLmLite().toString()
 }

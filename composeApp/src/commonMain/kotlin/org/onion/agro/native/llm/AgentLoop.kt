@@ -149,7 +149,7 @@ class AgentLoopRunner(
                 )
 
                 val result = toolExecutor.executeTool(toolCall.name, toolCall.arguments)
-                val response = ToolResponse(toolCall.name, result.toJsonString())
+                val response = ToolResponse(toolCall.name, result.toJson())
                 responses += response
 
                 emit(

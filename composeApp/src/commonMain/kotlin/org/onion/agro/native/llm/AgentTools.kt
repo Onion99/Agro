@@ -64,13 +64,6 @@ class AgentTools : KoinComponent, AgentToolExecutor {
         }.toString()
     }
 
-    /**
-     * Backward-compatible string result used by Message.tool responses.
-     */
-    suspend fun execute(name: String, arguments: JsonObject): String {
-        return executeTool(name, arguments).toJsonString()
-    }
-
     @OptIn(ExperimentalTime::class)
     override suspend fun executeTool(name: String, arguments: JsonObject): ToolExecutionResult {
         val tool = tools[name]

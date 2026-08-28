@@ -64,8 +64,12 @@ class Message internal constructor(
             toolCalls: List<ToolCall> = emptyList(),
             channels: Map<String, String> = emptyMap()
         ) = Message(Role.MODEL, contents, toolCalls, emptyList(), channels)
-        fun tool(toolResponses: List<ToolResponse>) = Message(Role.TOOL, toolResponses = toolResponses)
-        fun tool(contents: Contents) = Message(Role.TOOL, contents)
+        fun tool(toolResponses: List<ToolResponse>): Message {
+            require(toolResponses.isNotEmpty()) {
+                "A tool message requires at least one structured response."
+            }
+            return Message(Role.TOOL, toolResponses = toolResponses)
+        }
     }
 }
 
@@ -97,7 +101,8 @@ data class ToolCall(val name: String, val arguments: JsonObject) {
     }
 }
 
-data class ToolResponse(val name: String, val response: String) {
+/** A structured tool result passed across the LiteRT-LM boundary. */
+data class ToolResponse(val name: String, val response: JsonObject) {
     internal fun toJson() = buildJsonObject {
         put("type", "tool_response")
         put("name", name)

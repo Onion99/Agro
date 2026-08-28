@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-28] - 重构工具历史协议并修复会话重放
+- [修复] `ContextTranscript` 将完整工具历史按 `model(tool_calls) → tool(tool_response) → model(final text)` 重建，并在持久化工具元数据不完整时只保留可用的最终正文，避免 `nativeCreateConversation` 接收非法角色顺序。
+- [重构] `PersistentToolCall.arguments`、`PersistentToolResponse.response` 与 `ToolResponse.response` 统一为 `JsonObject`，从 Agent Loop、Room 公共模型到 LiteRT-LM 边界不再二次编码或解析嵌套 JSON 字符串。
+- [删除] 移除持久化 `ChatRole.TOOL`、`Message.tool(Contents)`、`AgentTools.execute()` 字符串接口、`ToolExecutionResult.toJsonString()` 与旧纯文本响应 fallback，非法工具消息不再拥有兼容入口。
+- [破坏性变更] Room 升级至 Schema v3，并对 v1/v2 执行 destructive migration；删除旧 migration、迁移测试和 v1/v2 schema 快照，升级后旧聊天历史会被清空。
+- [修复] `LmEngine.createConversation()` 在 JNI 调用前递归清洗 system instruction、历史消息与嵌套工具响应，使创建路径与增量发送路径采用一致的消息清洗规则。
+- [测试] 新增结构化持久化协议、v2→v3 destructive reset、工具历史顺序、残缺工具元数据回退、结构化响应与会话 preface 清洗回归测试。
+- [文档] 更新应用上下文、Agent Loop、Room 持久化、公共数据模型与 JNI 消息边界规范，固化 Schema v3 工具历史契约。
+
 ## [1.0.3] - 2026-08-27
 - [新增] 新增 `litert-community/Ministral-3-3B-Instruct-2512` 模型预设与参数调优，丰富轻量端侧本地推理选择。
 - [重构] 重塑 Gris 艺术水彩与极简美学设计：引入全新神圣几何星轨指示器与流光微晶毛玻璃状态胶囊。

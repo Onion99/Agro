@@ -1311,7 +1311,7 @@ class ChatViewModel(
                                 println("ChatViewModel: Executing tool '${event.toolCall.name}' with args: ${event.toolCall.arguments}")
                                 val toolStartedAt = Clock.System.now().toEpochMilliseconds()
                                 val toolLogId = ChatHistoryRepository.newId("tool")
-                                val toolArguments = event.toolCall.arguments.toString()
+                                val toolArguments = event.toolCall.arguments
                                 val toolKey = "${event.turnIndex}:${event.callIndex}"
                                 toolLogIds[toolKey] = toolLogId
 
@@ -1330,8 +1330,8 @@ class ChatViewModel(
                                             sessionId = sessionId,
                                             messageId = assistantMessageId,
                                             toolName = event.toolCall.name,
-                                            arguments = toolArguments,
-                                            response = "",
+                                            argumentsJson = toolArguments.toString(),
+                                            responseJson = "",
                                             status = "running",
                                             startedAtMillis = toolStartedAt,
                                             completedAtMillis = null
@@ -1350,14 +1350,14 @@ class ChatViewModel(
                             is AgentLoopEvent.ToolFinished -> {
                                 val toolKey = "${event.turnIndex}:${event.callIndex}"
                                 val toolLogId = toolLogIds[toolKey] ?: ChatHistoryRepository.newId("tool")
-                                val resultStr = event.response.response
-                                val toolArguments = event.toolCall.arguments.toString()
+                                val result = event.result.toJson()
+                                val toolArguments = event.toolCall.arguments
                                 val toolStatus = if (event.result.success) "completed" else "failed"
 
                                 persistentToolResponses.add(
                                     PersistentToolResponse(
                                         name = event.toolCall.name,
-                                        response = resultStr,
+                                        response = result,
                                         createdAtMillis = event.result.completedAtMillis
                                     )
                                 )
@@ -1369,8 +1369,8 @@ class ChatViewModel(
                                             sessionId = sessionId,
                                             messageId = assistantMessageId,
                                             toolName = event.toolCall.name,
-                                            arguments = toolArguments,
-                                            response = resultStr,
+                                            argumentsJson = toolArguments.toString(),
+                                            responseJson = result.toString(),
                                             status = toolStatus,
                                             startedAtMillis = event.result.startedAtMillis,
                                             completedAtMillis = event.result.completedAtMillis

@@ -36,7 +36,7 @@ class AgentToolsTest {
     @Test
     fun disabledToolReturnsStructuredFailure() = runTest {
         val result = AgentTools().executeTool("loadSkill", buildJsonObject {})
-        val payload = Json.parseToJsonElement(result.toJsonString()).jsonObject
+        val payload = result.toJson()
 
         assertFalse(result.success)
         assertFalse(payload["success"]!!.jsonPrimitive.content.toBoolean())

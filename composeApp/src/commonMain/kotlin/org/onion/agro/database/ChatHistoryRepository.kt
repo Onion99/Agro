@@ -176,9 +176,9 @@ class ChatHistoryRepository(
                     appendLine("### Tool Logs")
                     logs.forEach { log ->
                         appendLine("- ${log.status}: ${log.toolName}")
-                        appendLine("  - arguments: ${log.arguments}")
-                        if (log.response.isNotBlank()) {
-                            appendLine("  - response: ${log.response}")
+                        appendLine("  - arguments: ${log.argumentsJson}")
+                        if (log.responseJson.isNotBlank()) {
+                            appendLine("  - response: ${log.responseJson}")
                         }
                     }
                     appendLine()
@@ -231,12 +231,10 @@ class ChatHistoryRepository(
         val parsedMetadata = runCatching {
             json.decodeFromString<Map<String, String>>(metadataJson)
         }.getOrDefault(emptyMap())
-        val parsedToolCalls = runCatching {
-            json.decodeFromString<List<PersistentToolCall>>(toolCallsJson)
-        }.getOrDefault(emptyList())
-        val parsedToolResponses = runCatching {
-            json.decodeFromString<List<PersistentToolResponse>>(toolResponsesJson)
-        }.getOrDefault(emptyList())
+        val parsedToolCalls = json.decodeFromString<List<PersistentToolCall>>(toolCallsJson)
+        val parsedToolResponses = json.decodeFromString<List<PersistentToolResponse>>(
+            toolResponsesJson
+        )
         val parsedContents = contentEntities
             .sortedBy { it.position }
             .map { it.toChatMessageContent() }

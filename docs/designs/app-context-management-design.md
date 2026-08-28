@@ -306,3 +306,22 @@ AIGC 每次请求前都必须以 `forceRecreate = true` 创建新的 `LmConversa
 | `ERROR` | 初始化、恢复或生成失败 | Error / Slate 低频潮汐，不闪烁 |
 
 颜色、间距、形状与玻璃表面均来自 `AppTheme` token；动画只表达状态变化，不替代本地化文字标签。
+
+### 7.8 工具历史重放契约
+
+Room 继续在同一条 assistant 消息中保存最终正文、有序 `toolCalls` 与有序 `toolResponses`；
+公共模型中的 `PersistentToolCall.arguments` 与 `PersistentToolResponse.response` 均为
+`JsonObject`。Room 的 TEXT 列只在 repository 边界编码整个列表，业务层和 native 边界不再持有或
+解析嵌套 JSON 字符串。`ContextTranscript` 按以下规则恢复原生消息：
+
+1. 仅当最终 assistant 正文非空、调用与响应数量相同且名称逐项匹配时，才认为工具交换完整。
+2. 完整交换固定重放为 `model(tool_calls) → tool(tool_response) → model(final text)`，不得把
+   最终正文与 `tool_calls` 合并到同一条 model 消息，也不得把响应排在最终正文之后。
+3. 工具参数与响应直接从公共模型映射为 LiteRT-LM 的 `JsonObject`，不得增加字符串化 API、
+   旧响应解析器或类型猜测 fallback。
+4. 元数据缺失、数量不等、名称错位或缺少最终正文时，不向 native 注入残缺工具交换；有最终正文时
+   只回放该正文，以保证恢复后的角色序列有效。
+5. `LmEngine.createConversation()` 在调用 `nativeCreateConversation` 前递归清洗完整 preface，覆盖
+   system instruction、普通历史正文以及嵌套 tool response，规则与后续 send 路径一致。
+6. Room Schema v3 是工具协议断代点：v1/v2 数据库升级时直接删除全部旧表并按 v3 重建；旧会话
+   不参与转换，仓库也不保留 v1/v2 migration 与 schema 快照。

@@ -2,6 +2,7 @@ package com.onion.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 @Serializable
 enum class ChatRole {
@@ -12,10 +13,7 @@ enum class ChatRole {
     USER,
 
     @SerialName("assistant")
-    ASSISTANT,
-
-    @SerialName("tool")
-    TOOL
+    ASSISTANT
 }
 
 @Serializable
@@ -48,13 +46,13 @@ data class ConversationContextState(
 @Serializable
 data class PersistentToolCall(
     val name: String,
-    val arguments: String,
+    val arguments: JsonObject,
     val createdAtMillis: Long
 )
 
 @Serializable
 data class PersistentToolResponse(
     val name: String,
-    val response: String,
+    val response: JsonObject,
     val createdAtMillis: Long
 )

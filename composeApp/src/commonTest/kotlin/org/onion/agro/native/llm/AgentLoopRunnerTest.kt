@@ -55,6 +55,7 @@ class AgentLoopRunnerTest {
         assertEquals(2, session.sentMessages.size)
         assertEquals(Role.TOOL, session.sentMessages[1].role)
         assertEquals(1, session.sentMessages[1].toolResponses.size)
+        assertIs<JsonObject>(session.sentMessages[1].toolResponses.single().response)
         assertEquals("testTool", tools.calls.single().first)
         assertTrue(events.any { it is AgentLoopEvent.ToolStarted })
         assertTrue(events.any { it is AgentLoopEvent.ToolFinished })
@@ -95,4 +96,3 @@ class AgentLoopRunnerTest {
         }
     }
 }
-

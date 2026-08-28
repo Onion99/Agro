@@ -8,6 +8,9 @@
 
 - **消息传递机制**：
     - **禁止**直接跨 JNI 传递裸指针或裸原生 JSON 字符串，应在 Kotlin 侧将对象（`Message`, `Content`, `ToolCall`）转换为规范的 `kotlinx.serialization.json` 结构后再行操作。
+    - `ToolCall.arguments` 与 `ToolResponse.response` 在 LiteRT-LM 边界必须是 `JsonObject`；禁止先调用 `toString()` 再作为 JSON 字符串二次编码，也禁止在 native 边界解析持久化字符串或猜测旧响应类型。
+    - 历史工具轮次必须按 `model(tool_calls) → tool(tool_response) → model(final text)` 重建。调用/响应不完整或名称错位时不得把残缺工具元数据交给 `nativeCreateConversation`，只保留可用的最终 assistant 正文。
+    - `LmEngine.createConversation()` 与 `LmConversation.send()` 必须对即将跨 native 边界的整个 JSON 树执行同一套递归字符清洗，覆盖 system instruction 和嵌套 tool response，不得只清洗增量发送路径。
     - 流式应答（Stream Response）：原生回调应转化为 Kotlin `Flow` 的异步数据流抛出，提供平滑非阻塞的 UI 消费方案。
     - JNI 回调向 Kotlin 传递 `absl::Status` 错误时必须使用 `Status::ToString()` 或显式拷贝 `string_view` 长度，禁止直接把 `status.message().data()` 当作以 NUL 结尾的 C 字符串传入 JVM；Kotlin 侧必须保留 native status code，便于区分取消、token 上限和 GPU decode 内部错误。
     - Desktop GPU decode 阶段返回 `INTERNAL` 时，当前 `Conversation` 视为不可继续复用；应用层只能重建引擎/会话后重试，若转入 CPU 恢复，必须同步更新 `lmBackend` 与 active backend 状态，禁止静默伪装为 GPU。

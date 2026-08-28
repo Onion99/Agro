@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "database": {
-    "version": 2,
+    "version": 3,
     "identityHash": "48c2bf5381519bbd20844afff9dc6d18",
     "entities": [
       {
@@ -278,13 +278,13 @@
             "notNull": true
           },
           {
-            "fieldPath": "arguments",
+            "fieldPath": "argumentsJson",
             "columnName": "arguments",
             "affinity": "TEXT",
             "notNull": true
           },
           {
-            "fieldPath": "response",
+            "fieldPath": "responseJson",
             "columnName": "response",
             "affinity": "TEXT",
             "notNull": true

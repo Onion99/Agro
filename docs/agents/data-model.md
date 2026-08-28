@@ -28,6 +28,11 @@
 - `Unsupported` 是前向兼容边界：未知类型、更高版本或无效载荷必须保留原始内容，
   不得让整段会话反序列化失败。
 - 纯文本消息优先通过 `ChatMessage.text(...)` 创建，避免调用端重复构造单元素列表。
+- `ChatRole` 只表达 durable transcript 中的 `SYSTEM`、`USER` 与 `ASSISTANT`；工具调用和响应
+  归属于最终 assistant 消息，不创建脱离调用上下文的持久化 `TOOL` 消息。
+- `PersistentToolCall.arguments` 与 `PersistentToolResponse.response` 必须是 `JsonObject`。公共模型、
+  Agent Loop 和 LiteRT-LM 边界共用结构化 JSON 语义，不提供 JSON 字符串构造器、解析 fallback
+  或纯文本响应兼容层；Room TEXT 列的编码仅属于 repository 存储适配器。
 
 ## 4. 聊天会话上下文
 
@@ -41,6 +46,11 @@
   与 `ERROR`。该枚举供 ViewModel 与 UI 共享，但不序列化、不写入 Room，也不替代
   `ConversationContextState.isApplied` 的上下文提交语义。
 - system instruction 的完整文本由持久化层保存快照，不应仅从模式名在 UI 中推断。
+- 同一条 assistant 消息中的有序 `toolCalls`、有序 `toolResponses` 与最终正文构成一个可恢复工具轮次。
+  只有数量、顺序名称和最终正文都完整时才能向 native 重建为
+  `model(tool_calls) → tool(tool_response) → model(final text)`；否则只恢复可用的最终正文。
+- 工具协议自 Room Schema v3 起断代；v1/v2 数据不会进入当前公共模型，也不要求模型层长期携带
+  旧字段形态的兼容代码。
 
 ## 5. 8-bit BGM 规格
 

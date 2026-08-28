@@ -1,6 +1,6 @@
 # Chat 会话持久化与历史记录
 
-> 日期: 2026-06-25（2026-07-25 更新至 Schema v2）
+> 日期: 2026-06-25（2026-08-28 更新至 Schema v3）
 > 范围: `composeApp` Chat/Library 会话历史能力
 
 ## 1. 目标
@@ -40,10 +40,10 @@
 
 - `id`: 消息主键，对应运行时 `ChatMessage.id`。
 - `session_id`: 所属会话。
-- `role`: `system`、`user`、`assistant`、`tool`。
+- `role`: `system`、`user`、`assistant`；工具交换归属于 assistant 消息。
 - `content`: 文本检索与预览兼容列；完整正文以 `chat_message_contents` 为准。
-- `tool_calls`: 工具调用 JSON。
-- `tool_responses`: 工具响应 JSON。
+- `tool_calls`: 工具调用数组 JSON；每项 `arguments` 必须是 JSON object，不接受嵌套 JSON 字符串。
+- `tool_responses`: 工具响应数组 JSON；每项 `response` 必须是 JSON object，不接受纯文本或嵌套 JSON 字符串。
 - `metadata`: 消息元数据 JSON。
 - `created_at_millis`: 消息创建时间。
 
@@ -67,9 +67,9 @@
 - `session_id`: 所属会话。
 - `message_id`: 关联的助手消息。
 - `tool_name`: 工具名称。
-- `arguments`: 工具参数 JSON。
-- `response`: 工具返回文本。
-- `status`: `running` / `completed`。
+- `arguments`: 工具参数对象序列化后的 JSON，仅作为审计存储边界。
+- `response`: 工具响应对象序列化后的 JSON，仅作为审计存储边界。
+- `status`: `running` / `completed` / `failed`。
 - `started_at_millis`: 开始时间。
 - `completed_at_millis`: 完成时间。
 
@@ -86,25 +86,23 @@
 - Chat 页历史面板支持搜索、打开、重命名、删除、导出。
 - Library 页 Living Memory 卡片展示最近会话，点击后打开该会话并跳转 Chat。
 
-## 5. Schema v1 → v2 迁移
+## 5. Schema v3 断代策略
 
-`MIGRATION_1_2` 执行以下兼容转换：
+Schema v3 将工具调用协议统一为结构化 `JsonObject`，不兼容 v1/v2 中的字符串字段形态：
 
-1. 为 `chat_sessions` 增加带默认值的 `mode` 与 `system_instruction`。
-2. 创建 `chat_message_contents`、外键和两个索引。
-3. 将每条旧 `chat_messages.content` 回填为 position 0 的内容块。
-4. 若旧助手正文是合法的 `{"type":"svg_image","svg":"..."}`，则迁移为
-   `svg_image` 内容并把所属会话标记为 SVG 模式；其他内容迁移为 `text`。
-5. SVG 父消息的兼容 `content` 置空，并重新计算会话预览，避免在历史列表展示完整 JSON。
-
-导出的 Room schema 位于
-`composeApp/schemas/org.onion.agro.database.AgentDatabase/2.json`，迁移必须与该 schema
-保持一致。
+1. `AgentDatabase` 不再注册 `MIGRATION_1_2`，也不保留 v1/v2 schema 快照和迁移测试。
+2. 数据库从 v1 或 v2 打开时，Room 使用 `fallbackToDestructiveMigrationFrom(true, 1, 2)` 删除
+   所有旧表并按 v3 重建；旧会话、消息、内容块与工具日志都会被清空。
+3. 当前 schema 只导出到
+   `composeApp/schemas/org.onion.agro.database.AgentDatabase/3.json`。
+4. 该 destructive fallback 仅允许从 v1/v2 触发。v3 之后若再次修改 schema，必须明确选择新迁移
+   或新的断代版本，不允许无边界继承历史兼容代码。
 
 ## 6. 当前限制
 
 - 导出当前实现为 Markdown 文本复制到剪贴板，尚未接入跨端文件保存流程。
-- 应用重启后会恢复历史消息 UI；本地 LLM 原生会话上下文会重新创建，尚未将历史消息重放进模型上下文。
+- 应用重启后会恢复 Schema v3 历史消息；DEFAULT 模式通过 `ContextTranscript` 按合法角色顺序
+  重建本地 LLM conversation，结构化生成模式仍保持空历史隔离。
 - Windows 环境已验证 Desktop 与 Android Kotlin 编译；iOS target 在当前机器被 Gradle 禁用，未做本机编译验证。
 ## 2026-07-10 写入语义修复
 

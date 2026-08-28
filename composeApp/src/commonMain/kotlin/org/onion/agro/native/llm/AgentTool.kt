@@ -32,7 +32,7 @@ data class ToolExecutionResult(
 ) {
     val durationMillis: Long = completedAtMillis - startedAtMillis
 
-    fun toJsonString(): String = buildJsonObject {
+    fun toJson(): JsonObject = buildJsonObject {
         put("success", success)
         put("tool", toolName)
         put("data", data)
@@ -46,7 +46,7 @@ data class ToolExecutionResult(
             put("completedAtMillis", completedAtMillis)
             put("durationMs", durationMillis)
         })
-    }.toString()
+    }
 }
 
 interface AgentTool {
@@ -57,4 +57,3 @@ interface AgentTool {
 interface AgentToolExecutor {
     suspend fun executeTool(name: String, arguments: JsonObject): ToolExecutionResult
 }
-
