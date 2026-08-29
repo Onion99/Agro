@@ -330,6 +330,7 @@ class ChatViewModel(
 
         benchmarkJob = viewModelScope.launch(Dispatchers.IO) {
             var activeSession: LmConversation? = null
+            var wasCancelled = false
             try {
                 // Ensure engine is ready (reuse existing engine if already initialized)
                 // Session Isolation: Create a completely independent conversation
@@ -424,6 +425,7 @@ class ChatViewModel(
                     maxRamMb = currentMaxRam
                 )
             } catch (e: CancellationException) {
+                wasCancelled = true
                 _benchmarkUiState.value = _benchmarkUiState.value.copy(
                     isRunning = false,
                     errorMessage = "Benchmark cancelled."
@@ -435,14 +437,22 @@ class ChatViewModel(
                     errorMessage = e.message ?: "Benchmark failed."
                 )
             } finally {
-                // Ensure the isolated conversation is closed and destroyed cleanly
-                try {
-                    activeSession?.close()
-                } catch (e: Exception) {
-                    e.printStackTrace()
+                // If not cancelled, close the conversation cleanly here.
+                // If cancelled, stopBenchmarkAndWait() safely owns closing the conversation
+                // only AFTER activeBenchmarkJob.cancelAndJoin() has completed.
+                if (!wasCancelled) {
+                    try {
+                        activeSession?.close()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                    if (benchmarkConversation === activeSession) {
+                        benchmarkConversation = null
+                    }
                 }
-                benchmarkConversation = null
-                benchmarkJob = null
+                if (benchmarkJob === coroutineContext[Job]) {
+                    benchmarkJob = null
+                }
                 if (_llmEngineStatus.value == LlmEngineStatus.GENERATING) {
                     _llmEngineStatus.value = if (
                         contextCoordinator.isEngineReady() &&
@@ -458,25 +468,58 @@ class ChatViewModel(
         }
     }
 
+    private val benchmarkStopMutex = Mutex()
+
     fun cancelBenchmarkTest() {
-        try {
-            benchmarkConversation?.cancelProcess()
-        } catch (e: Exception) {
-            // ignore
+        viewModelScope.launch {
+            stopBenchmarkAndWait()
         }
-        benchmarkJob?.cancel()
     }
 
-    private suspend fun stopBenchmarkAndWait() {
-        val activeBenchmarkJob = benchmarkJob ?: return
-        try {
-            benchmarkConversation?.cancelProcess()
-        } catch (e: Exception) {
-            // The benchmark job still has to be cancelled and joined.
+    private suspend fun stopBenchmarkAndWait() = benchmarkStopMutex.withLock {
+        val activeBenchmarkJob = benchmarkJob
+        val activeConversation = benchmarkConversation
+        if (activeBenchmarkJob == null && activeConversation == null) {
+            return@withLock
         }
-        activeBenchmarkJob.cancelAndJoin()
+
+        withContext(Dispatchers.Main) {
+            if (_benchmarkUiState.value.isRunning) {
+                _benchmarkUiState.value = _benchmarkUiState.value.copy(
+                    isRunning = false,
+                    errorMessage = "Benchmark cancelled."
+                )
+            }
+        }
+
+        withContext(Dispatchers.IO) {
+            // 1. Native cancel first
+            try {
+                activeConversation?.cancelProcess()
+            } catch (e: Exception) {
+                // ignore
+            }
+
+            // 2. Cancel and join the coroutine job so in-flight tasks and streaming finish cleanly
+            try {
+                activeBenchmarkJob?.cancelAndJoin()
+            } catch (e: Exception) {
+                // ignore
+            }
+
+            // 3. Safe barrier: only delete/close the native conversation after the job has completely joined!
+            try {
+                activeConversation?.close()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         if (benchmarkJob === activeBenchmarkJob) {
             benchmarkJob = null
+        }
+        if (benchmarkConversation === activeConversation) {
+            benchmarkConversation = null
         }
     }
 
@@ -724,8 +767,21 @@ class ChatViewModel(
     }
 
     override fun onCleared() {
+        try {
+            benchmarkConversation?.cancelProcess()
+        } catch (e: Exception) {
+            // ignore
+        }
+        try {
+            benchmarkConversation?.close()
+        } catch (e: Exception) {
+            // ignore
+        }
+        benchmarkConversation = null
+        benchmarkJob?.cancel()
+        benchmarkJob = null
+
         super.onCleared()
-        cancelBenchmarkTest()
         contextCoordinator.closeAll()
     }
 

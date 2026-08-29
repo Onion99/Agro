@@ -1,5 +1,9 @@
 package org.onion.agro.native.llm
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
@@ -38,52 +42,79 @@ class LmConversation(
         val sanitizedMessageJson = message.toJson().sanitizeForLmLite()
         val sanitizedExtraContextJson = extraContextObj.sanitizeForLmLite()
 
-        LiteRtLmJni.sendLmMessageAsync(
-            conversationPointer = handle,
-            messageJsonString = sanitizedMessageJson.toString(),
-            extraContextJsonString = sanitizedExtraContextJson.toString(),
-            onMessage = { messageJsonString ->
-                try {
-                    val messageJsonObject = Json.parseToJsonElement(messageJsonString).jsonObject
+        val completion = CompletableDeferred<Unit>()
+        var started = false
 
-                    if (messageJsonObject.containsKey("content") || messageJsonObject.containsKey("channels")) {
-                        val result = trySend(jsonToMessage(messageJsonObject))
-                        if (result.isFailure) {
-                            println("LmConversation: unable to deliver response chunk: $result")
+        try {
+            LiteRtLmJni.sendLmMessageAsync(
+                conversationPointer = handle,
+                messageJsonString = sanitizedMessageJson.toString(),
+                extraContextJsonString = sanitizedExtraContextJson.toString(),
+                onMessage = { messageJsonString ->
+                    try {
+                        val messageJsonObject = Json.parseToJsonElement(messageJsonString).jsonObject
+
+                        if (messageJsonObject.containsKey("content") || messageJsonObject.containsKey("channels")) {
+                            val result = trySend(jsonToMessage(messageJsonObject))
+                            if (result.isFailure) {
+                                println("LmConversation: unable to deliver response chunk: $result")
+                            }
+                        } else if (messageJsonObject.containsKey("tool_calls")) {
+                            val result = trySend(jsonToMessage(messageJsonObject))
+                            if (result.isFailure) {
+                                println("LmConversation: unable to deliver tool call chunk: $result")
+                            }
                         }
-                    } else if (messageJsonObject.containsKey("tool_calls")) {
-                        val result = trySend(jsonToMessage(messageJsonObject))
-                        if (result.isFailure) {
-                            println("LmConversation: unable to deliver tool call chunk: $result")
-                        }
+                    } catch (e: Exception) {
+                        println("LmConversation: Error parsing message: ${e.message}")
+                        e.printStackTrace()
                     }
-                } catch (e: Exception) {
-                    println("LmConversation: Error parsing message: ${e.message}")
-                    e.printStackTrace()
-                }
-            },
-            onDone = {
-                this@callbackFlow.close()
-            },
-            onError = { code, errorMsg ->
-                println("LmConversation: onError called with code $code: $errorMsg")
-                if (code == 1) { // Cancelled
-                    this@callbackFlow.close(CancellationException(errorMsg))
-                } else {
-                    this@callbackFlow.close(
-                        LiteRtLmInferenceException(
-                            statusCode = code,
-                            nativeMessage = errorMsg
+                },
+                onDone = {
+                    completion.complete(Unit)
+                    this@callbackFlow.close()
+                },
+                onError = { code, errorMsg ->
+                    completion.complete(Unit)
+                    println("LmConversation: onError called with code $code: $errorMsg")
+                    if (code == 1) { // Cancelled
+                        this@callbackFlow.close(CancellationException(errorMsg))
+                    } else {
+                        this@callbackFlow.close(
+                            LiteRtLmInferenceException(
+                                statusCode = code,
+                                nativeMessage = errorMsg
+                            )
                         )
-                    )
+                    }
+                },
+                visualTokenBudget = visualTokenBudget,
+                maxOutputToken = maxOutputTokens ?: -1
+            )
+            started = true
+            
+            awaitClose {
+                if (!completion.isCompleted) {
+                    try {
+                        cancelProcess()
+                    } catch (e: Throwable) {
+                        // ignore if already cancelled or closed
+                    }
                 }
-            },
-            visualTokenBudget = visualTokenBudget,
-            maxOutputToken = maxOutputTokens ?: -1
-        )
-        
-        awaitClose {
-            // Wait for completion, process cancellation if needed via cancelProcess() explicitly handled externally
+            }
+        } finally {
+            if (started && !completion.isCompleted) {
+                withContext(NonCancellable) {
+                    try {
+                        cancelProcess()
+                    } catch (e: Throwable) {
+                        // ignore
+                    }
+                    withTimeoutOrNull(3000) {
+                        completion.await()
+                    }
+                }
+            }
         }
     }.buffer(Channel.UNLIMITED)
 
@@ -102,6 +133,11 @@ class LmConversation(
     override fun close() {
         if (isAlive) {
             isAlive = false
+            try {
+                LiteRtLmJni.cancelLmConversation(handle)
+            } catch (e: Throwable) {
+                // ignore
+            }
             LiteRtLmJni.deleteLmConversation(handle)
         }
     }

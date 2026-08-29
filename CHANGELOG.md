@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-29] - 修复 Benchmark 取消顺序与 cancel/delete 竞态缺陷
+- [修复] `LmConversation.kt`: 在 `sendMessageAsync` 中引入 `CompletableDeferred` 原生终态追踪与同步屏障，`awaitClose` 及时触发 `cancelProcess()` 并在 `finally` 块中通过 `NonCancellable` 挂起等待 native 回调到达，确保流关闭前原生推理线程彻底停止；`close()` 增加保护性取消。
+- [修复] `ChatViewModel.kt`: Benchmark 取消复用「native cancel → cancelAndJoin → close」安全屏障，引入 `benchmarkStopMutex` 串行化防重入；`runBenchmarkTest` 在遇到取消时不再提前在 Job 的 `finally` 中 close 会话，改由 `stopBenchmarkAndWait` 在 `cancelAndJoin` 完整等待后统一安全销毁，彻底消除异步 native 推理与会话销毁间的 Use-After-Free 竞态。
+- [修复] `ChatViewModel.onCleared`: 优化销毁清理顺序，在模型引擎关闭前先行取消并安全释放 Benchmark 原生会话指针。
+- [测试] 新增 `BenchmarkCancellationBarrierTest`，验证取消屏障中 native cancel、cancelAndJoin 与 close 的严格执行时序以及多并发取消调用的幂等性与串行化。
+- [文档] 更新 `docs/designs/app-context-management-design.md`，记录 Benchmark 安全停止屏障与 `LmConversation` 终态协同设计契约。
+
+## [2026-08-29] - 修复 iOS Benchmark Bridge 编译阻断与 SettingScreen 测试逻辑缺陷
+- [修复] `LiteRtLmJni.ios.kt` 补齐 `cnames.structs.LiteRtLmBenchmarkInfo` 及 `litert_lm_conversation_get_benchmark_info`、`litert_lm_benchmark_info_*` 等 10 项 C API 符号导入，解决 iOS Kotlin/Native 编译 unresolved reference 阻断。
+- [修复] `ChatViewModel.runBenchmarkTest` 调整前置校验顺序，避免在模型未选择或未加载时误报“对话正在生成中”，并完成 toast 提示文案国际化。
+- [优化] `SettingScreen` 的 `ThroughputTestCard` 与 `BenchmarkLiveOutputCard` 响应对话引擎忙碌状态（禁用测试按钮并展示“引擎忙碌”提示）。
+- [新增] `BenchmarkLiveOutputCard` 激活原闲置的回调参数 `onRunTestWithPrompt`，新增顶部操作按钮、输入框内 Play 按钮及键盘回车发送（`ImeAction.Send`），并增加实时流式输出自动平滑滚动。
+- [文档] 同步更新 `docs/specs/ios-litertlm-platform.md`，记录 iOS LiteRT LM Benchmark Cinterop 符号映射与释放契约。
+
 ## [2026-08-29] - 修复 Chat 与 Benchmark 并发推理崩溃
 - [修复] `ChatViewModel` 为 Chat 和 Benchmark 引入共享 `LmInferenceGate` 原子租约，并在 Benchmark 运行期间同步 `LlmEngineStatus.GENERATING`，防止同一 `LiteRtLmEngine` 实例发生并发 native 推理。
 - [修复] 将 `benchmarkJob` 纳入生成停止屏障，模型重载、上下文与会话切换前会取消并等待 Benchmark native 会话完整收尾。

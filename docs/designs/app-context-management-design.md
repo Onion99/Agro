@@ -293,6 +293,8 @@ AIGC 每次请求前都必须以 `forceRecreate = true` 创建新的 `LmConversa
 6. Chat 输入区在 `isGenerating=true` 时将发送按钮切换为停止按钮，点击事件必须直接调用 `ChatViewModel.stopGeneration()`，不得再次进入 `sendMessage()` 的就绪状态校验分支。
 7. Chat 与 Benchmark 共用同一个 `LmInferenceGate`：两者在任何可挂起操作之前必须原子获取推理租约，并持有到 native 生成 Job 完全结束。独立 `LmConversation` 只隔离 KV 上下文，不代表底层 `LmEngine` 支持并发执行。
 8. Benchmark 运行期间将 `LlmEngineStatus` 置为 `GENERATING`，使 Chat 入口不再误判为 `READY`；模型重载、上下文切换和会话切换通过统一停止屏障取消并 `join` Benchmark Job，然后才能回收 engine/conversation。
+9. `LmConversation.sendMessageAsync` 内建终态协同屏障：通过 `CompletableDeferred` 追踪底层 `onDone`/`onError` 回调；当下游 Flow 被取消时，`awaitClose` 触发 `cancelProcess()`，并在 `finally` 块中使用 `NonCancellable` 挂起等待 native 回调到达，确保流彻底关闭前原生推理线程完全停止，避免协程提前退出导致 native 异步回调访问已被 `delete` 的 C++ `Conversation`。
+10. Benchmark 取消复用「native cancel → cancelAndJoin → close」安全屏障：`cancelBenchmarkTest()` 通过独立 `benchmarkStopMutex` 串行化，在 `stopBenchmarkAndWait()` 中先调用 `activeConversation.cancelProcess()`，继而 `cancelAndJoin()` 等待 Job 完全退出，最后才执行 `activeConversation.close()`；Benchmark Job 自身遇到 `CancellationException` 时不提前关闭会话，彻底消除 cancel/delete 竞态。
 
 ### 7.7 LLM 运行态与 Gris 水彩反馈
 
