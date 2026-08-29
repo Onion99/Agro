@@ -280,18 +280,7 @@ class ChatViewModel(
             var activeSession: LmConversation? = null
             try {
                 // Ensure engine is ready (reuse existing engine if already initialized)
-                val engine = if (contextCoordinator.isEngineReady()) {
-                    contextCoordinator.currentEngine()!!
-                } else {
-                    _llmEngineStatus.value = LlmEngineStatus.INITIALIZING
-                    val newEngine = createLmEngine(currentLlmPath, lmBackend.value)
-                    newEngine.initialize()
-                    contextCoordinator.attachEngine(newEngine)
-                    updateActiveLmEngineState(currentLlmPath, lmBackend.value)
-                    _llmEngineStatus.value = LlmEngineStatus.READY
-                    newEngine
-                }
-
+                val engine = contextCoordinator.currentEngine()!!
                 // Session Isolation: Create a completely independent conversation
                 // that is not registered in ContextCoordinator's slots and does not affect chat history
                 val session = engine.createConversation(
@@ -1245,7 +1234,7 @@ class ChatViewModel(
             maxNumTokens = lmMaxNumTokens.value,
             maxNumImages = lmMaxNumImages.value,
             cacheDir = FileKit.cacheDir.path,
-            enableBenchmark = true,
+            enableBenchmark = false,
             enableSpeculativeDecoding = enableSpeculativeDecoding.value,
             mainNpuNativeLibraryDir = "",
             visionNpuNativeLibraryDir = "",
