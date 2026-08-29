@@ -184,6 +184,8 @@
     <string name="llm_benchmark_prompt_preset_ai">Explain AI fundamentals</string>
     <string name="llm_benchmark_prompt_preset_relativity">Theory of relativity</string>
     <string name="llm_benchmark_prompt_preset_story">Sci-fi space exploration</string>
+    <string name="model_benchmark_toggle_title">Benchmark</string>
+    <string name="model_benchmark_toggle_desc">Enable performance diagnostic module</string>
     <string name="model_download_queued">Queued...</string>
     <string name="model_download_paused">Paused</string>
     <string name="model_download_failed">Failed: %1$s</string>

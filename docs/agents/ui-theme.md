@@ -155,6 +155,14 @@ Box(modifier = Modifier.watercolorGradient()) { content() }
   - `ERROR`：沉静的暮色微烬与低频阻尼脉动，克制而富有叙事张力，严禁生硬闪烁。
 - 状态颜色与语义映射由组件内部维护；其他页面如需给图标着色，调用 `resolveGrisStatusAccent()`，避免重复 `when` 或仅依赖 `context.isApplied` 二态判断。
 
+### 微晶毛玻璃开关胶囊 (EtherealBenchmarkPill)
+
+- **定位与容器**：胶囊形态（`AppTheme.shape.full`），采用 `Modifier.glassSurface(shape = AppTheme.shape.full)` 悬浮于模型展示画廊右上方。在移动端与桌面端分别采用 `AppTheme.spacing.md` 与 `xl` 边距。
+- **色彩与动效**：
+  - 激活态：图标与开关滑动块采用 Sage Green（`AppTheme.colors.primary`），轨道使用低透明度主色水彩基底。
+  - 静泊态：图标与文本柔和淡化（`AppTheme.colors.onSurfaceVariant` 50%~60% 透明度），维持空灵极简质感。
+  - 悬停动效：微悬浮增强（`alpha = 0.85f`, `borderAlpha = 0.35f`），点击事件独立拦截，防止误触发底层画廊卡片点击。
+
 ---
 > [!NOTE]
 > 本文档应随着引入新模式而更新。

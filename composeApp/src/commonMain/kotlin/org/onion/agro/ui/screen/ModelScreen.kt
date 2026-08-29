@@ -1,5 +1,6 @@
 package org.onion.agro.ui.screen
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -178,6 +179,7 @@ fun ModelScreen() {
     val chatViewModel = koinInject<ChatViewModel>()
     val loadingState by chatViewModel.loadingModelState.collectAsState(0)
     val currentPath by chatViewModel.llmPath
+    val enableBenchmark by chatViewModel.enableBenchmark
     val coroutineScope = rememberCoroutineScope()
     val downloadManager = koinInject<DownloadManager>()
     val downloadTasks by downloadManager.tasksFlow.collectAsState(emptyList())
@@ -263,7 +265,7 @@ fun ModelScreen() {
                     desc = stringResource(Res.string.model_ministral3_desc),
                     contextWindow = "4k",
                     vram = "8GB",
-                    imageResource = Res.drawable.model_ministral_card,
+                    imageResource = Res.drawable.model_qwen_card,
                     isActive = activeId == "ministral",
                     isLoading = loadingState == 1 && activeId == "ministral",
                     isDesktop = false,
@@ -360,6 +362,19 @@ fun ModelScreen() {
             }
         }
 
+        // Floating Benchmark Toggle Pill
+        val isDesktop = contentType != ContentType.Single
+        EtherealBenchmarkPill(
+            checked = enableBenchmark,
+            onCheckedChange = { chatViewModel.setEnableBenchmark(it) },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(
+                    top = if (isDesktop) AppTheme.spacing.xl else AppTheme.spacing.md,
+                    end = if (isDesktop) AppTheme.spacing.xl else AppTheme.spacing.md
+                )
+        )
+
         if (loadingState == 1) {
             Box(
                 modifier = Modifier
@@ -426,6 +441,69 @@ fun ModelScreen() {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EtherealBenchmarkPill(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+
+    val iconColor by animateColorAsState(
+        targetValue = if (checked) AppTheme.colors.primary else AppTheme.colors.onSurfaceVariant.copy(alpha = 0.5f),
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
+
+    val textColor by animateColorAsState(
+        targetValue = if (checked) AppTheme.colors.onSurface else AppTheme.colors.onSurfaceVariant.copy(alpha = 0.6f),
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
+
+    Box(
+        modifier = modifier
+            .glassSurface(
+                shape = AppTheme.shape.full,
+                alpha = if (isHovered) 0.85f else AppTheme.elevation.glassSurfaceAlpha,
+                borderAlpha = if (isHovered) 0.35f else AppTheme.elevation.glassBorderAlpha
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = { onCheckedChange(!checked) }
+            )
+            .padding(
+                horizontal = AppTheme.spacing.md,
+                vertical = AppTheme.spacing.xs + 2.dp
+            )
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)
+        ) {
+            Icon(
+                imageVector = SpeedIcon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(AppTheme.size.icon)
+            )
+
+            Text(
+                text = stringResource(Res.string.model_benchmark_toggle_title),
+                style = AppTheme.typography.labelMedium.copy(
+                    letterSpacing = 0.5.sp
+                ),
+                color = textColor
+            )
+
+            EtherealSwitch(
+                checked = checked,
+                onCheckedChange = onCheckedChange
+            )
         }
     }
 }

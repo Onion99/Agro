@@ -183,6 +183,8 @@
     <string name="llm_benchmark_prompt_preset_ai">解释人工智能基本原理</string>
     <string name="llm_benchmark_prompt_preset_relativity">相对论核心观点</string>
     <string name="llm_benchmark_prompt_preset_story">科幻星际探索短文</string>
+    <string name="model_benchmark_toggle_title">性能基准</string>
+    <string name="model_benchmark_toggle_desc">开启性能吞吐与硬件诊断模块</string>
     <string name="model_download_queued">排队中...</string>
     <string name="model_download_paused">已暂停</string>
     <string name="model_download_failed">下载失败: %1$s</string>

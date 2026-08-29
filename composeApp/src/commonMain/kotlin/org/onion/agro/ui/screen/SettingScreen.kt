@@ -43,6 +43,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -103,7 +104,7 @@ enum class SettingTab {
     BENCHMARKS
 }
 
-private val SpeedIcon: ImageVector = ImageVector.Builder(
+internal val SpeedIcon: ImageVector = ImageVector.Builder(
     name = "Speed",
     defaultWidth = 24.dp,
     defaultHeight = 24.dp,
@@ -154,8 +155,16 @@ fun SettingScreen() {
     val sysPrompt by chatViewModel.systemPrompt
     val lmBackend by chatViewModel.lmBackend
     val benchmarkState by chatViewModel.benchmarkUiState.collectAsState()
+    val enableBenchmark by chatViewModel.enableBenchmark
 
     var selectedTab by remember { mutableStateOf(SettingTab.PARAMETERS) }
+    val currentTab = if (enableBenchmark) selectedTab else SettingTab.PARAMETERS
+
+    LaunchedEffect(enableBenchmark) {
+        if (!enableBenchmark && selectedTab == SettingTab.BENCHMARKS) {
+            selectedTab = SettingTab.PARAMETERS
+        }
+    }
 
     val containerPadding = if (AppTheme.contentType == ContentType.Dual) {
         AppTheme.spacing.containerPaddingDesktop
@@ -174,40 +183,42 @@ fun SettingScreen() {
                 .verticalScroll(rememberScrollState())
                 .padding(containerPadding)
         ) {
-            // Tab Switcher
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .drawBehind {
-                        val strokeWidth = 1.dp.toPx()
-                        val y = size.height - strokeWidth / 2
-                        drawLine(
-                            color = Color.LightGray.copy(alpha = 0.25f),
-                            start = Offset(0f, y),
-                            end = Offset(size.width, y),
-                            strokeWidth = strokeWidth
-                        )
-                    },
-                horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.xl)
-            ) {
-                TabButton(
-                    title = stringResource(Res.string.llm_settings_tab_parameters),
-                    selected = selectedTab == SettingTab.PARAMETERS,
-                    onClick = { selectedTab = SettingTab.PARAMETERS }
-                )
-                TabButton(
-                    title = stringResource(Res.string.llm_settings_tab_benchmarks),
-                    selected = selectedTab == SettingTab.BENCHMARKS,
-                    onClick = {
-                        selectedTab = SettingTab.BENCHMARKS
-                        chatViewModel.refreshHardwareStats()
-                    }
-                )
+            if (enableBenchmark) {
+                // Tab Switcher
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .drawBehind {
+                            val strokeWidth = 1.dp.toPx()
+                            val y = size.height - strokeWidth / 2
+                            drawLine(
+                                color = Color.LightGray.copy(alpha = 0.25f),
+                                start = Offset(0f, y),
+                                end = Offset(size.width, y),
+                                strokeWidth = strokeWidth
+                            )
+                        },
+                    horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.xl)
+                ) {
+                    TabButton(
+                        title = stringResource(Res.string.llm_settings_tab_parameters),
+                        selected = currentTab == SettingTab.PARAMETERS,
+                        onClick = { selectedTab = SettingTab.PARAMETERS }
+                    )
+                    TabButton(
+                        title = stringResource(Res.string.llm_settings_tab_benchmarks),
+                        selected = currentTab == SettingTab.BENCHMARKS,
+                        onClick = {
+                            selectedTab = SettingTab.BENCHMARKS
+                            chatViewModel.refreshHardwareStats()
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(AppTheme.spacing.xl))
             }
 
-            Spacer(modifier = Modifier.height(AppTheme.spacing.xl))
-
-            when (selectedTab) {
+            when (currentTab) {
                 SettingTab.PARAMETERS -> {
                     // Header
                     Text(
@@ -797,7 +808,8 @@ fun SystemBlueprintCard(chatViewModel: ChatViewModel, sysPrompt: String) {
 @Composable
 fun EtherealSwitch(
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val thumbOffset by animateDpAsState(
         targetValue = if (checked) 20.dp else 2.dp,
@@ -820,7 +832,7 @@ fun EtherealSwitch(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(44.dp, 24.dp)
             .clip(AppTheme.shape.full)
             .background(trackBg)

@@ -192,6 +192,7 @@ class ChatViewModel(
     var topK = mutableStateOf(70)
     var enableThinking = mutableStateOf(false)
     var enableSpeculativeDecoding = mutableStateOf(false)
+    var enableBenchmark = mutableStateOf(true)
     var systemPrompt = mutableStateOf("You are  ${BuildConfig.APP_NAME}, an analytical and precise local intelligence. Prioritize factual accuracy and concise formatting. Maintain a calm, neutral tone.")
     var systemContextShift = mutableStateOf(false)
     private val _conversationContext = mutableStateOf(
@@ -212,6 +213,7 @@ class ChatViewModel(
             topK.value = 40
             enableThinking.value = false
             enableSpeculativeDecoding.value = false
+            enableBenchmark.value = true
             lmMaxNumTokens.value =
                 _lmModelMaxNumTokens.value ?: DEFAULT_LM_MAX_NUM_TOKENS
             systemContextShift.value = true
@@ -234,6 +236,14 @@ class ChatViewModel(
 
     fun updateBenchmarkPrompt(prompt: String) {
         _benchmarkUiState.value = _benchmarkUiState.value.copy(testPrompt = prompt)
+    }
+
+    fun setEnableBenchmark(enabled: Boolean) {
+        if (enableBenchmark.value == enabled) return
+        enableBenchmark.value = enabled
+        if (contextCoordinator.isEngineReady() && !isGenerating.value && !isLlmModelLoading.value && !isInitializing) {
+            applyConversationSettings()
+        }
     }
 
     fun refreshHardwareStats() {
@@ -407,6 +417,7 @@ class ChatViewModel(
     private val contextCoordinator = ContextCoordinator()
     private var activeBackend: String? = null
     private var activeEnableSpeculativeDecoding: Boolean? = null
+    private var activeEnableBenchmark: Boolean? = null
     private var activeMaxNumTokens: Int? = null
     private val agentTools = AgentTools()
 
@@ -524,6 +535,7 @@ class ChatViewModel(
             llmPath.value == activeModelPath &&
             isSameLmBackend(activeBackend, lmBackend.value) &&
             activeEnableSpeculativeDecoding == enableSpeculativeDecoding.value &&
+            activeEnableBenchmark == enableBenchmark.value &&
             activeMaxNumTokens == lmMaxNumTokens.value
         ) {
             _llmEngineStatus.value = LlmEngineStatus.READY
@@ -586,6 +598,7 @@ class ChatViewModel(
                         activeModelPath != currentLlmPath ||
                         !isSameLmBackend(activeBackend, lmBackend.value) ||
                         activeEnableSpeculativeDecoding != enableSpeculativeDecoding.value ||
+                        activeEnableBenchmark != enableBenchmark.value ||
                         activeMaxNumTokens != lmMaxNumTokens.value
 
                 if (needsEngineReinit) {
@@ -1222,6 +1235,7 @@ class ChatViewModel(
         activeModelPath = null
         activeBackend = null
         activeEnableSpeculativeDecoding = null
+        activeEnableBenchmark = null
         activeMaxNumTokens = null
     }
 
@@ -1234,7 +1248,7 @@ class ChatViewModel(
             maxNumTokens = lmMaxNumTokens.value,
             maxNumImages = lmMaxNumImages.value,
             cacheDir = FileKit.cacheDir.path,
-            enableBenchmark = false,
+            enableBenchmark = enableBenchmark.value,
             enableSpeculativeDecoding = enableSpeculativeDecoding.value,
             mainNpuNativeLibraryDir = "",
             visionNpuNativeLibraryDir = "",
@@ -1248,6 +1262,7 @@ class ChatViewModel(
         activeModelPath = modelPath
         activeBackend = normalizeLmBackend(backend)
         activeEnableSpeculativeDecoding = enableSpeculativeDecoding.value
+        activeEnableBenchmark = enableBenchmark.value
         activeMaxNumTokens = lmMaxNumTokens.value
     }
 

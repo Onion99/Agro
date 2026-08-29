@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-29] - ModelScreen 增加 enableBenchmark 开关并联动隐藏 SettingScreen Benchmark 模块
+- [新增] `ModelScreen` 新增符合 Ethereal Minimalism 设计系统的微晶毛玻璃开关胶囊 `EtherealBenchmarkPill`，支持悬浮展示、独立点击拦截与平滑状态过渡。
+- [修改] `SettingScreen` 联动 `enableBenchmark` 状态：当开关关闭时自动隐藏 `BENCHMARKS` 选项卡及 Bento 性能基准测试模块，当前标签自动回退至 `PARAMETERS`；若仅剩单标签则隐藏 Tab 切换栏，呈现极简设置页。
+- [优化] `ChatViewModel` 打通 `enableBenchmark` 运行时状态与底层 `LmEngine`/`LiteRtLm` 原生 C++ Benchmark 插桩配置，并在设置重置时协同更新。
+- [新增] 新增 `model_benchmark_toggle_title` 与 `model_benchmark_toggle_desc` 国际化字符串（中/英文）。
+- [文档] 同步更新 `docs/agents/ui-theme.md`，沉淀 `EtherealBenchmarkPill` 设计规范。
+
 ## [1.1.0] - 2026-08-28
 - [新增] 设置页面新增端侧基准测试（Benchmark）模式，支持测量模型首字时延（TTFT）、预填速度、解码吞吐率（Tokens/s）与多平台物理/虚拟内存开销。
 - [重构] 重构工具调用历史协议，统一 `JsonObject` 结构化参数，修复会话重放与多轮工具调用时角色时序异常的问题。
