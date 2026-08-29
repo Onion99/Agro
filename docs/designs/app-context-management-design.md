@@ -291,6 +291,8 @@ AIGC 每次请求前都必须以 `forceRecreate = true` 创建新的 `LmConversa
 4. Compose 状态和消息列表只在 Main dispatcher 修改；取消 turn 的删除与持久化只在 IO dispatcher 执行。
 5. LiteRT-LM 不支持取消后继续复用同一个 conversation。若停止操作本身未触发其他上下文切换，则旧任务退出并删除取消 turn 后，必须从清理后的 durable transcript 强制重建 conversation，再恢复为 `READY`；重建期间使用 `APPLYING_CONTEXT`，失败则进入 `ERROR`。
 6. Chat 输入区在 `isGenerating=true` 时将发送按钮切换为停止按钮，点击事件必须直接调用 `ChatViewModel.stopGeneration()`，不得再次进入 `sendMessage()` 的就绪状态校验分支。
+7. Chat 与 Benchmark 共用同一个 `LmInferenceGate`：两者在任何可挂起操作之前必须原子获取推理租约，并持有到 native 生成 Job 完全结束。独立 `LmConversation` 只隔离 KV 上下文，不代表底层 `LmEngine` 支持并发执行。
+8. Benchmark 运行期间将 `LlmEngineStatus` 置为 `GENERATING`，使 Chat 入口不再误判为 `READY`；模型重载、上下文切换和会话切换通过统一停止屏障取消并 `join` Benchmark Job，然后才能回收 engine/conversation。
 
 ### 7.7 LLM 运行态与 Gris 水彩反馈
 

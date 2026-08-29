@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-29] - 修复 Chat 与 Benchmark 并发推理崩溃
+- [修复] `ChatViewModel` 为 Chat 和 Benchmark 引入共享 `LmInferenceGate` 原子租约，并在 Benchmark 运行期间同步 `LlmEngineStatus.GENERATING`，防止同一 `LiteRtLmEngine` 实例发生并发 native 推理。
+- [修复] 将 `benchmarkJob` 纳入生成停止屏障，模型重载、上下文与会话切换前会取消并等待 Benchmark native 会话完整收尾。
+- [测试] 新增 `LmInferenceGateTest`，验证活跃推理租约释放前不会授予第二个租约。
+- [文档] 更新 `docs/designs/app-context-management-design.md`，记录 Chat/Benchmark 双向互斥与取消屏障契约。
+
 ## [2026-08-29] - ModelScreen 增加 enableBenchmark 开关并联动隐藏 SettingScreen Benchmark 模块
 - [新增] `ModelScreen` 新增符合 Ethereal Minimalism 设计系统的微晶毛玻璃开关胶囊 `EtherealBenchmarkPill`，支持悬浮展示、独立点击拦截与平滑状态过渡。
 - [修改] `SettingScreen` 联动 `enableBenchmark` 状态：当开关关闭时自动隐藏 `BENCHMARKS` 选项卡及 Bento 性能基准测试模块，当前标签自动回退至 `PARAMETERS`；若仅剩单标签则隐藏 Tab 切换栏，呈现极简设置页。

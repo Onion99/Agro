@@ -43,6 +43,7 @@ import org.onion.agro.native.llm.AgentLoopRunner
 import org.onion.agro.native.llm.AgentTools
 import org.onion.agro.native.llm.LiteRtLmModelMetadata
 import org.onion.agro.native.llm.LiteRtLmInferenceException
+import org.onion.agro.native.llm.LmInferenceGate
 import org.onion.agro.native.llm.LmConversation
 import org.onion.agro.native.llm.LmEngine
 import org.onion.agro.native.llm.ContextBudgetLevel
@@ -192,7 +193,7 @@ class ChatViewModel(
     var topK = mutableStateOf(70)
     var enableThinking = mutableStateOf(false)
     var enableSpeculativeDecoding = mutableStateOf(false)
-    var enableBenchmark = mutableStateOf(true)
+    var enableBenchmark = mutableStateOf(false)
     var systemPrompt = mutableStateOf("You are  ${BuildConfig.APP_NAME}, an analytical and precise local intelligence. Prioritize factual accuracy and concise formatting. Maintain a calm, neutral tone.")
     var systemContextShift = mutableStateOf(false)
     private val _conversationContext = mutableStateOf(
@@ -213,7 +214,7 @@ class ChatViewModel(
             topK.value = 40
             enableThinking.value = false
             enableSpeculativeDecoding.value = false
-            enableBenchmark.value = true
+            enableBenchmark.value = false
             lmMaxNumTokens.value =
                 _lmModelMaxNumTokens.value ?: DEFAULT_LM_MAX_NUM_TOKENS
             systemContextShift.value = true
@@ -231,6 +232,7 @@ class ChatViewModel(
     // ========================================================================================
     private var benchmarkJob: Job? = null
     private var benchmarkConversation: LmConversation? = null
+    private val lmInferenceGate = LmInferenceGate()
     private val _benchmarkUiState = MutableStateFlow(BenchmarkUiState())
     val benchmarkUiState: StateFlow<BenchmarkUiState> = _benchmarkUiState
 
@@ -241,7 +243,13 @@ class ChatViewModel(
     fun setEnableBenchmark(enabled: Boolean) {
         if (enableBenchmark.value == enabled) return
         enableBenchmark.value = enabled
-        if (contextCoordinator.isEngineReady() && !isGenerating.value && !isLlmModelLoading.value && !isInitializing) {
+        if (
+            contextCoordinator.isEngineReady() &&
+            !isGenerating.value &&
+            !_benchmarkUiState.value.isRunning &&
+            !isLlmModelLoading.value &&
+            !isInitializing
+        ) {
             applyConversationSettings()
         }
     }
@@ -257,7 +265,7 @@ class ChatViewModel(
 
     fun runBenchmarkTest(customPrompt: String? = null) {
         if (_benchmarkUiState.value.isRunning) return
-        if (isGenerating.value) {
+        if (isGenerating.value || _llmEngineStatus.value != LlmEngineStatus.READY) {
             viewModelScope.launch {
                 showToast("Chat generation is in progress. Please wait for it to finish.")
             }
@@ -267,6 +275,20 @@ class ChatViewModel(
         if (currentLlmPath.isBlank()) {
             viewModelScope.launch {
                 showToast(getString(Res.string.error_select_correct_llm_model))
+            }
+            return
+        }
+        val engine = contextCoordinator.currentEngine()
+        if (engine == null || !contextCoordinator.isEngineReady()) {
+            viewModelScope.launch {
+                showToast(getString(Res.string.llm_benchmark_no_model))
+            }
+            return
+        }
+        val inferenceLease = lmInferenceGate.tryAcquire()
+        if (inferenceLease == null) {
+            viewModelScope.launch {
+                showToast("Chat generation is in progress. Please wait for it to finish.")
             }
             return
         }
@@ -285,12 +307,12 @@ class ChatViewModel(
             usedRamMb = usedRam,
             maxRamMb = maxRam
         )
+        _llmEngineStatus.value = LlmEngineStatus.GENERATING
 
         benchmarkJob = viewModelScope.launch(Dispatchers.IO) {
             var activeSession: LmConversation? = null
             try {
                 // Ensure engine is ready (reuse existing engine if already initialized)
-                val engine = contextCoordinator.currentEngine()!!
                 // Session Isolation: Create a completely independent conversation
                 // that is not registered in ContextCoordinator's slots and does not affect chat history
                 val session = engine.createConversation(
@@ -401,16 +423,41 @@ class ChatViewModel(
                     e.printStackTrace()
                 }
                 benchmarkConversation = null
+                benchmarkJob = null
+                if (_llmEngineStatus.value == LlmEngineStatus.GENERATING) {
+                    _llmEngineStatus.value = if (
+                        contextCoordinator.isEngineReady() &&
+                        _conversationContext.value.isApplied
+                    ) {
+                        LlmEngineStatus.READY
+                    } else {
+                        LlmEngineStatus.UNINITIALIZED
+                    }
+                }
+                inferenceLease.release()
             }
         }
     }
 
     fun cancelBenchmarkTest() {
-        benchmarkJob?.cancel()
         try {
             benchmarkConversation?.cancelProcess()
         } catch (e: Exception) {
             // ignore
+        }
+        benchmarkJob?.cancel()
+    }
+
+    private suspend fun stopBenchmarkAndWait() {
+        val activeBenchmarkJob = benchmarkJob ?: return
+        try {
+            benchmarkConversation?.cancelProcess()
+        } catch (e: Exception) {
+            // The benchmark job still has to be cancelled and joined.
+        }
+        activeBenchmarkJob.cancelAndJoin()
+        if (benchmarkJob === activeBenchmarkJob) {
+            benchmarkJob = null
         }
     }
 
@@ -785,36 +832,67 @@ class ChatViewModel(
             }
             return
         }
+        val inferenceLease = lmInferenceGate.tryAcquire()
+        if (inferenceLease == null) {
+            viewModelScope.launch {
+                showToast(getString(Res.string.chat_context_wait_until_ready))
+            }
+            return
+        }
+        _llmEngineStatus.value = LlmEngineStatus.GENERATING
 
         viewModelScope.launch {
-            stopGenerationAndWait()
-            val sessionId = ensureActiveSession(message)
-            val messageDraft = ChatMessage.text(
-                text = message,
-                role = if (isUser) ChatRole.USER else ChatRole.ASSISTANT
-            )
-            val turnId = messageDraft.id.toString()
-            val userMessage = messageDraft.copy(
-                metadata = mapOf(METADATA_TURN_ID to turnId)
-            )
-            _currentChatMessages.add(userMessage)
-            chatHistoryRepository.saveMessage(sessionId, userMessage)
-            val meta = mapOf(
-                METADATA_IS_GENERATING to "true",
-                METADATA_TURN_ID to turnId,
-            )
-            val assistantMessage = ChatMessage.text(
-                text = "",
-                role = ChatRole.ASSISTANT,
-                metadata = meta
-            )
-            _currentChatMessages.add(assistantMessage)
-            chatHistoryRepository.saveMessage(sessionId, assistantMessage)
-            isGenerating.value = true
-            _llmEngineStatus.value = LlmEngineStatus.GENERATING
-            getTextTalkerResponse(message, {}, {
-                println(it.message)
-            })
+            var inferenceStarted = false
+            try {
+                stopGenerationAndWait()
+                val sessionId = ensureActiveSession(message)
+                val messageDraft = ChatMessage.text(
+                    text = message,
+                    role = if (isUser) ChatRole.USER else ChatRole.ASSISTANT
+                )
+                val turnId = messageDraft.id.toString()
+                val userMessage = messageDraft.copy(
+                    metadata = mapOf(METADATA_TURN_ID to turnId)
+                )
+                _currentChatMessages.add(userMessage)
+                chatHistoryRepository.saveMessage(sessionId, userMessage)
+                val meta = mapOf(
+                    METADATA_IS_GENERATING to "true",
+                    METADATA_TURN_ID to turnId,
+                )
+                val assistantMessage = ChatMessage.text(
+                    text = "",
+                    role = ChatRole.ASSISTANT,
+                    metadata = meta
+                )
+                _currentChatMessages.add(assistantMessage)
+                chatHistoryRepository.saveMessage(sessionId, assistantMessage)
+                isGenerating.value = true
+                val generationJob = getTextTalkerResponse(message, {}, {
+                    println(it.message)
+                })
+                if (generationJob != null) {
+                    inferenceStarted = true
+                    generationJob.invokeOnCompletion {
+                        inferenceLease.release()
+                    }
+                }
+            } finally {
+                if (!inferenceStarted) {
+                    isGenerating.value = false
+                    if (_llmEngineStatus.value == LlmEngineStatus.GENERATING) {
+                        _llmEngineStatus.value = if (
+                            contextCoordinator.isEngineReady() &&
+                            _conversationContext.value.isApplied
+                        ) {
+                            LlmEngineStatus.READY
+                        } else {
+                            LlmEngineStatus.UNINITIALIZED
+                        }
+                    }
+                    inferenceLease.release()
+                }
+            }
         }
 
     }
@@ -912,7 +990,9 @@ class ChatViewModel(
         }
     }
 
-    private suspend fun stopGenerationAndWait() = generationStopMutex.withLock {
+    private suspend fun stopGenerationAndWait() {
+        stopBenchmarkAndWait()
+        generationStopMutex.withLock {
         val generationJob = responseGenerationJob
         val cleanup = withContext(Dispatchers.Main) {
             val shouldStop = isGenerating.value || generationJob?.isActive == true
@@ -924,6 +1004,11 @@ class ChatViewModel(
             // cannot clean up more than one turn.
             isGenerating.value = false
             isInferenceOn = false
+            if (recreateConversation) {
+                // Prevent another inference from starting after the generation
+                // job releases its lease but before cancellation recovery ends.
+                _llmEngineStatus.value = LlmEngineStatus.APPLYING_CONTEXT
+            }
 
             val assistantIndex = _currentChatMessages.indexOfLast { message ->
                 message.role == ChatRole.ASSISTANT &&
@@ -978,6 +1063,7 @@ class ChatViewModel(
 
         if (cleanup.recreateConversation) {
             recreateConversationAfterCancellation()
+        }
         }
     }
 
@@ -1341,7 +1427,11 @@ class ChatViewModel(
     }
     
     @OptIn(ExperimentalTime::class)
-    fun getTextTalkerResponse(query: String, onCancelled: () -> Unit, onError: (Throwable) -> Unit) {
+    fun getTextTalkerResponse(
+        query: String,
+        onCancelled: () -> Unit,
+        onError: (Throwable) -> Unit,
+    ): Job? {
         val activeConversation = contextCoordinator.currentConversation()
         if (activeConversation == null) {
             isGenerating.value = false
@@ -1368,10 +1458,10 @@ class ChatViewModel(
                 }
             }
             onError(IllegalStateException("LM Engine not initialized"))
-            return
+            return null
         }
         
-        responseGenerationJob = viewModelScope.launch(Dispatchers.IO) {
+        val generationJob = viewModelScope.launch(Dispatchers.IO) {
             isInferenceOn = true
             _llmEngineStatus.value = LlmEngineStatus.GENERATING
             val promptContent = query
@@ -1727,6 +1817,8 @@ class ChatViewModel(
             isInferenceOn = false
             _llmEngineStatus.value = LlmEngineStatus.READY
         }
+        responseGenerationJob = generationJob
+        return generationJob
     }
 
     init {
