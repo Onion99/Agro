@@ -184,6 +184,10 @@
     <string name="llm_benchmark_prompt_preset_ai">Explain AI fundamentals</string>
     <string name="llm_benchmark_prompt_preset_relativity">Theory of relativity</string>
     <string name="llm_benchmark_prompt_preset_story">Sci-fi space exploration</string>
+    <string name="llm_benchmark_engine_busy">Engine Busy</string>
+    <string name="llm_benchmark_chat_busy">Chat generation is in progress. Please wait for it to finish.</string>
+    <string name="llm_benchmark_model_loading">Model is loading. Please wait for it to complete.</string>
+    <string name="llm_benchmark_hint">Click \"Run Test\" to start throughput analysis. Generated tokens will stream here in real time.</string>
     <string name="model_benchmark_toggle_title">Benchmark</string>
     <string name="model_benchmark_toggle_desc">Enable performance diagnostic module</string>
     <string name="model_download_queued">Queued...</string>

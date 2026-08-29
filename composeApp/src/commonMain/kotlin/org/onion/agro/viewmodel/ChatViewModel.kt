@@ -265,12 +265,7 @@ class ChatViewModel(
 
     fun runBenchmarkTest(customPrompt: String? = null) {
         if (_benchmarkUiState.value.isRunning) return
-        if (isGenerating.value || _llmEngineStatus.value != LlmEngineStatus.READY) {
-            viewModelScope.launch {
-                showToast("Chat generation is in progress. Please wait for it to finish.")
-            }
-            return
-        }
+
         val currentLlmPath = llmPath.value
         if (currentLlmPath.isBlank()) {
             viewModelScope.launch {
@@ -278,17 +273,41 @@ class ChatViewModel(
             }
             return
         }
-        val engine = contextCoordinator.currentEngine()
-        if (engine == null || !contextCoordinator.isEngineReady()) {
+
+        if (isLlmModelLoading.value || _llmEngineStatus.value == LlmEngineStatus.INITIALIZING) {
+            viewModelScope.launch {
+                showToast(getString(Res.string.llm_benchmark_model_loading))
+            }
+            return
+        }
+
+        if (!contextCoordinator.isEngineReady() || _llmEngineStatus.value == LlmEngineStatus.UNINITIALIZED) {
             viewModelScope.launch {
                 showToast(getString(Res.string.llm_benchmark_no_model))
             }
             return
         }
+
+        if (isGenerating.value || _llmEngineStatus.value == LlmEngineStatus.GENERATING) {
+            viewModelScope.launch {
+                showToast(getString(Res.string.llm_benchmark_chat_busy))
+            }
+            return
+        }
+
         val inferenceLease = lmInferenceGate.tryAcquire()
         if (inferenceLease == null) {
             viewModelScope.launch {
-                showToast("Chat generation is in progress. Please wait for it to finish.")
+                showToast(getString(Res.string.llm_benchmark_chat_busy))
+            }
+            return
+        }
+
+        val engine = contextCoordinator.currentEngine()
+        if (engine == null) {
+            inferenceLease.release()
+            viewModelScope.launch {
+                showToast(getString(Res.string.llm_benchmark_no_model))
             }
             return
         }

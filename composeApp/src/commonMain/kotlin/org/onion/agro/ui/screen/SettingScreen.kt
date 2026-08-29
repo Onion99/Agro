@@ -27,15 +27,20 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -60,9 +65,11 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agro.composeapp.generated.resources.Res
+import com.onion.model.LlmEngineStatus
 import agro.composeapp.generated.resources.*
 import agro.composeapp.generated.resources.llm_setting_temp_title
 import agro.composeapp.generated.resources.llm_setting_temp_desc
@@ -156,6 +163,9 @@ fun SettingScreen() {
     val lmBackend by chatViewModel.lmBackend
     val benchmarkState by chatViewModel.benchmarkUiState.collectAsState()
     val enableBenchmark by chatViewModel.enableBenchmark
+    val isGenerating by chatViewModel.isGenerating
+    val llmEngineStatus by chatViewModel.llmEngineStatus.collectAsState()
+    val isEngineBusy = isGenerating || llmEngineStatus == LlmEngineStatus.GENERATING
 
     var selectedTab by remember { mutableStateOf(SettingTab.PARAMETERS) }
     val currentTab = if (enableBenchmark) selectedTab else SettingTab.PARAMETERS
@@ -364,6 +374,7 @@ fun SettingScreen() {
                             ThroughputTestCard(
                                 benchmarkState = benchmarkState,
                                 maxTokens = maxTokens,
+                                isEngineBusy = isEngineBusy,
                                 onRunTest = { chatViewModel.runBenchmarkTest() },
                                 onCancelTest = { chatViewModel.cancelBenchmarkTest() },
                                 modifier = Modifier.weight(1f)
@@ -383,6 +394,7 @@ fun SettingScreen() {
                             ThroughputTestCard(
                                 benchmarkState = benchmarkState,
                                 maxTokens = maxTokens,
+                                isEngineBusy = isEngineBusy,
                                 onRunTest = { chatViewModel.runBenchmarkTest() },
                                 onCancelTest = { chatViewModel.cancelBenchmarkTest() }
                             )
@@ -399,8 +411,10 @@ fun SettingScreen() {
                     // Live Output Preview & Test Prompt Card
                     BenchmarkLiveOutputCard(
                         benchmarkState = benchmarkState,
+                        isEngineBusy = isEngineBusy,
                         onPromptChange = { chatViewModel.updateBenchmarkPrompt(it) },
-                        onRunTestWithPrompt = { chatViewModel.runBenchmarkTest(it) }
+                        onRunTestWithPrompt = { chatViewModel.runBenchmarkTest(it) },
+                        onCancelTest = { chatViewModel.cancelBenchmarkTest() }
                     )
                 }
             }
@@ -895,6 +909,7 @@ private fun TabButton(
 fun ThroughputTestCard(
     benchmarkState: BenchmarkUiState,
     maxTokens: Int,
+    isEngineBusy: Boolean,
     onRunTest: () -> Unit,
     onCancelTest: () -> Unit,
     modifier: Modifier = Modifier
@@ -961,15 +976,22 @@ fun ThroughputTestCard(
                 } else {
                     Button(
                         onClick = onRunTest,
+                        enabled = !isEngineBusy,
                         shape = AppTheme.shape.full,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = AppTheme.colors.primaryContainer.copy(alpha = 0.45f),
-                            contentColor = AppTheme.colors.primary
+                            contentColor = AppTheme.colors.primary,
+                            disabledContainerColor = AppTheme.colors.surfaceVariant.copy(alpha = 0.3f),
+                            disabledContentColor = AppTheme.colors.onSurfaceVariant.copy(alpha = 0.4f)
                         ),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = stringResource(Res.string.llm_benchmark_run_test),
+                            text = if (isEngineBusy) {
+                                stringResource(Res.string.llm_benchmark_engine_busy)
+                            } else {
+                                stringResource(Res.string.llm_benchmark_run_test)
+                            },
                             style = AppTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium)
                         )
                     }
@@ -1227,10 +1249,20 @@ private fun BenchmarkProgressBar(
 @Composable
 fun BenchmarkLiveOutputCard(
     benchmarkState: BenchmarkUiState,
+    isEngineBusy: Boolean,
     onPromptChange: (String) -> Unit,
     onRunTestWithPrompt: (String) -> Unit,
+    onCancelTest: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val outputScrollState = rememberScrollState()
+
+    LaunchedEffect(benchmarkState.liveOutputText) {
+        if (benchmarkState.isRunning && benchmarkState.liveOutputText.isNotEmpty()) {
+            outputScrollState.scrollTo(outputScrollState.maxValue)
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -1243,34 +1275,79 @@ fun BenchmarkLiveOutputCard(
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.md)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(AppTheme.shape.md)
-                        .background(AppTheme.colors.tertiaryContainer.copy(alpha = 0.3f)),
-                    contentAlignment = Alignment.Center
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.md)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.EditNote,
-                        contentDescription = "Output",
-                        tint = AppTheme.colors.tertiary,
-                        modifier = Modifier.size(22.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(AppTheme.shape.md)
+                            .background(AppTheme.colors.tertiaryContainer.copy(alpha = 0.3f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.EditNote,
+                            contentDescription = "Output",
+                            tint = AppTheme.colors.tertiary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = stringResource(Res.string.llm_benchmark_live_output),
+                            style = AppTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = AppTheme.colors.onSurface
+                        )
+                        Text(
+                            text = stringResource(Res.string.llm_benchmark_prompt_label),
+                            style = AppTheme.typography.bodySmall,
+                            color = AppTheme.colors.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
                 }
-                Column {
-                    Text(
-                        text = stringResource(Res.string.llm_benchmark_live_output),
-                        style = AppTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = AppTheme.colors.onSurface
-                    )
-                    Text(
-                        text = stringResource(Res.string.llm_benchmark_prompt_label),
-                        style = AppTheme.typography.bodySmall,
-                        color = AppTheme.colors.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
+
+                if (benchmarkState.isRunning) {
+                    Button(
+                        onClick = onCancelTest,
+                        shape = AppTheme.shape.full,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AppTheme.colors.errorContainer.copy(alpha = 0.8f),
+                            contentColor = AppTheme.colors.onErrorContainer
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = stringResource(Res.string.llm_benchmark_stop),
+                            style = AppTheme.typography.labelMedium
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = { onRunTestWithPrompt(benchmarkState.testPrompt) },
+                        enabled = !isEngineBusy,
+                        shape = AppTheme.shape.full,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AppTheme.colors.primaryContainer.copy(alpha = 0.45f),
+                            contentColor = AppTheme.colors.primary,
+                            disabledContainerColor = AppTheme.colors.surfaceVariant.copy(alpha = 0.3f),
+                            disabledContentColor = AppTheme.colors.onSurfaceVariant.copy(alpha = 0.4f)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = if (isEngineBusy) {
+                                stringResource(Res.string.llm_benchmark_engine_busy)
+                            } else {
+                                stringResource(Res.string.llm_benchmark_run_test)
+                            },
+                            style = AppTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium)
+                        )
+                    }
                 }
             }
 
@@ -1321,7 +1398,33 @@ fun BenchmarkLiveOutputCard(
                     focusedContainerColor = AppTheme.colors.surfaceContainerLowest.copy(alpha = 0.5f),
                     unfocusedContainerColor = AppTheme.colors.surfaceContainerLowest.copy(alpha = 0.5f)
                 ),
-                maxLines = 2
+                maxLines = 2,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(
+                    onSend = {
+                        if (!benchmarkState.isRunning && !isEngineBusy) {
+                            onRunTestWithPrompt(benchmarkState.testPrompt)
+                        }
+                    }
+                ),
+                trailingIcon = {
+                    IconButton(
+                        onClick = {
+                            if (benchmarkState.isRunning) {
+                                onCancelTest()
+                            } else {
+                                onRunTestWithPrompt(benchmarkState.testPrompt)
+                            }
+                        },
+                        enabled = benchmarkState.isRunning || !isEngineBusy
+                    ) {
+                        Icon(
+                            imageVector = if (benchmarkState.isRunning) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                            contentDescription = if (benchmarkState.isRunning) "Stop" else "Run",
+                            tint = if (benchmarkState.isRunning) AppTheme.colors.error else AppTheme.colors.primary
+                        )
+                    }
+                }
             )
 
             Spacer(modifier = Modifier.height(AppTheme.spacing.lg))
@@ -1335,7 +1438,7 @@ fun BenchmarkLiveOutputCard(
                     .background(AppTheme.colors.surfaceVariant.copy(alpha = 0.35f))
                     .border(1.dp, AppTheme.colors.outlineVariant.copy(alpha = 0.25f), AppTheme.shape.md)
                     .padding(AppTheme.spacing.md)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(outputScrollState)
             ) {
                 if (benchmarkState.liveOutputText.isNotEmpty()) {
                     Text(
@@ -1360,7 +1463,7 @@ fun BenchmarkLiveOutputCard(
                     )
                 } else {
                     Text(
-                        text = "Click \"Run Test\" above to start throughput analysis. Generated tokens will stream here in real time.",
+                        text = stringResource(Res.string.llm_benchmark_hint),
                         style = AppTheme.typography.bodySmall,
                         color = AppTheme.colors.onSurfaceVariant.copy(alpha = 0.5f)
                     )
