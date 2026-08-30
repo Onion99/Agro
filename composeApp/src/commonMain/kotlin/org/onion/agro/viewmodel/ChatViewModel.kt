@@ -435,7 +435,6 @@ class ChatViewModel(
                         val currentText = stringBuilder.toString()
                         val estimatedTokens = estimateTokenCount(currentText)
                         val elapsedSinceFirstToken = (now - tokenTime).coerceAtLeast(1)
-                        val liveTtft = (tokenTime - startTime).coerceAtLeast(0)
                         val liveTokensPerSec = if (estimatedTokens > 0 && elapsedSinceFirstToken > 0) {
                             (estimatedTokens.toDouble() / (elapsedSinceFirstToken.toDouble() / 1000.0))
                         } else 0.0
@@ -443,7 +442,7 @@ class ChatViewModel(
                         _benchmarkUiState.value = _benchmarkUiState.value.copy(
                             liveOutputText = currentText,
                             decodeTokensPerSecond = (liveTokensPerSec * 10).roundToInt() / 10.0,
-                            latencyMs = liveTtft,
+                            latencyMs = -1,
                             decodeTokenCount = estimatedTokens
                         )
                     }
@@ -471,11 +470,7 @@ class ChatViewModel(
                     finalDecodeTokensPerSec = nativeBenchmarkInfo.lastDecodeTokensPerSecond
                     finalPrefillTokens = nativeBenchmarkInfo.lastPrefillTokenCount
                     finalPrefillTokensPerSec = nativeBenchmarkInfo.lastPrefillTokensPerSecond
-                    finalLatencyMs = if (nativeBenchmarkInfo.timeToFirstToken > 0) {
-                        (nativeBenchmarkInfo.timeToFirstToken * 1000).toLong()
-                    } else {
-                        ttftDuration
-                    }
+                    finalLatencyMs = (nativeBenchmarkInfo.timeToFirstToken * 1000).toLong()
                     initTime = if (nativeBenchmarkInfo.totalInitTimeMs < 100.0) {
                         nativeBenchmarkInfo.totalInitTimeMs * 1000.0
                     } else {
