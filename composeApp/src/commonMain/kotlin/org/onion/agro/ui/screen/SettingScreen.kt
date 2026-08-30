@@ -382,7 +382,6 @@ fun SettingScreen() {
                             HardwareUtilizationCard(
                                 benchmarkState = benchmarkState,
                                 backend = lmBackend,
-                                maxTokens = maxTokens,
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -400,8 +399,7 @@ fun SettingScreen() {
                             )
                             HardwareUtilizationCard(
                                 benchmarkState = benchmarkState,
-                                backend = lmBackend,
-                                maxTokens = maxTokens
+                                backend = lmBackend
                             )
                         }
                     }
@@ -1043,7 +1041,6 @@ fun ThroughputTestCard(
                     }
                 )
 
-                println("bench info: $benchmarkState")
                 if (benchmarkState.prefillTokensPerSecond > 0) {
                     Spacer(modifier = Modifier.height(AppTheme.spacing.xs))
                     Text(
@@ -1099,9 +1096,17 @@ fun ThroughputTestCard(
 fun HardwareUtilizationCard(
     benchmarkState: BenchmarkUiState,
     backend: String,
-    maxTokens: Int,
     modifier: Modifier = Modifier
 ) {
+    val normalizedBackend = backend.ifBlank { "CPU" }.uppercase()
+    val resourceUsage = benchmarkState.resourceUsage
+    val isCpuBackend = normalizedBackend == "CPU"
+    val displayedCpuLoad = if (benchmarkState.isRunning) {
+        resourceUsage.currentCpuLoadPercent
+    } else {
+        resourceUsage.peakCpuLoadPercent
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -1134,7 +1139,7 @@ fun HardwareUtilizationCard(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Memory,
-                            contentDescription = "Hardware",
+                            contentDescription = stringResource(Res.string.llm_benchmark_hardware_title),
                             tint = AppTheme.colors.secondary,
                             modifier = Modifier.size(22.dp)
                         )
@@ -1154,7 +1159,7 @@ fun HardwareUtilizationCard(
                         .padding(horizontal = 12.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = backend.uppercase(),
+                        text = normalizedBackend,
                         style = AppTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = AppTheme.colors.secondary
                     )
@@ -1163,46 +1168,79 @@ fun HardwareUtilizationCard(
 
             Spacer(modifier = Modifier.height(AppTheme.spacing.xl))
 
-            // Progress Items
+            // Backend-aware metrics. Accelerator utilization is intentionally left
+            // unavailable when the platform cannot expose a reliable driver counter.
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)
             ) {
-                // 1. Engine Compute
+                val computeValue = when {
+                    !isCpuBackend -> stringResource(Res.string.llm_benchmark_metric_unavailable)
+                    displayedCpuLoad != null -> {
+                        if (benchmarkState.isRunning) {
+                            stringResource(
+                                Res.string.llm_benchmark_cpu_current,
+                                displayedCpuLoad.roundToInt(),
+                            )
+                        } else {
+                            stringResource(
+                                Res.string.llm_benchmark_cpu_peak,
+                                displayedCpuLoad.roundToInt(),
+                            )
+                        }
+                    }
+                    else -> stringResource(Res.string.llm_benchmark_metric_not_measured)
+                }
                 BenchmarkProgressBar(
-                    label = stringResource(Res.string.llm_benchmark_gpu_compute),
-                    valueText = if (benchmarkState.isRunning) "Active (95%)" else "Idle (0%)",
-                    progress = if (benchmarkState.isRunning) 0.95f else 0.04f,
+                    label = if (isCpuBackend) {
+                        stringResource(Res.string.llm_benchmark_process_cpu)
+                    } else {
+                        stringResource(Res.string.llm_benchmark_backend_compute, normalizedBackend)
+                    },
+                    valueText = computeValue,
+                    progress = if (isCpuBackend) {
+                        displayedCpuLoad?.div(100.0)?.toFloat()
+                    } else {
+                        null
+                    },
                     barColor = AppTheme.colors.secondary
                 )
 
-                // 2. Context KV Cache
-                val totalTokens = benchmarkState.prefillTokenCount + benchmarkState.decodeTokenCount
-                val capacity = if (benchmarkState.contextTokens > 0) benchmarkState.contextTokens else maxTokens
-                val contextProgress = (totalTokens.toFloat() / capacity.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
-                val contextPercent = (contextProgress * 100).roundToInt()
-                BenchmarkProgressBar(
-                    label = stringResource(Res.string.llm_benchmark_vram_context),
-                    valueText = if (totalTokens > 0) "$contextPercent% ($totalTokens/$capacity)" else "0% (0/$capacity)",
-                    progress = if (totalTokens > 0) contextProgress.coerceAtLeast(0.04f) else 0.02f,
-                    barColor = AppTheme.colors.primary
-                )
-
-                // 3. System RAM
-                val ramProgress = if (benchmarkState.maxRamMb > 0) {
-                    (benchmarkState.usedRamMb.toFloat() / benchmarkState.maxRamMb.toFloat()).coerceIn(0f, 1f)
-                } else 0.25f
-                val ramPercent = (ramProgress * 100).roundToInt()
-                val ramText = if (benchmarkState.maxRamMb > 0) {
-                    "$ramPercent% (${benchmarkState.usedRamMb}/${benchmarkState.maxRamMb} MB)"
+                val hasBenchmarkMemoryWindow = benchmarkState.isRunning || benchmarkState.hasCompletedTest
+                val displayedMemoryBytes = if (hasBenchmarkMemoryWindow) {
+                    resourceUsage.peakResidentMemoryBytes
                 } else {
-                    "${benchmarkState.usedRamMb} MB"
+                    resourceUsage.currentResidentMemoryBytes
+                }
+                val totalMemoryBytes = resourceUsage.totalPhysicalMemoryBytes
+                val peakMemoryDeltaBytes = resourceUsage.peakResidentMemoryDeltaBytes
+                val memoryText = when {
+                    displayedMemoryBytes == null -> {
+                        stringResource(Res.string.llm_benchmark_metric_unavailable)
+                    }
+                    hasBenchmarkMemoryWindow -> stringResource(
+                        Res.string.llm_benchmark_memory_peak_delta,
+                        displayedMemoryBytes.toMebibytes(),
+                        (peakMemoryDeltaBytes ?: 0L).toMebibytes(),
+                    )
+                    else -> stringResource(
+                        Res.string.llm_benchmark_memory_current,
+                        displayedMemoryBytes.toMebibytes(),
+                    )
                 }
                 BenchmarkProgressBar(
-                    label = stringResource(Res.string.llm_benchmark_system_ram),
-                    valueText = ramText,
-                    progress = ramProgress,
-                    barColor = AppTheme.colors.tertiary
+                    label = stringResource(Res.string.llm_benchmark_process_memory, normalizedBackend),
+                    valueText = memoryText,
+                    progress = if (
+                        displayedMemoryBytes != null &&
+                        totalMemoryBytes != null &&
+                        totalMemoryBytes > 0L
+                    ) {
+                        (displayedMemoryBytes.toDouble() / totalMemoryBytes.toDouble()).toFloat()
+                    } else {
+                        null
+                    },
+                    barColor = AppTheme.colors.primary
                 )
             }
         }
@@ -1213,11 +1251,11 @@ fun HardwareUtilizationCard(
 private fun BenchmarkProgressBar(
     label: String,
     valueText: String,
-    progress: Float,
+    progress: Float?,
     barColor: Color
 ) {
     val animatedProgress by animateFloatAsState(
-        targetValue = progress,
+        targetValue = progress?.coerceIn(0f, 1f) ?: 0f,
         animationSpec = spring(stiffness = Spring.StiffnessLow)
     )
 
@@ -1256,6 +1294,10 @@ private fun BenchmarkProgressBar(
         }
     }
 }
+
+private fun Long.toMebibytes(): Long = (this / BYTES_PER_MEBIBYTE).coerceAtLeast(0L)
+
+private const val BYTES_PER_MEBIBYTE = 1024L * 1024L
 
 @Composable
 fun BenchmarkLiveOutputCard(

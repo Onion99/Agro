@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-30] - 修正 SettingScreen Backend 资源遥测与 Benchmark 峰值采样
+- [修复] `SettingScreen.kt` 移除固定 95% 的 Engine Compute 占位值和无真实字节依据的 KV Cache 进度；CPU Backend 展示真实进程 CPU 负载，GPU/NPU 无可靠驱动计数器时明确显示遥测不可用。
+- [重构] `MemoryUtils` expect/actual 接口改为真实进程资源快照：Android 采集 `/proc` RSS/PSS、系统物理内存与进程 CPU 时间；Windows/Linux/macOS Desktop 采集 OS 工作集/RSS；iOS 通过 Mach、`NSProcessInfo` 与 `getrusage` 替代固定 `256/4096 MB`。
+- [优化] `ChatViewModel` 在 Warmup 后以 200ms 周期采样正式 Benchmark，聚合进程内存峰值、相对起始基线增量以及归一化 CPU 当前值/峰值；取消与异常路径同步回收采样 Job，StateFlow 改用原子更新避免流式输出覆盖资源样本。
+- [测试] 新增 `ProcessResourceTrackerTest` 与 `PlatformProcessResourceSnapshotTest`，覆盖峰值/增量、CPU 多核归一化、不可用指标和当前平台真实资源计数器。
+- [文档] 新增 `docs/designs/benchmark-resource-telemetry.md`，并同步 `docs/designs/app-context-management-design.md` 的 Benchmark 度量契约。
+
 ## [2026-08-30] - 基准测试引入两阶段预热机制消除冷启动与多次测试方差
 - [新增] `ChatViewModel.kt`: 基准测试引入两阶段机制（Phase 1 预热 + Phase 2 正式度量）。在正式基准测试前，先行针对 Prompt 执行一段短预热流（`maxOutputTokens = 16`），充分触发 GPU Shaders/Vulkan 管线 JIT 预编译并抛弃其输出与耗时，在硬件完全热机态下开始正式测试，彻底消除首次冷启动与第二次测试间的巨大误差。
 - [优化] `SettingScreen.kt`: 完善预热态 UI 呈现，在预热执行期间速度卡片与流式预览卡片展示 `llm_benchmark_warming_up`（“正在预热引擎...”），预热完成后无缝进入正式吞吐率流式呈现。

@@ -343,3 +343,6 @@ SettingScreen 性能基准测试与底层 LiteRT-LM 交互遵循以下确定性�
 7. **首次预热（Warmup）与冷启动开销消除**：端侧推理引擎在首次执行时存在 GPU Shaders/Vulkan/Metal 管线 JIT 编译、权重缓存换入、内存分页与线程池启动等冷启动开销。基准测试采用两阶段执行机制：
    - **Phase 1: Warmup**：先行针对测试 Prompt 执行一段短预热流（`maxOutputTokens = 16`），触发所有预填与解码计算管线预编译并直接丢弃其输出与耗时；UI 呈现预热状态反馈，同时支持安全响应停止取消。
    - **Phase 2: Formal Benchmark**：预热会话安全关闭后立即启动正式基准测试，在完全热机、GPU 性能频率处于稳态的环境下采集指标，彻底消除首轮冷启动测试与后续热机测试间的显著方差。
+8. **资源采样窗口与吞吐窗口对齐**：Warmup 完成后建立正式跑测进程内存基线，以 200ms 周期采样并在 Flow 结束时补抓终态样本；取消和异常路径必须在 `NonCancellable` 清理区停止采样 Job，避免泄漏后台采样任务。
+9. **Backend 指标禁止伪造**：CPU Backend 可使用按逻辑处理器归一化的进程 CPU 时间；GPU/NPU 在平台驱动未提供可信计数器时必须显示不可用，不得用 `isRunning`、进程 CPU 或固定百分比代替。跨平台数据源和指标边界见 [Benchmark Backend 资源遥测设计](benchmark-resource-telemetry.md)。
+10. **KV Cache 容量不等于硬件内存**：Token 数/最大上下文比例不得作为 KV Cache 字节或显存占用展示；只有 LiteRT-LM 暴露真实分配计数器后才能恢复该类资源指标。

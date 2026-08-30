@@ -18,6 +18,9 @@ import com.onion.model.PersistentToolResponse
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +28,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -35,6 +39,7 @@ import io.github.vinceglb.filekit.cacheDir
 import io.github.vinceglb.filekit.path
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import kotlin.time.TimeSource
 import kotlin.math.roundToInt
 import org.onion.agro.getPlatform
 import org.onion.agro.native.llm.AgentLoopConfig
@@ -68,7 +73,9 @@ import org.onion.agro.message.SvgMessageParser
 import org.onion.agro.message.ChiptuneBgmMessageParser
 import org.onion.agro.message.LottieMessageParser
 import org.onion.agro.lottie.LottieSceneContract
-import org.onion.agro.utils.getAppMemoryUsageMb
+import org.onion.agro.utils.ProcessResourceTracker
+import org.onion.agro.utils.ProcessResourceUsage
+import org.onion.agro.utils.getProcessResourceSnapshot
 
 class ChatViewModel(
     private val chatHistoryRepository: ChatHistoryRepository
@@ -237,7 +244,7 @@ class ChatViewModel(
     val benchmarkUiState: StateFlow<BenchmarkUiState> = _benchmarkUiState
 
     fun updateBenchmarkPrompt(prompt: String) {
-        _benchmarkUiState.value = _benchmarkUiState.value.copy(testPrompt = prompt)
+        _benchmarkUiState.update { it.copy(testPrompt = prompt) }
     }
 
     fun setEnableBenchmark(enabled: Boolean) {
@@ -255,12 +262,26 @@ class ChatViewModel(
     }
 
     fun refreshHardwareStats() {
-        val (usedRam, maxRam) = getAppMemoryUsageMb()
-        _benchmarkUiState.value = _benchmarkUiState.value.copy(
-            usedRamMb = usedRam,
-            maxRamMb = maxRam,
-            contextTokens = lmMaxNumTokens.value
-        )
+        val currentState = _benchmarkUiState.value
+        if (currentState.isRunning || currentState.hasCompletedTest) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val snapshot = getProcessResourceSnapshot()
+            val resourceUsage = ProcessResourceTracker(
+                initialSnapshot = snapshot,
+                initialTimestampMillis = 0L,
+            ).currentUsage
+            _benchmarkUiState.update { state ->
+                if (state.isRunning || state.hasCompletedTest) {
+                    state
+                } else {
+                    state.copy(
+                        resourceUsage = resourceUsage,
+                        contextTokens = lmMaxNumTokens.value,
+                    )
+                }
+            }
+        }
     }
 
     private var isFirstWarmup = true
@@ -317,29 +338,72 @@ class ChatViewModel(
             "Explain the theory of relativity and its core principles concisely."
         }
 
-        val (usedRam, maxRam) = getAppMemoryUsageMb()
-
-        _benchmarkUiState.value = _benchmarkUiState.value.copy(
-            isRunning = true,
-            isWarmingUp = isFirstWarmup,
-            errorMessage = null,
-            liveOutputText = if(isFirstWarmup) "Warming up engine..." else "",
-            contextTokens = lmMaxNumTokens.value,
-            usedRamMb = usedRam,
-            maxRamMb = maxRam
-        )
+        _benchmarkUiState.update {
+            it.copy(
+                isRunning = true,
+                isWarmingUp = isFirstWarmup,
+                hasCompletedTest = false,
+                errorMessage = null,
+                liveOutputText = if (isFirstWarmup) "Warming up engine..." else "",
+                contextTokens = lmMaxNumTokens.value,
+                decodeTokensPerSecond = 0.0,
+                prefillTokensPerSecond = 0.0,
+                latencyMs = 0L,
+                prefillTokenCount = 0,
+                decodeTokenCount = 0,
+                initTimeMs = 0.0,
+                resourceUsage = ProcessResourceUsage(),
+            )
+        }
         _llmEngineStatus.value = LlmEngineStatus.GENERATING
 
         benchmarkJob = viewModelScope.launch(Dispatchers.IO) {
             var activeSession: LmConversation? = null
             var wasCancelled = false
+            var resourceTracker: ProcessResourceTracker? = null
+            var resourceSamplerJob: Job? = null
+            val resourceSampleOrigin = TimeSource.Monotonic.markNow()
+
+            fun resourceTimestampMillis(): Long = resourceSampleOrigin.elapsedNow().inWholeMilliseconds
+
+            fun publishResourceSample() {
+                val tracker = resourceTracker ?: return
+                val usage = tracker.record(
+                    snapshot = getProcessResourceSnapshot(),
+                    timestampMillis = resourceTimestampMillis(),
+                )
+                _benchmarkUiState.update { it.copy(resourceUsage = usage) }
+            }
+
+            fun startResourceSampler() {
+                val snapshot = getProcessResourceSnapshot()
+                val tracker = ProcessResourceTracker(
+                    initialSnapshot = snapshot,
+                    initialTimestampMillis = resourceTimestampMillis(),
+                )
+                resourceTracker = tracker
+                _benchmarkUiState.update { it.copy(resourceUsage = tracker.currentUsage) }
+                resourceSamplerJob = launch {
+                    while (isActive) {
+                        delay(BENCHMARK_RESOURCE_SAMPLE_INTERVAL_MS)
+                        publishResourceSample()
+                    }
+                }
+            }
+
+            suspend fun stopResourceSampler() {
+                resourceSamplerJob?.cancelAndJoin()
+                resourceSamplerJob = null
+                publishResourceSample()
+            }
+
             try {
                 // Ensure engine has enableBenchmark = true for litertlm.cc native metrics
                 val benchmarkEngine = if (!currentEngine.enableBenchmark || activeEnableBenchmark != true) {
                     enableBenchmark.value = true
-                    _benchmarkUiState.value = _benchmarkUiState.value.copy(
-                        liveOutputText = "Preparing benchmark engine..."
-                    )
+                    _benchmarkUiState.update {
+                        it.copy(liveOutputText = "Preparing benchmark engine...")
+                    }
                     contextCoordinator.closeAll()
                     clearActiveLmEngineState()
                     val newEngine = createLmEngine(currentLlmPath, lmBackend.value)
@@ -357,10 +421,12 @@ class ChatViewModel(
                     // ==========================================
                     // 端侧推理在首次推理时存在 GPU Shaders/Vulkan 管线编译、内核 JIT、内存分页与线程池启动开销。
                     // 先行执行一段短预热会话并彻底丢弃其输出与耗时，消除首轮冷启动与第二轮热机之间的显著方差。
-                    _benchmarkUiState.value = _benchmarkUiState.value.copy(
-                        isWarmingUp = true,
-                        liveOutputText = "Warming up compute pipeline & GPU kernels..."
-                    )
+                    _benchmarkUiState.update {
+                        it.copy(
+                            isWarmingUp = true,
+                            liveOutputText = "Warming up compute pipeline & GPU kernels...",
+                        )
+                    }
 
                     val warmupSession = benchmarkEngine.createConversation(
                         systemInstruction = null,
@@ -393,12 +459,18 @@ class ChatViewModel(
                     // ==========================================
                     // PHASE 2: FORMAL BENCHMARK (正式基准测试)
                     // ==========================================
-                    _benchmarkUiState.value = _benchmarkUiState.value.copy(
-                        isWarmingUp = false,
-                        liveOutputText = ""
-                    )
+                    _benchmarkUiState.update {
+                        it.copy(
+                            isWarmingUp = false,
+                            liveOutputText = "",
+                        )
+                    }
                     isFirstWarmup = false
                 }
+
+                // Start a fresh sampling window after warm-up so the reported delta belongs
+                // to the formal benchmark rather than engine initialization or shader JIT.
+                startResourceSampler()
 
                 val session = benchmarkEngine.createConversation(
                     systemInstruction = null,
@@ -438,14 +510,18 @@ class ChatViewModel(
                             (estimatedTokens.toDouble() / (elapsedSinceFirstToken.toDouble() / 1000.0))
                         } else 0.0
 
-                        _benchmarkUiState.value = _benchmarkUiState.value.copy(
-                            liveOutputText = currentText,
-                            decodeTokensPerSecond = (liveTokensPerSec * 10).roundToInt() / 10.0,
-                            latencyMs = -1,
-                            decodeTokenCount = estimatedTokens
-                        )
+                        _benchmarkUiState.update {
+                            it.copy(
+                                liveOutputText = currentText,
+                                decodeTokensPerSecond = (liveTokensPerSec * 10).roundToInt() / 10.0,
+                                latencyMs = -1,
+                                decodeTokenCount = estimatedTokens,
+                            )
+                        }
                     }
                 }
+
+                stopResourceSampler()
 
                 val finishTime = Clock.System.now().toEpochMilliseconds()
                 val generationDuration = (finishTime - (firstTokenTime ?: finishTime)).coerceAtLeast(1)
@@ -492,37 +568,42 @@ class ChatViewModel(
                     initTime = 0.0
                 }
 
-                val (currentUsedRam, currentMaxRam) = getAppMemoryUsageMb()
-
-                _benchmarkUiState.value = _benchmarkUiState.value.copy(
-                    isRunning = false,
-                    isWarmingUp = false,
-                    hasCompletedTest = true,
-                    decodeTokensPerSecond = (finalDecodeTokensPerSec * 10).roundToInt() / 10.0,
-                    prefillTokensPerSecond = (finalPrefillTokensPerSec * 10).roundToInt() / 10.0,
-                    latencyMs = finalLatencyMs,
-                    prefillTokenCount = finalPrefillTokens,
-                    decodeTokenCount = finalDecodeTokens,
-                    initTimeMs = initTime,
-                    liveOutputText = fullOutputText,
-                    usedRamMb = currentUsedRam,
-                    maxRamMb = currentMaxRam
-                )
+                _benchmarkUiState.update {
+                    it.copy(
+                        isRunning = false,
+                        isWarmingUp = false,
+                        hasCompletedTest = true,
+                        decodeTokensPerSecond = (finalDecodeTokensPerSec * 10).roundToInt() / 10.0,
+                        prefillTokensPerSecond = (finalPrefillTokensPerSec * 10).roundToInt() / 10.0,
+                        latencyMs = finalLatencyMs,
+                        prefillTokenCount = finalPrefillTokens,
+                        decodeTokenCount = finalDecodeTokens,
+                        initTimeMs = initTime,
+                        liveOutputText = fullOutputText,
+                    )
+                }
             } catch (e: CancellationException) {
                 wasCancelled = true
-                _benchmarkUiState.value = _benchmarkUiState.value.copy(
-                    isRunning = false,
-                    isWarmingUp = false,
-                    errorMessage = "Benchmark cancelled."
-                )
+                _benchmarkUiState.update {
+                    it.copy(
+                        isRunning = false,
+                        isWarmingUp = false,
+                        errorMessage = "Benchmark cancelled.",
+                    )
+                }
             } catch (e: Throwable) {
                 e.printStackTrace()
-                _benchmarkUiState.value = _benchmarkUiState.value.copy(
-                    isRunning = false,
-                    isWarmingUp = false,
-                    errorMessage = e.message ?: "Benchmark failed."
-                )
+                _benchmarkUiState.update {
+                    it.copy(
+                        isRunning = false,
+                        isWarmingUp = false,
+                        errorMessage = e.message ?: "Benchmark failed.",
+                    )
+                }
             } finally {
+                withContext(NonCancellable) {
+                    stopResourceSampler()
+                }
                 // If not cancelled, close the conversation cleanly here.
                 // If cancelled, stopBenchmarkAndWait() safely owns closing the conversation
                 // only AFTER activeBenchmarkJob.cancelAndJoin() has completed.
@@ -2010,6 +2091,7 @@ class ChatViewModel(
         const val LM_BACKEND_CPU = "CPU"
         const val LM_BACKEND_GPU = "GPU"
         const val DEFAULT_LM_MAX_NUM_TOKENS = 8192
+        const val BENCHMARK_RESOURCE_SAMPLE_INTERVAL_MS = 200L
         const val MIN_LM_MAX_NUM_TOKENS = 128
         const val LM_MAX_NUM_TOKENS_STEP = 128
         const val METADATA_IS_GENERATING = "is_generating"
@@ -2127,7 +2209,6 @@ data class BenchmarkUiState(
     val errorMessage: String? = null,
     val hasCompletedTest: Boolean = false,
     val testPrompt: String = "Explain the theory of relativity and its core principles concisely.",
-    val usedRamMb: Long = 0,
-    val maxRamMb: Long = 0,
+    val resourceUsage: ProcessResourceUsage = ProcessResourceUsage(),
 )
 
