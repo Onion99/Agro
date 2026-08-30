@@ -7,7 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.2.0] - 2026-08-30
 - [修复] `ChatScreen.InputArea` 支持 Enter、Ctrl+Enter 和 Cmd+Enter 发送消息，Shift+Enter 继续换行；生成期间保留停止按钮行为。
-- [修复] 显式声明 `composeApp/src/androidMain/jniLibs` 为 Android JNI 输入目录，并确保 Bazel 生成任务在 Android JNI/native library 合并前执行，修复 `liblitertlm_jni.so` 未进入 APK/AAB 的问题。
 
 ## [1.2.0] - 2026-08-30
 - [新增] 全面扩展多语言国际化支持，新增 7 种语言本地化资源包（德语、韩语、西班牙语、俄语、法语等），README 文档支持 9 种语言全方位导航与对齐；静态扫描并彻底精简 49 项冗余字符串资源。
