@@ -87,6 +87,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalFocusManager
@@ -2197,7 +2205,17 @@ fun InputArea(
     onTextChange: (String) -> Unit
 ) {
     val isSingle = AppTheme.contentType == ContentType.Single
-
+    val inputKeyHandler: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = { event ->
+        if (event.type != KeyEventType.KeyDown || event.key != Key.Enter || isGenerating ||
+            event.isShiftPressed || event.isCtrlPressed || event.isMetaPressed ||
+            text.isEmpty() || !canSend
+        ) {
+            false
+        } else {
+            onSendClick()
+            true
+        }
+    }
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -2284,7 +2302,7 @@ fun InputArea(
                             MediumOutlinedTextField(
                                 value = text,
                                 onValueChange = onTextChange,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(inputKeyHandler),
                                 shape = RoundedCornerShape(20.dp),
                                 singleLine = false,
                                 colors = OutlinedTextFieldDefaults.colors(
@@ -2393,7 +2411,7 @@ fun InputArea(
                             MediumOutlinedTextField(
                                 value = text,
                                 onValueChange = onTextChange,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(inputKeyHandler),
                                 shape = RoundedCornerShape(20.dp),
                                 singleLine = false,
                                 colors = OutlinedTextFieldDefaults.colors(

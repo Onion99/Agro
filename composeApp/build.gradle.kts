@@ -243,6 +243,10 @@ android {
         }
     }
 
+    // The Bazel task materializes Android native libraries into this directory.
+    // Declare it explicitly so AGP packages the generated .so files in APK/AAB.
+    sourceSets["main"].jniLibs.srcDir(file("src/androidMain/jniLibs"))
+
     signingConfigs {
         create("release") {
             storeFile = file("release.jks")
@@ -1022,7 +1026,12 @@ tasks.register<BuildNativeLibTask>("buildAndroidNativeLib") {
 }
 
 // 让 Android 构建依赖 Bazel 原生库构建
-tasks.matching { it.name.contains("mergeDebugNativeLibs") || it.name.contains("mergeReleaseNativeLibs") }.configureEach {
+tasks.matching {
+    it.name.contains("mergeDebugNativeLibs") ||
+        it.name.contains("mergeReleaseNativeLibs") ||
+        it.name.contains("mergeDebugJniLibFolders") ||
+        it.name.contains("mergeReleaseJniLibFolders")
+}.configureEach {
     dependsOn("buildAndroidNativeLib")
 }
 
