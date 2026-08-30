@@ -410,7 +410,6 @@ class ChatViewModel(
                 activeSession = session
                 benchmarkConversation = session
 
-                val startTime = Clock.System.now().toEpochMilliseconds()
                 var firstTokenTime: Long? = null
                 var lastUiUpdateTime = 0L
                 val stringBuilder = StringBuilder()
@@ -449,7 +448,6 @@ class ChatViewModel(
                 }
 
                 val finishTime = Clock.System.now().toEpochMilliseconds()
-                val ttftDuration = ((firstTokenTime ?: finishTime) - startTime).coerceAtLeast(0)
                 val generationDuration = (finishTime - (firstTokenTime ?: finishTime)).coerceAtLeast(1)
                 val fullOutputText = stringBuilder.toString()
                 val finalEstimatedTokens = estimateTokenCount(fullOutputText)
@@ -490,7 +488,7 @@ class ChatViewModel(
                     } else 0.0
                     finalPrefillTokens = promptTokens
                     finalPrefillTokensPerSec = 0.0
-                    finalLatencyMs = ttftDuration
+                    finalLatencyMs = -1
                     initTime = 0.0
                 }
 
