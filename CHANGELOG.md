@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2026-08-30] - 优化中文导航文案
+- [修改] `values-zh/strings.xml`: 将 `setting` 导航项文案由“设置”调整为更易理解的“调试”。
+
 ## [2026-08-30] - 扫描并清理冗余字符串资源与补全国际化翻译
 - [优化] `strings.xml` & `values-zh/strings.xml`: 全量静态扫描代码工程，清理已废弃且未引用的 49 个字符串资源（涵盖早期 SD 图像/视频生成、废弃 Library Mock 卡片、未引用 BGM 重复项及未引用的模型预设文案），使默认与中文资源文件条目数从 291/290 精简至 242 项，键集达成 100% 对齐。
 - [修复] `values-zh/strings.xml`: 补齐 `unknown`（“未知”）在中文资源中的定义，修复导航路由 `RootRoute.kt` 引用该资源时的语言回退问题。
