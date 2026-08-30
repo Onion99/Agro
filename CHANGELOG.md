@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-30] - 重构 SettingScreen 基准测试流程与原生 Benchmark 指标提取
+- [重构] `ChatViewModel.kt`: 彻底解耦 Flow Chunk 回调与 Token 计数。基准测试改用确定性贪婪解码（`samplerConfig = null`），确保同 Prompt 连续测试生成结果 100% 可复现并消除随机波动；启动前自动确保底层引擎 `enableBenchmark` 原生插桩处于就绪状态；流式更新引入 80ms 节流并基于 BPE 分词估算实时吞吐率；测试完成优先提取 `litertlm.cc` 权威 `BenchmarkInfo`（包含精确解码/预填 Token 数、吞吐率与 TTFT），回退方案基于 `session.tokenCount()` 与真实文本分词，杜绝任何将 Chunk 回调次数充当 Token 的伪计算。
+- [新增] `TokenEstimator.kt`: 新增轻量级跨平台 BPE 分词估算器 `estimateTokenCount`，高效近似中英文、子词、标点符号与数字序列的 Token 数量。
+- [测试] 新增 `TokenEstimatorTest.kt`: 覆盖空字符串、空白符、英文词汇与长词子词切分、CJK 汉字序列及中英文混合文本的 Token 估算单元测试。
+- [文档] 更新 `docs/designs/app-context-management-design.md`: 增加第 7.9 节，确立基准测试确定性度量与 Token 统计设计契约。
+
 ## [2026-08-29] - 修复 Benchmark 取消顺序与 cancel/delete 竞态缺陷
 - [修复] `LmConversation.kt`: 在 `sendMessageAsync` 中引入 `CompletableDeferred` 原生终态追踪与同步屏障，`awaitClose` 及时触发 `cancelProcess()` 并在 `finally` 块中通过 `NonCancellable` 挂起等待 native 回调到达，确保流关闭前原生推理线程彻底停止；`close()` 增加保护性取消。
 - [修复] `ChatViewModel.kt`: Benchmark 取消复用「native cancel → cancelAndJoin → close」安全屏障，引入 `benchmarkStopMutex` 串行化防重入；`runBenchmarkTest` 在遇到取消时不再提前在 Job 的 `finally` 中 close 会话，改由 `stopBenchmarkAndWait` 在 `cancelAndJoin` 完整等待后统一安全销毁，彻底消除异步 native 推理与会话销毁间的 Use-After-Free 竞态。

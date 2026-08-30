@@ -329,3 +329,14 @@ Room 继续在同一条 assistant 消息中保存最终正文、有序 `toolCall
    system instruction、普通历史正文以及嵌套 tool response，规则与后续 send 路径一致。
 6. Room Schema v3 是工具协议断代点：v1/v2 数据库升级时直接删除全部旧表并按 v3 重建；旧会话
    不参与转换，仓库也不保留 v1/v2 migration 与 schema 快照。
+
+### 7.9 基准测试（Benchmark）确定性度量与 Token 统计契约
+
+SettingScreen 性能基准测试与底层 LiteRT-LM 交互遵循以下确定性与度量契约：
+
+1. **Flow Chunk 与 Token 彻底解耦**：JNI `sendMessageAsync` 发射的每个 Flow `Message` 是流式文本增量块（Chunk），可能包含多个 Token 或子词片段；严禁将 Chunk 回调次数当成 Token 数量。
+2. **流式阶段 BPE 快速分词估算与节流**：流式阶段使用 `estimateTokenCount(text)` 进行轻量无状态的 BPE 分词估算，并配合 80ms 时间窗口节流发射 UI 状态，防止 Compose 频繁重组抢占 CPU/GPU 线程资源并引发计时抖动。
+3. **完成阶段优先采用原生硬件级 BenchmarkInfo**：测试完成时，必须通过 `session.getBenchmarkInfo()` 提取 `litertlm.cc` 内部以 `std::chrono::steady_clock` 采集的权威指标（`lastDecodeTokenCount`, `lastPrefillTokenCount`, `lastDecodeTokensPerSecond`, `lastPrefillTokensPerSecond`, `timeToFirstToken`）。
+4. **健壮的 Native Step 回退**：若因极端情况未能提取原生 BenchmarkInfo，通过 `session.tokenCount()`（即 native `session_->GetCurrentStep()`）获取总步骤数，结合分词估算推导解码 Token 数，杜绝任何以 Chunk 数充当 Token 数的伪计算。
+5. **确定性贪婪解码保障低方差**：基准测试会话统一使用 `samplerConfig = null`（Greedy Decoding: `temperature = 0.0, topK = 1`），保证相同 Prompt 下每次测试生成的内容、长度与 Token 序列 100% 确定，消除随机采样带来的吞吐波动。
+6. **引擎原生插桩前置保障**：测试启动前检查引擎的 `enableBenchmark` 开关，若引擎未启用原生插桩则自动重置初始化，确保 C++ 侧的 `BenchmarkParams` 处于活跃就绪状态。

@@ -53,6 +53,7 @@ import org.onion.agro.native.llm.ContextCoordinator
 import org.onion.agro.native.llm.ContextStrategy
 import org.onion.agro.native.llm.GenerationOutputPolicy
 import org.onion.agro.native.llm.contextStrategy
+import org.onion.agro.native.llm.estimateTokenCount
 import agro.composeapp.generated.resources.Res
 import agro.composeapp.generated.resources.*
 import kotlinx.coroutines.IO
@@ -303,8 +304,8 @@ class ChatViewModel(
             return
         }
 
-        val engine = contextCoordinator.currentEngine()
-        if (engine == null) {
+        val currentEngine = contextCoordinator.currentEngine()
+        if (currentEngine == null) {
             inferenceLease.release()
             viewModelScope.launch {
                 showToast(getString(Res.string.llm_benchmark_no_model))
@@ -332,26 +333,41 @@ class ChatViewModel(
             var activeSession: LmConversation? = null
             var wasCancelled = false
             try {
+                // Ensure engine has enableBenchmark = true for litertlm.cc native metrics
+                val benchmarkEngine = if (!currentEngine.enableBenchmark || activeEnableBenchmark != true) {
+                    enableBenchmark.value = true
+                    _benchmarkUiState.value = _benchmarkUiState.value.copy(
+                        liveOutputText = "Preparing benchmark engine..."
+                    )
+                    contextCoordinator.closeAll()
+                    clearActiveLmEngineState()
+                    val newEngine = createLmEngine(currentLlmPath, lmBackend.value)
+                    newEngine.initialize()
+                    contextCoordinator.attachEngine(newEngine)
+                    updateActiveLmEngineState(currentLlmPath, lmBackend.value)
+                    newEngine
+                } else {
+                    currentEngine
+                }
+
                 // Ensure engine is ready (reuse existing engine if already initialized)
                 // Session Isolation: Create a completely independent conversation
-                // that is not registered in ContextCoordinator's slots and does not affect chat history
-                val session = engine.createConversation(
-                    systemInstruction = "You are a helpful and concise benchmark assistant.",
+                // that is not registered in ContextCoordinator's slots and does not affect chat history.
+                // For benchmark, use greedy decoding (samplerConfig = null) matching LiteRT native Benchmark.kt
+                // to eliminate stochastic variance and guarantee deterministic, reproducible runs.
+                val session = benchmarkEngine.createConversation(
+                    systemInstruction = null,
                     initialMessages = emptyList(),
                     toolsDescriptionJsonString = "[]",
                     strategy = ContextStrategy.ChatSession(maxOutputTokens = 256),
-                    samplerConfig = SamplerConfig(
-                        temperature = 0.7,
-                        topP = 0.9,
-                        topK = 40
-                    )
+                    samplerConfig = null
                 )
                 activeSession = session
                 benchmarkConversation = session
 
                 val startTime = Clock.System.now().toEpochMilliseconds()
                 var firstTokenTime: Long? = null
-                var tokenChunkCount = 0
+                var lastUiUpdateTime = 0L
                 val stringBuilder = StringBuilder()
 
                 val messageFlow = session.sendMessageAsync(
@@ -365,49 +381,78 @@ class ChatViewModel(
                     val text = message.contents.toString()
                     if (text.isNotEmpty()) {
                         stringBuilder.append(text)
-                        tokenChunkCount += 1
                     }
 
-                    val elapsedSinceFirstToken = (now - tokenTime).coerceAtLeast(1)
-                    val liveTtft = (tokenTime - startTime).coerceAtLeast(0)
-                    val liveTokensPerSec = if (tokenChunkCount > 0 && elapsedSinceFirstToken > 0) {
-                        (tokenChunkCount.toDouble() / (elapsedSinceFirstToken.toDouble() / 1000.0))
-                    } else 0.0
+                    // Throttle UI updates (every 80ms) to avoid Compose recomposition storm
+                    // which degrades CPU inference performance and causes timing jitter
+                    if (now - lastUiUpdateTime >= 80L || firstTokenTime == now) {
+                        lastUiUpdateTime = now
+                        val currentText = stringBuilder.toString()
+                        val estimatedTokens = estimateTokenCount(currentText)
+                        val elapsedSinceFirstToken = (now - tokenTime).coerceAtLeast(1)
+                        val liveTtft = (tokenTime - startTime).coerceAtLeast(0)
+                        val liveTokensPerSec = if (estimatedTokens > 0 && elapsedSinceFirstToken > 0) {
+                            (estimatedTokens.toDouble() / (elapsedSinceFirstToken.toDouble() / 1000.0))
+                        } else 0.0
 
-                    _benchmarkUiState.value = _benchmarkUiState.value.copy(
-                        liveOutputText = stringBuilder.toString(),
-                        decodeTokensPerSecond = (liveTokensPerSec * 10).roundToInt() / 10.0,
-                        latencyMs = liveTtft,
-                        decodeTokenCount = tokenChunkCount
-                    )
+                        _benchmarkUiState.value = _benchmarkUiState.value.copy(
+                            liveOutputText = currentText,
+                            decodeTokensPerSecond = (liveTokensPerSec * 10).roundToInt() / 10.0,
+                            latencyMs = liveTtft,
+                            decodeTokenCount = estimatedTokens
+                        )
+                    }
                 }
 
                 val finishTime = Clock.System.now().toEpochMilliseconds()
                 val ttftDuration = ((firstTokenTime ?: finishTime) - startTime).coerceAtLeast(0)
                 val generationDuration = (finishTime - (firstTokenTime ?: finishTime)).coerceAtLeast(1)
+                val fullOutputText = stringBuilder.toString()
+                val finalEstimatedTokens = estimateTokenCount(fullOutputText)
 
                 // Query C++ native benchmark info from litertlm.cc (nativeConversationGetBenchmarkInfo)
                 val nativeBenchmarkInfo = runCatching { session.getBenchmarkInfo() }.getOrNull()
 
-                val finalDecodeTokensPerSec = if (nativeBenchmarkInfo != null && nativeBenchmarkInfo.lastDecodeTokensPerSecond > 0) {
-                    nativeBenchmarkInfo.lastDecodeTokensPerSecond
-                } else if (tokenChunkCount > 0) {
-                    tokenChunkCount.toDouble() / (generationDuration.toDouble() / 1000.0)
-                } else 0.0
+                val finalDecodeTokens: Int
+                val finalDecodeTokensPerSec: Double
+                val finalPrefillTokens: Int
+                val finalPrefillTokensPerSec: Double
+                val finalLatencyMs: Long
+                val initTime: Double
 
-                val finalPrefillTokensPerSec = nativeBenchmarkInfo?.lastPrefillTokensPerSecond ?: 0.0
-                val finalLatencyMs = if (nativeBenchmarkInfo != null && nativeBenchmarkInfo.timeToFirstToken > 0) {
-                    (nativeBenchmarkInfo.timeToFirstToken * 1000).toLong()
+                if (nativeBenchmarkInfo != null && nativeBenchmarkInfo.lastDecodeTokensPerSecond > 0) {
+                    // Authoritative C++ steady_clock hardware-level metrics from litertlm.cc
+                    finalDecodeTokens = nativeBenchmarkInfo.lastDecodeTokenCount
+                    finalDecodeTokensPerSec = nativeBenchmarkInfo.lastDecodeTokensPerSecond
+                    finalPrefillTokens = nativeBenchmarkInfo.lastPrefillTokenCount
+                    finalPrefillTokensPerSec = nativeBenchmarkInfo.lastPrefillTokensPerSecond
+                    finalLatencyMs = if (nativeBenchmarkInfo.timeToFirstToken > 0) {
+                        (nativeBenchmarkInfo.timeToFirstToken * 1000).toLong()
+                    } else {
+                        ttftDuration
+                    }
+                    initTime = if (nativeBenchmarkInfo.totalInitTimeMs < 100.0) {
+                        nativeBenchmarkInfo.totalInitTimeMs * 1000.0
+                    } else {
+                        nativeBenchmarkInfo.totalInitTimeMs
+                    }
                 } else {
-                    ttftDuration
+                    // Robust fallback: query session.tokenCount() (session_->GetCurrentStep())
+                    val totalStepCount = runCatching { session.tokenCount() }.getOrDefault(0)
+                    val promptTokens = estimateTokenCount(promptContent)
+                    finalDecodeTokens = if (totalStepCount > 0) {
+                        (totalStepCount - promptTokens).coerceAtLeast(finalEstimatedTokens)
+                    } else {
+                        finalEstimatedTokens
+                    }
+                    finalDecodeTokensPerSec = if (finalDecodeTokens > 0) {
+                        finalDecodeTokens.toDouble() / (generationDuration.toDouble() / 1000.0)
+                    } else 0.0
+                    finalPrefillTokens = promptTokens
+                    finalPrefillTokensPerSec = 0.0
+                    finalLatencyMs = ttftDuration
+                    initTime = 0.0
                 }
-                val finalPrefillTokens = nativeBenchmarkInfo?.lastPrefillTokenCount ?: 0
-                val finalDecodeTokens = if (nativeBenchmarkInfo != null && nativeBenchmarkInfo.lastDecodeTokenCount > 0) {
-                    nativeBenchmarkInfo.lastDecodeTokenCount
-                } else {
-                    tokenChunkCount
-                }
-                val initTime = nativeBenchmarkInfo?.totalInitTimeMs ?: 0.0
 
                 val (currentUsedRam, currentMaxRam) = getAppMemoryUsageMb()
 
@@ -420,7 +465,7 @@ class ChatViewModel(
                     prefillTokenCount = finalPrefillTokens,
                     decodeTokenCount = finalDecodeTokens,
                     initTimeMs = initTime,
-                    liveOutputText = stringBuilder.toString(),
+                    liveOutputText = fullOutputText,
                     usedRamMb = currentUsedRam,
                     maxRamMb = currentMaxRam
                 )
