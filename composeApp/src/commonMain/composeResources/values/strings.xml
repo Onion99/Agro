@@ -178,7 +178,7 @@
     <string name="llm_benchmark_hardware_title">Backend Resource Usage</string>
     <string name="llm_benchmark_process_cpu">Process CPU (CPU backend)</string>
     <string name="llm_benchmark_backend_compute">%1$s Compute</string>
-    <string name="llm_benchmark_process_memory">%1$s Process Memory</string>
+    <string name="llm_benchmark_process_memory">App Memory Usage</string>
     <string name="llm_benchmark_cpu_current">Current %1$d%%</string>
     <string name="llm_benchmark_cpu_peak">Peak %1$d%%</string>
     <string name="llm_benchmark_metric_unavailable">Telemetry unavailable</string>

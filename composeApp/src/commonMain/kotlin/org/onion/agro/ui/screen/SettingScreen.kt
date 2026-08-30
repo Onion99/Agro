@@ -1216,7 +1216,7 @@ fun HardwareUtilizationCard(
                 val peakMemoryDeltaBytes = resourceUsage.peakResidentMemoryDeltaBytes
                 val memoryText = when {
                     displayedMemoryBytes == null -> {
-                        stringResource(Res.string.llm_benchmark_metric_unavailable)
+                        ""
                     }
                     hasBenchmarkMemoryWindow -> stringResource(
                         Res.string.llm_benchmark_memory_peak_delta,
@@ -1229,7 +1229,7 @@ fun HardwareUtilizationCard(
                     )
                 }
                 BenchmarkProgressBar(
-                    label = stringResource(Res.string.llm_benchmark_process_memory, normalizedBackend),
+                    label = stringResource(Res.string.llm_benchmark_process_memory),
                     valueText = memoryText,
                     progress = if (
                         displayedMemoryBytes != null &&

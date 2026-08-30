@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [2026-08-30] - 修正 SettingScreen Backend 资源遥测与 Benchmark 峰值采样
-- [修复] `SettingScreen.kt` 移除固定 95% 的 Engine Compute 占位值和无真实字节依据的 KV Cache 进度；CPU Backend 展示真实进程 CPU 负载，GPU/NPU 无可靠驱动计数器时明确显示遥测不可用。
+- [修复] `SettingScreen.kt` 移除固定 95% 的 Engine Compute 占位值和无真实字节依据的 KV Cache 进度；CPU Backend 展示真实进程 CPU 负载，GPU/NPU 无可靠驱动计数器时明确标注为等待开发。
 - [重构] `MemoryUtils` expect/actual 接口改为真实进程资源快照：Android 采集 `/proc` RSS/PSS、系统物理内存与进程 CPU 时间；Windows/Linux/macOS Desktop 采集 OS 工作集/RSS；iOS 通过 Mach、`NSProcessInfo` 与 `getrusage` 替代固定 `256/4096 MB`。
 - [优化] `ChatViewModel` 在 Warmup 后以 200ms 周期采样正式 Benchmark，聚合进程内存峰值、相对起始基线增量以及归一化 CPU 当前值/峰值；取消与异常路径同步回收采样 Job，StateFlow 改用原子更新避免流式输出覆盖资源样本。
 - [测试] 新增 `ProcessResourceTrackerTest` 与 `PlatformProcessResourceSnapshotTest`，覆盖峰值/增量、CPU 多核归一化、不可用指标和当前平台真实资源计数器。

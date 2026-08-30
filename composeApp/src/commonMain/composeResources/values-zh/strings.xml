@@ -177,10 +177,10 @@
     <string name="llm_benchmark_hardware_title">后端资源占用</string>
     <string name="llm_benchmark_process_cpu">进程 CPU（CPU 后端）</string>
     <string name="llm_benchmark_backend_compute">%1$s 计算占用</string>
-    <string name="llm_benchmark_process_memory">%1$s 进程内存</string>
+    <string name="llm_benchmark_process_memory">应用内存占用</string>
     <string name="llm_benchmark_cpu_current">当前 %1$d%%</string>
     <string name="llm_benchmark_cpu_peak">峰值 %1$d%%</string>
-    <string name="llm_benchmark_metric_unavailable">系统未提供遥测</string>
+    <string name="llm_benchmark_metric_unavailable">等待开发</string>
     <string name="llm_benchmark_metric_not_measured">尚未测量</string>
     <string name="llm_benchmark_memory_current">当前 %1$d MB</string>
     <string name="llm_benchmark_memory_peak_delta">峰值 %1$d MB（测试增量 +%2$d MB）</string>
