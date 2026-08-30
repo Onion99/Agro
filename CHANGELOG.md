@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-30] - 国际化 (README 文档与 App 端内多语言)
+- [新增] `README`: 新增 5 份本地化 README 文档：德语 (`README.de.md`)、韩语 (`README.ko.md`)、西班牙语 (`README.es.md`)、俄语 (`README.ru.md`)、法语 (`README.fr.md`)，并联动更新已有 4 份文档（英文、简中、繁中、日文）的顶部 9 语言导航栏。
+- [新增] `composeApp/composeResources`: 全量新增 7 个语言本地化资源包
+- [文档] 更新 `docs/agents/i18n-guide.md`：记录支持的 9 种语言限定符目录，确立 100% 键对齐与防机械机翻规范。
+
 ## [2026-08-30] - 扫描并清理冗余字符串资源与补全国际化翻译
 - [优化] `strings.xml` & `values-zh/strings.xml`: 全量静态扫描代码工程，清理已废弃且未引用的 49 个字符串资源（涵盖早期 SD 图像/视频生成、废弃 Library Mock 卡片、未引用 BGM 重复项及未引用的模型预设文案），使默认与中文资源文件条目数从 291/290 精简至 242 项，键集达成 100% 对齐。
 - [修复] `values-zh/strings.xml`: 补齐 `unknown`（“未知”）在中文资源中的定义，修复导航路由 `RootRoute.kt` 引用该资源时的语言回退问题。
