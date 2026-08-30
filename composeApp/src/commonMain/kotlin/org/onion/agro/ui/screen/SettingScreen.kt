@@ -1043,6 +1043,7 @@ fun ThroughputTestCard(
                     }
                 )
 
+                println("bench info: $benchmarkState")
                 if (benchmarkState.prefillTokensPerSecond > 0) {
                     Spacer(modifier = Modifier.height(AppTheme.spacing.xs))
                     Text(
