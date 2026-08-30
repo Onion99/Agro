@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-08-30
+- [新增] 全面扩展多语言国际化支持，新增 7 种语言本地化资源包（德语、韩语、西班牙语、俄语、法语等），README 文档支持 9 种语言全方位导航与对齐；静态扫描并彻底精简 49 项冗余字符串资源。
+- [重构] 深度重构端侧基准测试（Benchmark）流程与度量体系，支持从 LiteRT 原生 C++ 权威提取首字时延（TTFT）、预填速度、解码吞吐率，并基于确定性贪婪解码与 BPE 分词实现精确流式测速。
+- [新增] 基准测试引入两阶段预热（Warmup）消除冷启动与 GPU/Vulkan 管线编译方差；跨平台真实采集物理/虚拟内存峰值、增量与多核 CPU 负载（Android / iOS / Desktop）。
+- [修复] 引入原子推理租约（`LmInferenceGate`）与安全取消屏障，彻底消除 Chat 与 Benchmark 并发冲突及异步推理 Use-After-Free 竞态崩溃。
+- [新增] `ModelScreen` 新增符合 Ethereal Minimalism 设计系统的微晶毛玻璃开关胶囊 `EtherealBenchmarkPill`，支持无缝联动与极简模式切换。
+- [修复] 补齐 iOS Kotlin/Native Benchmark Cinterop 结构体与符号映射，解决跨平台构建阻断。
+
 ## [2026-08-30] - 国际化 (README 文档与 App 端内多语言)
 - [新增] `README`: 新增 5 份本地化 README 文档：德语 (`README.de.md`)、韩语 (`README.ko.md`)、西班牙语 (`README.es.md`)、俄语 (`README.ru.md`)、法语 (`README.fr.md`)，并联动更新已有 4 份文档（英文、简中、繁中、日文）的顶部 9 语言导航栏。
 - [新增] `composeApp/composeResources`: 全量新增 7 个语言本地化资源包
