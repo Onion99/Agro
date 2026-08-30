@@ -1140,10 +1140,6 @@ class ChatViewModel(
 
     }
 
-    fun reGenerateMessage(message: ChatMessage) {
-        val prompt = message.metadata?.get("prompt") ?: return
-        val negativePrompt = message.metadata?.get("negative_prompt") ?: ""
-    }
 
     fun startNewConversation() = startConversation(ChatSessionMode.DEFAULT)
 

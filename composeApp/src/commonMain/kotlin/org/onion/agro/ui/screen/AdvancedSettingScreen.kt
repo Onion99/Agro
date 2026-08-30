@@ -68,7 +68,6 @@ import agro.composeapp.generated.resources.settings_keep_clip_on_cpu_desc
 import agro.composeapp.generated.resources.settings_keep_vae_on_cpu
 import agro.composeapp.generated.resources.settings_keep_vae_on_cpu_desc
 import agro.composeapp.generated.resources.settings_quant_auto
-import agro.composeapp.generated.resources.settings_quant_default
 import agro.composeapp.generated.resources.settings_quant_info
 import agro.composeapp.generated.resources.settings_quantization
 import agro.composeapp.generated.resources.settings_quantization_desc

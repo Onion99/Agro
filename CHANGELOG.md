@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2026-08-30] - 扫描并清理冗余字符串资源与补全国际化翻译
+- [优化] `strings.xml` & `values-zh/strings.xml`: 全量静态扫描代码工程，清理已废弃且未引用的 49 个字符串资源（涵盖早期 SD 图像/视频生成、废弃 Library Mock 卡片、未引用 BGM 重复项及未引用的模型预设文案），使默认与中文资源文件条目数从 291/290 精简至 242 项，键集达成 100% 对齐。
+- [修复] `values-zh/strings.xml`: 补齐 `unknown`（“未知”）在中文资源中的定义，修复导航路由 `RootRoute.kt` 引用该资源时的语言回退问题。
+- [清理] `AdvancedSettingScreen.kt` & `ChatScreen.kt`: 移除残留的无用资源导入 `settings_quant_default` 与 `user_image`。
 
 ## [2026-08-30] - 修正 SettingScreen Backend 资源遥测与 Benchmark 峰值采样
 - [修复] `SettingScreen.kt` 移除固定 95% 的 Engine Compute 占位值和无真实字节依据的 KV Cache 进度；CPU Backend 展示真实进程 CPU 负载，GPU/NPU 无可靠驱动计数器时明确标注为等待开发。

@@ -144,7 +144,6 @@ import agro.composeapp.generated.resources.chat_input_hint_mobile
 import agro.composeapp.generated.resources.copy
 import agro.composeapp.generated.resources.creating
 import agro.composeapp.generated.resources.delete
-import agro.composeapp.generated.resources.error_no_interrupt_api
 import agro.composeapp.generated.resources.export
 import agro.composeapp.generated.resources.history_empty
 import agro.composeapp.generated.resources.history_exported
@@ -187,7 +186,6 @@ import agro.composeapp.generated.resources.lottie_render_failed
 import agro.composeapp.generated.resources.lottie_save_failed
 import agro.composeapp.generated.resources.lottie_save_json
 import agro.composeapp.generated.resources.lottie_saved
-import agro.composeapp.generated.resources.user_image
 import kotlinx.coroutines.IO
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
@@ -1096,15 +1094,7 @@ private fun ChatMessagesList(
                                 }
                             }
                         },
-                        onRegenerate = if (message.metadata?.containsKey("prompt") == true) {
-                            {
-                                if (chatViewModel.isGenerating.value) {
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar(getString(Res.string.error_no_interrupt_api))
-                                    }
-                                } else chatViewModel.reGenerateMessage(message)
-                            }
-                        } else null,
+                        onRegenerate =  null,
                         onCopyText = { textToCopy ->
                             clipboardManager.setText(AnnotatedString(textToCopy))
                             coroutineScope.launch {

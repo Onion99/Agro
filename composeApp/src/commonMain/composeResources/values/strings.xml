@@ -5,16 +5,12 @@
     <string name="library">Library</string>
     <string name="setting">Setting</string>
     <string name="unknown">unknown</string>
-    <string name="local_intelligence">Local Intelligence</string>
     <string name="light_theme">Light Theme</string>
     <string name="dark_theme">Dark Theme</string>
     <string name="error_select_correct_llm_model">Please select a valid LLM model file</string>
     <string name="feature_not_available">Feature not available</string>
-    <string name="error_no_interrupt_api">Interruption not supported due to missing API in StableDiffusion-CPP</string>
     <string name="scroll_to_bottom">Scroll to bottom</string>
-    <string name="ask_anything_placeholder">Please enter your prompt word, format: prompt word | negative prompt word</string>
     <string name="attachment">Attachment</string>
-    <string name="clear">Clear</string>
     <string name="delete">Delete</string>
     <string name="rename">Rename</string>
     <string name="export">Export</string>
@@ -23,20 +19,11 @@
     <string name="text_copied">Text copied to clipboard</string>
     <string name="stop_generation">Stop generation</string>
     <string name="send_message">Send message</string>
-    <string name="user_avatar">User Avatar</string>
-    <string name="ai_avatar">AI Avatar</string>
-    <string name="user_image">User Image</string>
     <string name="ai_image">AI Image</string>
-    <string name="select_llm_model_title">Select Your Diffusion Model</string>
     <string name="loading">Loading...</string>
-    <string name="select">Select</string>
     <string name="creating">Creating</string>
     <string name="save_image">Save Image</string>
     <string name="regenerate">Regenerate</string>
-    <string name="image_saved">Image saved successfully</string>
-    <string name="image_save_failed">Failed to save image</string>
-    <string name="image_generation_finished">Image generation completed: %1$s</string>
-    <string name="video_generation_finished">Video generation completed: %1$s, %2$s frames</string>
 
     <!-- Settings Screen -->
     <string name="settings_title">Settings</string>
@@ -69,7 +56,6 @@
     <string name="settings_quantization">Model Weight Type (wtype)</string>
     <string name="settings_quantization_desc">Controls how model weights are stored in memory. Higher precision = better quality but more RAM.</string>
     <string name="settings_quantization_warning">⚠️ Advanced users only. Changing this requires re-loading the model (long initialization) and may cause quality degradation. Most users should keep "Auto".</string>
-    <string name="settings_quant_default">Default (F32)</string>
     <string name="settings_quant_auto">Auto</string>
     <string name="settings_quant_info">• Auto: Library selects optimal type\n• F32: Full precision, ~8GB RAM, best quality\n• F16: Half precision, ~4GB RAM, minimal loss\n• BF16: Brain Float 16, ~4GB, modern hardware optimized\n• Q8_0: 8-bit quantized, ~2GB RAM, slight loss\n• Q6_K: 6-bit K-variant, ~1.5GB, good balance\n• Q5_K: 5-bit K-variant, ~1.3GB, better than Q5_0\n• Q5_0: 5-bit legacy, ~1.2GB, noticeable loss\n• Q4_K: 4-bit K-variant, ~1GB, better than Q4_0\n• Q4_0: 4-bit legacy, ~1GB, quality compromise\n• Q3_K: 3-bit K-variant, ~0.7GB, low memory\n• Q2_K: 2-bit K-variant, ~0.5GB, extreme compression\n\nNote: K-variants offer better quality at same bit-depth.</string>
     <string name="settings_offload_to_cpu">Offload to CPU</string>
@@ -87,31 +73,17 @@
     <string name="settings_lora_add">Add LoRA</string>
     <string name="settings_lora_strength">Strength: %1$s</string>
     <string name="settings_lora_remove">Remove</string>
-    <string name="settings_lora_files">LoRA Files (*.safetensors)</string>
 
     <!-- Model Selection Screen -->
-    <string name="model_select_title">Neural Architecture</string>
-    <string name="model_select_subtitle">Select a local language model to load into memory. Each architecture offers a different balance of contemplative reasoning, creative generation, and structural discipline.</string>
-    <string name="model_select_mobile_title">Select Model</string>
-    <string name="model_select_mobile_subtitle">Choose a local intelligence engine.</string>
-    <string name="model_section_active">Active</string>
-    <string name="model_section_available">Available</string>
-    <string name="model_qwen3_title">Qwen 3 4B</string>
-    <string name="model_qwen3_tagline">Multilingual, optimized for reasoning</string>
-    <string name="model_qwen3_desc">A high-performance multilingual model optimized for reasoning and chat. Developed by Alibaba Cloud.</string>
     <string name="model_ministral3_title">Ministral-3-3B</string>
-    <string name="model_ministral3_tagline">Edge-optimized reasoning &amp; instruct model</string>
     <string name="model_ministral3_desc">A state-of-the-art 3B instruction model developed by Mistral AI, optimized for on-device reasoning and chat.</string>
     <string name="model_gemma4_title">Gemma 4 4B</string>
-    <string name="model_gemma4_tagline">Google's next-generation intelligence</string>
     <string name="model_gemma4_desc">Google's next-generation open model, offering advanced reasoning, instruction following, and creative capabilities in a compact size.</string>
     <string name="model_action_download">Download Model</string>
     <string name="model_custom_title">Custom Local Model</string>
     <string name="model_custom_tagline">Load any compatible LiteRT/TFLite model</string>
-    <string name="model_custom_desc">Select a custom model weight file from your local storage to initialize the neural engine.</string>
     <string name="model_action_load">Load Model</string>
     <string name="model_action_active">Active Engine</string>
-    <string name="model_action_select_file">Select File</string>
     <string name="new_chat">New Spark</string>
     <string name="history">History</string>
     <string name="history_search_hint">Search history</string>
@@ -185,8 +157,6 @@
     <string name="llm_benchmark_metric_not_measured">Not measured</string>
     <string name="llm_benchmark_memory_current">Current %1$d MB</string>
     <string name="llm_benchmark_memory_peak_delta">Peak %1$d MB (test +%2$d MB)</string>
-    <string name="llm_benchmark_cpu_scope_note">CPU load is sampled for the whole app process and normalized across logical processors.</string>
-    <string name="llm_benchmark_accelerator_scope_note">Process memory includes host-visible %1$s/native allocations; device-private accelerator memory is not reported.</string>
     <string name="llm_benchmark_live_output">Live Output Preview</string>
     <string name="llm_benchmark_no_model">Please select and load an LLM model first.</string>
     <string name="llm_benchmark_prompt_label">Test Prompt</string>
@@ -198,7 +168,6 @@
     <string name="llm_benchmark_model_loading">Model is loading. Please wait for it to complete.</string>
     <string name="llm_benchmark_hint">Click \"Run Test\" to start throughput analysis. Generated tokens will stream here in real time.</string>
     <string name="model_benchmark_toggle_title">Benchmark</string>
-    <string name="model_benchmark_toggle_desc">Enable performance diagnostic module</string>
     <string name="model_download_queued">Queued...</string>
     <string name="model_download_paused">Paused</string>
     <string name="model_download_failed">Failed: %1$s</string>
@@ -225,22 +194,9 @@
     <string name="library_title">Ethereal Library</string>
     <string name="library_desc">A curated collection of your intellectual vessels. Access refined skills, specialized knowledge bases, and deep-dive conceptual tools.</string>
     <string name="library_living_memory">Living Memory</string>
-    <string name="library_status_active">Active</string>
     <string name="library_memory_desc">Resuming your most intricate threads of thought...</string>
-    <string name="library_time_10m">10m ago</string>
-    <string name="library_time_2h">2h ago</string>
-    <string name="library_time_yesterday">Yesterday</string>
-    <string name="library_thread_1">Synthesis of Gris color palettes and emotive UI</string>
-    <string name="library_thread_2">Quantum entanglement metaphors in poetry</string>
-    <string name="library_thread_3">Refining the watercolor diffusion algorithm</string>
-    <string name="library_logic_vessel">Logic Vessel</string>
-    <string name="library_logic_desc">Strictly typed structure and semantic code generation.</string>
-    <string name="library_creative_nebula">Creative Nebula</string>
-    <string name="library_creative_desc">Expansive, unconstrained prose and artistic ideation.</string>
     <string name="library_chiptune_bgm">8-bit BGM</string>
     <string name="library_chiptune_bgm_desc">Compose a loopable chiptune score and render it locally as WAV.</string>
-    <string name="library_data_crystal">Data Crystal</string>
-    <string name="library_data_desc">Fractal analysis and hard pattern recognition.</string>
     <string name="library_lottie_animation">Lottie Animation</string>
     <string name="library_lottie_animation_desc">Generate lightweight Lottie JSON micro-animations and preview them locally.</string>
     <string name="library_lottie_json_label">JSON</string>
@@ -260,7 +216,6 @@
     <string name="chat_context_svg_description">Creates safe, self-contained vector images</string>
     <string name="chat_context_bgm_description">Creates JSON + MML chiptunes and renders local WAV audio</string>
     <string name="chat_context_lottie_description">Creates constrained Lottie specs and previews local JSON animations</string>
-    <string name="chat_context_not_applied">Waiting for the model context</string>
     <string name="chat_context_wait_until_ready">The model is still preparing the selected context. Please wait a moment.</string>
     <string name="chat_context_current_instruction">Current System Instruction</string>
     <string name="chat_context_expand">Show system instruction</string>
@@ -282,19 +237,14 @@
     <string name="lottie_duration_minutes">%1$dm %2$02ds</string>
     <string name="bgm_play">Play</string>
     <string name="bgm_pause">Pause</string>
-    <string name="bgm_stop">Stop</string>
     <string name="bgm_copy_spec">Copy score JSON</string>
     <string name="bgm_save_wav">Save WAV</string>
-    <string name="bgm_save">Save WAV</string>
-    <string name="bgm_copy_source">Copy score JSON</string>
     <string name="bgm_saved">BGM saved successfully</string>
     <string name="bgm_save_failed">Failed to save BGM</string>
     <string name="bgm_player_error">Playback failed: %1$s</string>
-    <string name="bgm_audio_details">%1$d BPM · %2$d Hz · %3$d-bit</string>
     <string name="chat_running_tool">\n`[Running tool: %1$s...]`\n</string>
     <string name="chat_tool_completed">\n`[Tool \'%1$s\' completed]`\n</string>
     <string name="library_8bit_bgm">8-Bit BGM</string>
-    <string name="library_8bit_bgm_desc">Generate loopable chiptune JSON and render it as playable WAV audio.</string>
     <string name="library_8bit_chip_label">8BIT</string>
     <string name="bgm_audio_default_title">8-Bit BGM</string>
     <string name="bgm_audio_metadata">%1$d Hz · %2$d-bit · %3$s</string>
