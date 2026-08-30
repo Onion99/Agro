@@ -1008,7 +1008,9 @@ fun ThroughputTestCard(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                val displayText = if (benchmarkState.decodeTokensPerSecond > 0) {
+                val displayText = if (benchmarkState.isWarmingUp) {
+                    "..."
+                } else if (benchmarkState.decodeTokensPerSecond > 0) {
                     "${benchmarkState.decodeTokensPerSecond}"
                 } else if (benchmarkState.isRunning) {
                     "..."
@@ -1028,9 +1030,17 @@ fun ThroughputTestCard(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = stringResource(Res.string.llm_benchmark_tokens_per_second),
+                    text = if (benchmarkState.isWarmingUp) {
+                        stringResource(Res.string.llm_benchmark_warming_up)
+                    } else {
+                        stringResource(Res.string.llm_benchmark_tokens_per_second)
+                    },
                     style = AppTheme.typography.bodyMedium,
-                    color = AppTheme.colors.onSurfaceVariant.copy(alpha = 0.75f)
+                    color = if (benchmarkState.isWarmingUp) {
+                        AppTheme.colors.primary
+                    } else {
+                        AppTheme.colors.onSurfaceVariant.copy(alpha = 0.75f)
+                    }
                 )
 
                 if (benchmarkState.prefillTokensPerSecond > 0) {
@@ -1451,7 +1461,11 @@ fun BenchmarkLiveOutputCard(
                     )
                 } else if (benchmarkState.isRunning) {
                     Text(
-                        text = stringResource(Res.string.llm_benchmark_running),
+                        text = if (benchmarkState.isWarmingUp) {
+                            stringResource(Res.string.llm_benchmark_warming_up)
+                        } else {
+                            stringResource(Res.string.llm_benchmark_running)
+                        },
                         style = AppTheme.typography.bodySmall,
                         color = AppTheme.colors.primary.copy(alpha = 0.8f)
                     )

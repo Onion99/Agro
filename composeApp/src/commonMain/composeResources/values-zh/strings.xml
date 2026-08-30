@@ -168,6 +168,7 @@
     <string name="llm_benchmark_throughput_title">吞吐量测试</string>
     <string name="llm_benchmark_run_test">运行测试</string>
     <string name="llm_benchmark_running">测试中...</string>
+    <string name="llm_benchmark_warming_up">正在预热引擎...</string>
     <string name="llm_benchmark_stop">停止</string>
     <string name="llm_benchmark_tokens_per_second">Token / 秒</string>
     <string name="llm_benchmark_latency">延迟: %1$dms</string>

@@ -69,7 +69,6 @@ import org.onion.agro.message.ChiptuneBgmMessageParser
 import org.onion.agro.message.LottieMessageParser
 import org.onion.agro.lottie.LottieSceneContract
 import org.onion.agro.utils.getAppMemoryUsageMb
-import com.google.ai.edge.litertlm.BenchmarkInfo
 
 class ChatViewModel(
     private val chatHistoryRepository: ChatHistoryRepository
@@ -264,6 +263,7 @@ class ChatViewModel(
         )
     }
 
+    private var isFirstWarmup = true
     fun runBenchmarkTest(customPrompt: String? = null) {
         if (_benchmarkUiState.value.isRunning) return
 
@@ -321,8 +321,9 @@ class ChatViewModel(
 
         _benchmarkUiState.value = _benchmarkUiState.value.copy(
             isRunning = true,
+            isWarmingUp = isFirstWarmup,
             errorMessage = null,
-            liveOutputText = "",
+            liveOutputText = if(isFirstWarmup) "Warming up engine..." else "",
             contextTokens = lmMaxNumTokens.value,
             usedRamMb = usedRam,
             maxRamMb = maxRam
@@ -350,11 +351,55 @@ class ChatViewModel(
                     currentEngine
                 }
 
-                // Ensure engine is ready (reuse existing engine if already initialized)
-                // Session Isolation: Create a completely independent conversation
-                // that is not registered in ContextCoordinator's slots and does not affect chat history.
-                // For benchmark, use greedy decoding (samplerConfig = null) matching LiteRT native Benchmark.kt
-                // to eliminate stochastic variance and guarantee deterministic, reproducible runs.
+                if(isFirstWarmup){
+                    // ==========================================
+                    // PHASE 1: WARM-UP (预热跑测并抛弃结果)
+                    // ==========================================
+                    // 端侧推理在首次推理时存在 GPU Shaders/Vulkan 管线编译、内核 JIT、内存分页与线程池启动开销。
+                    // 先行执行一段短预热会话并彻底丢弃其输出与耗时，消除首轮冷启动与第二轮热机之间的显著方差。
+                    _benchmarkUiState.value = _benchmarkUiState.value.copy(
+                        isWarmingUp = true,
+                        liveOutputText = "Warming up compute pipeline & GPU kernels..."
+                    )
+
+                    val warmupSession = benchmarkEngine.createConversation(
+                        systemInstruction = null,
+                        initialMessages = emptyList(),
+                        toolsDescriptionJsonString = "[]",
+                        strategy = ContextStrategy.ChatSession(maxOutputTokens =256),
+                        samplerConfig = null // Greedy decoding
+                    )
+                    activeSession = warmupSession
+                    benchmarkConversation = warmupSession
+
+                    // 收集预热流并丢弃输出
+                    val warmupFlow = warmupSession.sendMessageAsync(
+                        message = org.onion.agro.native.llm.Message.user(promptContent),
+                        extraContext = emptyMap()
+                    )
+                    warmupFlow.collect {
+                        // Discard warmup chunks
+                    }
+
+                    // 预热完成，安全关闭预热会话
+                    try {
+                        warmupSession.close()
+                    } catch (e: Throwable) {
+                        // ignore
+                    }
+                    activeSession = null
+                    benchmarkConversation = null
+
+                    // ==========================================
+                    // PHASE 2: FORMAL BENCHMARK (正式基准测试)
+                    // ==========================================
+                    _benchmarkUiState.value = _benchmarkUiState.value.copy(
+                        isWarmingUp = false,
+                        liveOutputText = ""
+                    )
+                    isFirstWarmup = false
+                }
+
                 val session = benchmarkEngine.createConversation(
                     systemInstruction = null,
                     initialMessages = emptyList(),
@@ -458,6 +503,7 @@ class ChatViewModel(
 
                 _benchmarkUiState.value = _benchmarkUiState.value.copy(
                     isRunning = false,
+                    isWarmingUp = false,
                     hasCompletedTest = true,
                     decodeTokensPerSecond = (finalDecodeTokensPerSec * 10).roundToInt() / 10.0,
                     prefillTokensPerSecond = (finalPrefillTokensPerSec * 10).roundToInt() / 10.0,
@@ -473,12 +519,14 @@ class ChatViewModel(
                 wasCancelled = true
                 _benchmarkUiState.value = _benchmarkUiState.value.copy(
                     isRunning = false,
+                    isWarmingUp = false,
                     errorMessage = "Benchmark cancelled."
                 )
             } catch (e: Throwable) {
                 e.printStackTrace()
                 _benchmarkUiState.value = _benchmarkUiState.value.copy(
                     isRunning = false,
+                    isWarmingUp = false,
                     errorMessage = e.message ?: "Benchmark failed."
                 )
             } finally {
@@ -532,6 +580,7 @@ class ChatViewModel(
             if (_benchmarkUiState.value.isRunning) {
                 _benchmarkUiState.value = _benchmarkUiState.value.copy(
                     isRunning = false,
+                    isWarmingUp = false,
                     errorMessage = "Benchmark cancelled."
                 )
             }
@@ -2073,6 +2122,7 @@ class ChatViewModel(
 
 data class BenchmarkUiState(
     val isRunning: Boolean = false,
+    val isWarmingUp: Boolean = false,
     val decodeTokensPerSecond: Double = 0.0,
     val prefillTokensPerSecond: Double = 0.0,
     val latencyMs: Long = 0,

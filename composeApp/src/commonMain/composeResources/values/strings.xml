@@ -169,6 +169,7 @@
     <string name="llm_benchmark_throughput_title">Throughput Test</string>
     <string name="llm_benchmark_run_test">Run Test</string>
     <string name="llm_benchmark_running">Running...</string>
+    <string name="llm_benchmark_warming_up">Warming up engine...</string>
     <string name="llm_benchmark_stop">Stop</string>
     <string name="llm_benchmark_tokens_per_second">Tokens / Second</string>
     <string name="llm_benchmark_latency">Latency: %1$dms</string>

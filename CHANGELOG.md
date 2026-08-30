@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-08-30] - 基准测试引入两阶段预热机制消除冷启动与多次测试方差
+- [新增] `ChatViewModel.kt`: 基准测试引入两阶段机制（Phase 1 预热 + Phase 2 正式度量）。在正式基准测试前，先行针对 Prompt 执行一段短预热流（`maxOutputTokens = 16`），充分触发 GPU Shaders/Vulkan 管线 JIT 预编译并抛弃其输出与耗时，在硬件完全热机态下开始正式测试，彻底消除首次冷启动与第二次测试间的巨大误差。
+- [优化] `SettingScreen.kt`: 完善预热态 UI 呈现，在预热执行期间速度卡片与流式预览卡片展示 `llm_benchmark_warming_up`（“正在预热引擎...”），预热完成后无缝进入正式吞吐率流式呈现。
+- [新增] `composeResources`: 新增中英文 `llm_benchmark_warming_up` 字符串资源。
+- [文档] 更新 `docs/designs/app-context-management-design.md`: 在第 7.9 节追加第 7 条，规范基准测试预热跑测与冷启动开销消除契约。
+
 ## [2026-08-30] - 重构 SettingScreen 基准测试流程与原生 Benchmark 指标提取
 - [重构] `ChatViewModel.kt`: 彻底解耦 Flow Chunk 回调与 Token 计数。基准测试改用确定性贪婪解码（`samplerConfig = null`），确保同 Prompt 连续测试生成结果 100% 可复现并消除随机波动；启动前自动确保底层引擎 `enableBenchmark` 原生插桩处于就绪状态；流式更新引入 80ms 节流并基于 BPE 分词估算实时吞吐率；测试完成优先提取 `litertlm.cc` 权威 `BenchmarkInfo`（包含精确解码/预填 Token 数、吞吐率与 TTFT），回退方案基于 `session.tokenCount()` 与真实文本分词，杜绝任何将 Chunk 回调次数充当 Token 的伪计算。
 - [新增] `TokenEstimator.kt`: 新增轻量级跨平台 BPE 分词估算器 `estimateTokenCount`，高效近似中英文、子词、标点符号与数字序列的 Token 数量。

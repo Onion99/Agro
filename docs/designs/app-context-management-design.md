@@ -340,3 +340,6 @@ SettingScreen 性能基准测试与底层 LiteRT-LM 交互遵循以下确定性�
 4. **健壮的 Native Step 回退**：若因极端情况未能提取原生 BenchmarkInfo，通过 `session.tokenCount()`（即 native `session_->GetCurrentStep()`）获取总步骤数，结合分词估算推导解码 Token 数，杜绝任何以 Chunk 数充当 Token 数的伪计算。
 5. **确定性贪婪解码保障低方差**：基准测试会话统一使用 `samplerConfig = null`（Greedy Decoding: `temperature = 0.0, topK = 1`），保证相同 Prompt 下每次测试生成的内容、长度与 Token 序列 100% 确定，消除随机采样带来的吞吐波动。
 6. **引擎原生插桩前置保障**：测试启动前检查引擎的 `enableBenchmark` 开关，若引擎未启用原生插桩则自动重置初始化，确保 C++ 侧的 `BenchmarkParams` 处于活跃就绪状态。
+7. **首次预热（Warmup）与冷启动开销消除**：端侧推理引擎在首次执行时存在 GPU Shaders/Vulkan/Metal 管线 JIT 编译、权重缓存换入、内存分页与线程池启动等冷启动开销。基准测试采用两阶段执行机制：
+   - **Phase 1: Warmup**：先行针对测试 Prompt 执行一段短预热流（`maxOutputTokens = 16`），触发所有预填与解码计算管线预编译并直接丢弃其输出与耗时；UI 呈现预热状态反馈，同时支持安全响应停止取消。
+   - **Phase 2: Formal Benchmark**：预热会话安全关闭后立即启动正式基准测试，在完全热机、GPU 性能频率处于稳态的环境下采集指标，彻底消除首轮冷启动测试与后续热机测试间的显著方差。
