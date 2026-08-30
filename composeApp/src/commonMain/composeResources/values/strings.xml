@@ -94,13 +94,13 @@
     <string name="chat_input_hint_mobile">Share your thoughts...</string>
     <string name="chat_input_hint_desktop">Whisper your thoughts to the void...</string>
     <string name="chat_disclaimer">%1$s weaves responses from probability. Seek truth with gentle scrutiny.</string>
-    <string name="model_loading_title">Initializing Model</string>
-    <string name="model_loading_subtitle">Configuring weights and preparing the local engine...</string>
+    <string name="model_loading_title">Loading Model</string>
+    <string name="model_loading_subtitle">Loading model and preparing the local engine, please wait...</string>
     <string name="llm_status_standby">Model standby</string>
-    <string name="llm_status_initializing">Preparing local model</string>
-    <string name="llm_status_applying_context">Diffusing new context</string>
+    <string name="llm_status_initializing">Loading model</string>
+    <string name="llm_status_applying_context">Applying context</string>
     <string name="llm_status_ready">System ready</string>
-    <string name="llm_status_generating">Composing response</string>
+    <string name="llm_status_generating">Generating response</string>
     <string name="llm_status_error">Model needs attention</string>
 
     <!-- LLM Settings Screen -->
@@ -191,8 +191,8 @@
     <string name="chat_thinking_prefix">> *Thinking...*\n</string>
 
     <!-- Library Screen -->
-    <string name="library_title">Ethereal Library</string>
-    <string name="library_desc">A curated collection of your intellectual vessels. Access refined skills, specialized knowledge bases, and deep-dive conceptual tools.</string>
+    <string name="library_title">Library</string>
+    <string name="library_desc">A curated collection of practical skills and creative tools. Access specialized assistants and extended capabilities.</string>
     <string name="library_living_memory">Living Memory</string>
     <string name="library_memory_desc">Resuming your most intricate threads of thought...</string>
     <string name="library_chiptune_bgm">8-bit BGM</string>

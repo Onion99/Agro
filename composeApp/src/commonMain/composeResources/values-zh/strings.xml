@@ -94,13 +94,13 @@
     <string name="chat_input_hint_mobile">分享你的想法...</string>
     <string name="chat_input_hint_desktop">向虚空倾诉你的思绪...</string>
     <string name="chat_disclaimer">%1$s 基于概率编织回应，请以温和的审视探寻真相。</string>
-    <string name="model_loading_title">模型初始化中</string>
-    <string name="model_loading_subtitle">正在配置权重并准备本地神经网络引擎...</string>
+    <string name="model_loading_title">正在加载模型</string>
+    <string name="model_loading_subtitle">正在载入模型并准备本地运行环境，请稍候...</string>
     <string name="llm_status_standby">模型待加载</string>
-    <string name="llm_status_initializing">正在准备本地模型</string>
-    <string name="llm_status_applying_context">正在晕染新上下文</string>
+    <string name="llm_status_initializing">正在加载模型</string>
+    <string name="llm_status_applying_context">正在应用上下文</string>
     <string name="llm_status_ready">系统已就绪</string>
-    <string name="llm_status_generating">正在编织回应</string>
+    <string name="llm_status_generating">正在生成回答</string>
     <string name="llm_status_error">模型需要检查</string>
 
     <!-- LLM Settings Screen -->
@@ -193,8 +193,8 @@
     <string name="chat_tool_completed">\n`[工具 \'%1$s\' 已完成]`\n</string>
 
     <!-- Library Screen -->
-    <string name="library_title">空灵资源库</string>
-    <string name="library_desc">精心策展的智力容器集合。获取精炼的技能、专业知识库以及深度概念工具。</string>
+    <string name="library_title">资源库</string>
+    <string name="library_desc">精选的实用技能与创作工具集合，快速体验专属助手与丰富扩展功能。</string>
     <string name="library_living_memory">活跃记忆</string>
     <string name="library_memory_desc">重拾您最错综复杂的思维脉络...</string>
     <string name="library_chiptune_bgm">8-bit BGM</string>
