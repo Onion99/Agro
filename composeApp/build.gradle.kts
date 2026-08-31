@@ -234,12 +234,18 @@ android {
         applicationId = project.property("app.id").toString()
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 4
+        versionCode = 5
         versionName = libs.versions.app.version.get()
         resValue("string", "app_name", project.property("app.name").toString())
         ndk {
             abiFilters.clear()
             abiFilters += "arm64-v8a"
+        }
+    }
+
+    sourceSets {
+        named("main") {
+            jniLibs.srcDirs("src/androidMain/jniLibs")
         }
     }
 
@@ -1021,8 +1027,13 @@ tasks.register<BuildNativeLibTask>("buildAndroidNativeLib") {
     this.secondaryOutputSuffix.set(".so")
 }
 
-// 让 Android 构建依赖 Bazel 原生库构建
-tasks.matching { it.name.contains("mergeDebugNativeLibs") || it.name.contains("mergeReleaseNativeLibs") }.configureEach {
+// 让 Android 构建依赖 Bazel 原生库构建（确保在搜集本地 JNI 文件夹与合并原生库之前生成产物）
+tasks.matching {
+    it.name.contains("mergeDebugNativeLibs") ||
+        it.name.contains("mergeReleaseNativeLibs") ||
+        it.name.contains("mergeDebugJniLibFolders") ||
+        it.name.contains("mergeReleaseJniLibFolders")
+}.configureEach {
     dependsOn("buildAndroidNativeLib")
 }
 

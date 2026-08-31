@@ -5,8 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.0] - 2026-08-30
-- [修复] `ChatScreen.InputArea` 支持 Enter、Ctrl+Enter 和 Cmd+Enter 发送消息，Shift+Enter 继续换行；生成期间保留停止按钮行为。
+## [1.2.2] - 2026-08-31
+- [修复] 显式声明 `composeApp/src/androidMain/jniLibs` 为 Android JNI 输入目录，并扩展构建依赖链使 Bazel 编译任务前置于 `mergeDebugJniLibFolders` / `mergeReleaseJniLibFolders`，彻底修复 `liblitertlm_jni.so` 未被合并进 APK/AAB 导致运行时 `java.lang.UnsatisfiedLinkError` 的问题。
+- [优化] `ChatScreen.InputArea` 支持 Enter 发送消息，Shift+Enter、Ctrl+Enter 和 Cmd+Enter 换行；生成期间保留停止按钮行为。
 
 ## [1.2.0] - 2026-08-30
 - [新增] 全面扩展多语言国际化支持，新增 7 种语言本地化资源包（德语、韩语、西班牙语、俄语、法语等），README 文档支持 9 种语言全方位导航与对齐；静态扫描并彻底精简 49 项冗余字符串资源。
