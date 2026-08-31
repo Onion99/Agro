@@ -13,7 +13,6 @@
         <uses-native-library android:name="libOpenCL.so" android:required="false"/>
         <activity
             android:exported="true"
-            android:windowSoftInputMode="adjustNothing"
             android:name=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

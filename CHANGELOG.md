@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2026-08-31
+- [修改] 发布 Agro `v1.2.3`，统一 Android、iOS 与项目工程规范中的版本号；Android `versionCode` 与 iOS `CURRENT_PROJECT_VERSION` 均递增至 `6`。
+- [修复] 调整 Android Activity 的软键盘窗口配置，交由 Compose 输入区域处理 IME 内边距，避免移动端聊天输入框被键盘遮挡。
+
 ## [1.2.2] - 2026-08-31
 - [修复] 显式声明 `composeApp/src/androidMain/jniLibs` 为 Android JNI 输入目录，并扩展构建依赖链使 Bazel 编译任务前置于 `mergeDebugJniLibFolders` / `mergeReleaseJniLibFolders`，彻底修复 `liblitertlm_jni.so` 未被合并进 APK/AAB 导致运行时 `java.lang.UnsatisfiedLinkError` 的问题。
 - [优化] `ChatScreen.InputArea` 支持 Enter 发送消息，Shift+Enter、Ctrl+Enter 和 Cmd+Enter 换行；生成期间保留停止按钮行为。
