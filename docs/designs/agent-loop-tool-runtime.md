@@ -42,9 +42,10 @@
 
 当前暴露给模型的工具只有真实可执行项:
 
-- `runJs`: 使用本地 QuickJS 执行自包含 JavaScript，当前限制脚本长度为 20,000 字符。
 - `analyzeUrl`: 对 HTTP/HTTPS URL 发起请求，返回 URL 分析、请求、响应头、状态码、耗时和内容预览。
 - `searchWeb`: 使用 Bing 搜索并返回结构化搜索结果，可选抓取结果页正文。
+
+`runJs` 的 QuickJS 实现仍保留在代码中，但当前未注册，因此不会进入 tools schema，调用时按禁用工具返回结构化失败。
 
 以下旧占位工具不再进入 tools schema:
 
@@ -94,7 +95,7 @@
 
 - `ToolCall` 仍缺少 native 层透传的 tool call id，同轮同名工具结果仍依赖顺序匹配。
 - 尚未实现工具权限确认、域名策略、SSRF 完整防护和网络超时策略。
-- `runJs` 仍是直接 QuickJS 执行，后续应改为“已注册脚本”执行模型。
+- `runJs` 当前未注册；若未来重新启用，应先改为“已注册脚本”执行模型并补齐权限确认。
 - 尚未实现上下文压缩、token budget 恢复、工具结果摘要和长会话重放。
 - MCP、Skill、Intent 仍未接入真实系统，因此当前不暴露给模型。
 

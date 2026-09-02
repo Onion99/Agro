@@ -25,7 +25,7 @@ class AgentToolsTest {
                 ?.contentOrNull
         }
 
-        assertTrue("runJs" in names)
+        assertFalse("runJs" in names)
         assertTrue("analyzeUrl" in names)
         assertTrue("searchWeb" in names)
         assertFalse("loadSkill" in names)
@@ -44,7 +44,7 @@ class AgentToolsTest {
     }
 
     @Test
-    fun blankJavaScriptFailsBeforeEvaluation() = runTest {
+    fun disabledJavaScriptToolReturnsStructuredFailure() = runTest {
         val result = AgentTools().executeTool(
             name = "runJs",
             arguments = buildJsonObject {
@@ -53,7 +53,7 @@ class AgentToolsTest {
         )
 
         assertFalse(result.success)
-        assertTrue(result.error.orEmpty().contains("blank"))
+        assertTrue(result.error.orEmpty().contains("disabled"))
     }
 }
 

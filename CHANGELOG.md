@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4] - 2026-09-02
+- [修改] 发布 Agro `v1.2.4`，同步 Android、iOS 与项目工程规范版本；Android `versionCode` 与 iOS `CURRENT_PROJECT_VERSION` 均递增至 `7`。
+- [优化] 重写 `ChatViewModel.CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION`：消除 2 小节示例锚定，默认生成 8 小节，并为长篇需求选择 12/16 小节。
+- [优化] 为 4B 模型加入 A/A'/B/回归曲式、动机发展、四轨互补编配、循环接缝和逐轨时值核算规则，减少机械重复、尾部补静音与无目的音阶跑动。
+- [修复] 同步 Agent 工具注册表与结构化生成策略的过期测试：确认 `runJs` 当前禁用，Lottie 使用统一的 `4096` 输出 token 预算，避免 Release CI 被陈旧断言阻断。
+- [文档] 更新 `docs/designs/gemma4-8bit-bgm-json-mml-composemediaplayer-route-plan.md`，记录短曲根因、提示词优化策略与运行时协议边界。
+- [文档] 更新 `docs/designs/agent-loop-tool-runtime.md`，记录 `runJs` 保留实现但未注册的当前边界。
+
 ## [1.2.3] - 2026-08-31
 - [修改] 发布 Agro `v1.2.3`，统一 Android、iOS 与项目工程规范中的版本号；Android `versionCode` 与 iOS `CURRENT_PROJECT_VERSION` 均递增至 `6`。
 - [修复] 调整 Android Activity 的软键盘窗口配置，交由 Compose 输入区域处理 IME 内边距，避免移动端聊天输入框被键盘遮挡。

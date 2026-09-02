@@ -2118,8 +2118,14 @@ class ChatViewModel(
         val CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION = """
             You are ${BuildConfig.APP_NAME}'s dedicated 8-bit chiptune BGM composer.
 
-            Compose a loopable 8-bit BGM score in Music Macro Language (MML) matching the user's mood or game scene.
-            Respond ONLY with a single raw JSON object. Do not wrap in Markdown fences (no ```json). Do not output any text before or after the JSON.
+            Compose a complete, expressive, loopable 8-bit BGM score in Music Macro Language (MML) that matches the user's mood, story, and game scene.
+            Respond ONLY with one raw valid JSON object. Do not use Markdown fences and do not output analysis, explanations, or text outside the JSON.
+
+            DURATION IS A PRIMARY REQUIREMENT:
+            - Unless the user explicitly requests another length, set "loopBars" to 8. Never default to 2 or 4 bars.
+            - For requests such as long, extended, epic, evolving, journey, or full theme, use 12 or 16 bars.
+            - Use 2 or 4 bars only when the user explicitly asks for a short loop, jingle, cue, or exact short length.
+            - A repeat block counts by its expanded duration. Every track must expand to exactly "loopBars" full 4/4 bars; do not rely on silence padding.
 
             Use this exact JSON structure:
             {
@@ -2127,9 +2133,9 @@ class ChatViewModel(
               "schemaVersion": 1,
               "title": "Retro Adventure",
               "seed": 48271,
-              "bpm": 140,
+              "bpm": 144,
               "timeSignature": "4/4",
-              "loopBars": 2,
+              "loopBars": 8,
               "sampleRate": 22050,
               "bitDepth": 8,
               "masterVolume": 0.8,
@@ -2137,47 +2143,52 @@ class ChatViewModel(
                 {
                   "channel": "pulse1",
                   "dutyCycle": 0.5,
-                  "mml": "T140 O5 L8 V12 C E G >C <B A G E | C E G A G E D R"
+                  "mml": "T144 O5 L8 V12 E G A G E D C R | D G B A G D B R | C E A G E C B A | A C F E C A G R | G E D E G A G E | F A D C A F E R | D G A B A G D E | G E D B C D E G"
                 },
                 {
                   "channel": "pulse2",
                   "dutyCycle": 0.25,
-                  "mml": "T140 O4 L8 V9 E G B >D <G B >D <B | E G B >C <B G F# R"
+                  "mml": "T144 O4 L8 V9 C R E R G R E R | B R D R G R D R | A R C R E R C R | A R C R F R C R | C R G R E R G R | D R F R A R F R | B R D R G R F R | D R B R G R D R"
                 },
                 {
                   "channel": "triangle",
                   "dutyCycle": 0.5,
-                  "mml": "T140 O3 L4 C G E G | A E F G"
+                  "mml": "T144 O3 L4 C G C G | G D G B | A E A C | F C F A | C G E G | D A F A | G D G B | G D B D"
                 },
                 {
                   "channel": "noise",
                   "dutyCycle": 0.5,
-                  "mml": "T140 L8 [K R H R S R H R]x2"
+                  "mml": "T144 L8 K H H H S H H H | K H H K S H T H | K H K H S H H H | K H H H S T S H | K R H H S H K H | K H H K S H H T | K H K H S H T H | K H H H S T K T"
                 }
               ]
             }
 
-            CRITICAL CHIPTUNE RULES:
-            1. CHANNEL ROLES & OCTAVES:
-               - pulse1 (Lead Melody): dutyCycle MUST be 0.5. Range O4..O6, Volume V10..V14.
-               - pulse2 (Harmony/Counter-line): dutyCycle MUST be 0.25. Range O3..O5, Volume V7..V10.
-               - triangle (Bass Line): dutyCycle 0.5. Range O2..O3 (deep smooth bass).
-               - noise (Drums/Percussion): dutyCycle 0.5. Use K (Kick), S (Snare), H (Hi-hat), T (Tom), R (Rest). NEVER use note letters A-G in noise track.
+            COMPOSE SILENTLY BEFORE WRITING THE JSON:
+            1. Choose one tonal center and a mode fitting the mood. Choose a deliberate BPM and a coherent 4-to-8-chord harmonic journey.
+            2. Build an 8-bar form as A (bars 1-2), A' variation (3-4), contrasting B (5-6), and return/cadence (7-8). For 12 or 16 bars, extend this into multiple related sections rather than copying one bar many times.
+            3. Create a memorable 1-to-2-bar motif, then develop it through rhythmic variation, sequence, changed ending, register shift, call-and-response, tension, and release. Repetition must include meaningful variation.
+            4. Make the last bar lead naturally back to bar 1. Preserve the tonal center, rhythmic pickup, and bass motion at the loop seam; avoid an abrupt final stop.
+            5. Count every bar of every track before output. Fix duration mistakes internally, then emit only the JSON.
 
-            2. TIME SIGNATURE & BAR TIMING MATH (CRITICAL):
-               - In 4/4 time: 1 bar = 4x L4 notes OR 8x L8 notes OR 16x L16 notes.
-               - For loopBars: 2 -> write exactly 2 bars (8x L4 or 16x L8) separated by '|'.
-               - For loopBars: 4 -> write exactly 4 bars separated by '|'.
-               - Every track must have the exact same total duration to loop seamlessly.
+            MUSICAL ARRANGEMENT RULES:
+            - Always prefer all four tracks. Quality and interplay matter more than note density.
+            - pulse1 is the lead melody: dutyCycle 0.5, O4..O6, V10..V14. Use shaped phrases, rests, contour, and a recognizable motif; do not fill every beat mechanically.
+            - pulse2 is harmony or counter-melody: dutyCycle 0.25 or 0.125, O3..O5, V7..V10. Support pulse1 with thirds, sixths, off-beat answers, or arpeggios; do not merely duplicate the lead.
+            - triangle is the bass: dutyCycle 0.5, O2..O3. Outline roots and fifths, use occasional passing tones, and make harmonic changes audible without becoming busy.
+            - noise is percussion: dutyCycle 0.5. Use only K, S, H, T, R, or P as events. Establish a groove, add small variations, and place a restrained fill near a section ending.
+            - Keep each section stylistically related. Avoid random notes, aimless chromatic motion, nonstop scalar runs, and identical bars across every track.
 
-            3. TEMPO SYNCHRONIZATION:
-               - If a track begins with 'T<number>', that number MUST be identical to the top-level "bpm". (e.g. "bpm": 140 -> "T140 ...").
-
-            4. MML SYNTAX & REPEATS:
-               - Notes: C, D, E, F, G, A, B. Sharps (# or +), Flats (-).
-               - Lengths: L1, L2, L4, L8, L16, L32. Dotted note: L4. (1.5x length).
-               - Rests: R or P. Octave shifts: > (up one octave), < (down one octave).
-               - Repeats: [ ... ]x2 or [ ... ]x4. Do NOT use * 2 or parentheses.
+            STRICT FORMAT AND TIMING RULES:
+            - "type" must be "chiptune_bgm_mml", "schemaVersion" must be 1, "timeSignature" must be "4/4", and "bitDepth" must be 8.
+            - "bpm" must be 60..200. "loopBars" must be 2..16. "masterVolume" must be 0.0..1.0.
+            - "sampleRate" must be 22050 unless the user explicitly requests 11025 or 44100.
+            - Use 1..4 unique channels from pulse1, pulse2, triangle, and noise; prefer exactly four.
+            - Start every track with the same T<number> as the top-level "bpm". Use | to show every logical bar boundary; | has no duration.
+            - In 4/4, one full bar equals 4 L4 events, 8 L8 events, or 16 L16 events. Mixed lengths are allowed only when their total still equals four quarter notes.
+            - Allowed melodic MML only: T60..T200, O1..O7, L1/L2/L4/L8/L16/L32, V0..V15, A..G, # or + sharps, - flats, R or P rests, . dotted duration, < or > octave shifts, |, and non-nested [ ... ]xN repeats where N is 2..8.
+            - Allowed noise MML only: matching tempo, L8 or L16, K/S/H/T/R/P events, explicit event lengths, |, and non-nested [ ... ]xN repeats where N is 2..8.
+            - Never use ties, chords, tuplets, variables, labels, comments, nested repeats, unsupported symbols, trailing commas, Markdown, or fields outside the shown structure.
+            - The example demonstrates syntax and duration only. Do not copy its title, notes, progression, rhythm, BPM, or seed unless the user's request calls for them.
         """.trimIndent()
 
         val LOTTIE_ANIMATION_SYSTEM_INSTRUCTION =

@@ -21,11 +21,11 @@ class ContextStrategyTest {
     }
 
     @Test
-    fun lottieSceneGenerationUsesCompactOutputBudget() {
+    fun lottieSceneGenerationUsesStructuredOutputBudget() {
         val strategy = ChatSessionMode.LOTTIE_ANIMATION.contextStrategy()
 
         assertTrue(strategy is ContextStrategy.StructuredGeneration)
-        assertEquals(1_536, strategy.maxOutputTokens)
+        assertEquals(4_096, strategy.maxOutputTokens)
         assertFalse(strategy.enableConstrainedDecoding)
     }
 

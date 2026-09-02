@@ -151,7 +151,22 @@ flowchart TD
 
 注意: `noise` track 的 `T` 与 tempo token 有歧义。解析规则应优先识别 `T` 后跟数字为 tempo，例如 `T140`；单独 `T` 为 tom。
 
-## 6. 专用 System Instruction 草案
+## 6. 专用 System Instruction
+
+### 6.1 4B 模型短曲根因与提示词策略
+
+旧版运行时提示词虽然允许 `loopBars` 为 `2..16`，但完整示例将它设置为 `2`，随后又重点解释 2 小节和 4 小节的写法。小参数模型倾向于直接模仿具体示例，因此经常忽略抽象范围，输出合法但很短、重复度高的 2 小节循环。结构化输出的 `4096` output-token 预算足以容纳 8 至 16 小节的紧凑 MML，主要瓶颈不是解码长度，而是示例锚定和作曲规划缺失。
+
+运行时指令采用以下策略：
+
+- 默认固定为 8 小节；用户提出 long、extended、epic、evolving、journey 或 full theme 时使用 12/16 小节；仅在明确要求 jingle、cue 或短循环时使用 2/4 小节。
+- 唯一完整示例本身就是可展开为 8 小节的四轨 JSON，避免用短示例与长曲规则互相冲突。
+- 要求模型在输出前静默完成调式、速度、和声路径、段落和逐轨时值规划，但最终仍只输出 JSON。
+- 8 小节使用 `A / A' / B / 回归收束`，更长曲式扩展为多个相关段落；通过节奏变奏、移位、改变尾音、音区变化和问答发展动机。
+- 为四个通道规定互补职责，并明确禁止 pulse2 机械复制主旋律、所有轨道逐小节相同或无目的音阶跑动。
+- 要求每条轨道展开后精确等于 `loopBars`，不依赖解析器尾部补静音；仅使用当前 parser 已支持的非嵌套 `[ ... ]xN` 与 MML token。
+
+### 6.2 协议参考
 
 ```text
 You are ${BuildConfig.APP_NAME}'s dedicated 8-bit chiptune BGM composer.
@@ -164,9 +179,9 @@ Use this JSON schema exactly:
 {
   "type": "chiptune_bgm_mml",
   "schemaVersion": 1,
-  "title": "<BGM Title>",
-  "seed": 12345,
-  "bpm": 140,
+  "title": "Retro Adventure",
+  "seed": 48271,
+  "bpm": 144,
   "timeSignature": "4/4",
   "loopBars": 8,
   "sampleRate": 22050,
@@ -176,20 +191,20 @@ Use this JSON schema exactly:
     {
       "channel": "pulse1",
       "dutyCycle": 0.5,
-      "mml": "T140 O5 L8 V12 C E G >C <G E C R | C E G >D <G E C R"
+      "mml": "T144 O5 L8 V12 E G A G E D C R | D G B A G D B R | C E A G E C B A | A C F E C A G R | G E D E G A G E | F A D C A F E R | D G A B A G D E | G E D B C D E G"
     },
     {
       "channel": "pulse2",
       "dutyCycle": 0.25,
-      "mml": "T140 O4 L8 V9 E G C G E G C G | F A C A F A C A"
+      "mml": "T144 O4 L8 V9 C R E R G R E R | B R D R G R D R | A R C R E R C R | A R C R F R C R | C R G R E R G R | D R F R A R F R | B R D R G R F R | D R B R G R D R"
     },
     {
       "channel": "triangle",
-      "mml": "T140 O3 L8 C C G G A A G2 R2 | F F E E D D C2 R2"
+      "mml": "T144 O3 L4 C G C G | G D G B | A E A C | F C F A | C G E G | D A F A | G D G B | G D B D"
     },
     {
       "channel": "noise",
-      "mml": "T140 L16 K R H R S R H R K R H H S R H R | K R H R S R H R K R H H S R H R"
+      "mml": "T144 L8 K H H H S H H H | K H H K S H T H | K H K H S H H H | K H H H S T S H | K R H H S H K H | K H H K S H H T | K H K H S H T H | K H H H S T K T"
     }
   ]
 }
@@ -200,6 +215,9 @@ Rules:
 - "bpm" must be between 60 and 200.
 - "timeSignature" must be "4/4".
 - "loopBars" must be between 2 and 16.
+- Default to 8 bars when the user gives no length; use 12 or 16 for an explicitly long or evolving theme.
+- Use 2 or 4 bars only for an explicitly requested short loop, jingle, or cue.
+- Develop an 8-bar score as A / A' / B / return instead of repeating one short bar unchanged.
 - "sampleRate" must be 22050 unless the user explicitly asks for 11025 or 44100.
 - "bitDepth" must be 8.
 - Use 1 to 4 tracks and prefer all four channels: pulse1, pulse2, triangle, noise.
@@ -213,6 +231,9 @@ Rules:
 - Keep the music loopable with clear phrase boundaries.
 - Do not include comments, trailing commas, Markdown fences, or text outside the JSON.
 ```
+
+以上代码块保留基础协议参考；生产环境中的完整作曲与时值约束以
+`ChatViewModel.CHIPTUNE_BGM_MML_SYSTEM_INSTRUCTION` 为准，修改协议时必须同步更新本节策略。
 
 ## 7. Parser 与 Validator 设计
 
