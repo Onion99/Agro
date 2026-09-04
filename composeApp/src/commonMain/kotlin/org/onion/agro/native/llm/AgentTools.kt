@@ -371,11 +371,10 @@ class AgentTools : KoinComponent, AgentToolExecutor {
         }
     }
 
-    private fun buildBingSearchUrl(query: String, count: Int): Url {
-        return URLBuilder("https://www.bing.com/search").apply {
+    private fun buildBingSearchUrl(query: String): Url {
+        return URLBuilder("https://cn.bing.com/search").apply {
+            parameters.append("form", "bing")
             parameters.append("q", query)
-            parameters.append("count", count.toString())
-            parameters.append("mkt", "en-US")
         }.build()
     }
 
@@ -436,7 +435,7 @@ class AgentTools : KoinComponent, AgentToolExecutor {
             val shouldFetchContent = includeContent ?: false
             val contentLimit = (maxContentChars ?: 4000).coerceIn(500, 20_000)
             val startedAt = Clock.System.now().toString()
-            val searchUrl = buildBingSearchUrl(normalizedQuery, resultLimit)
+            val searchUrl = buildBingSearchUrl(normalizedQuery)
             val headers = mutableMapOf<String, String>()
             applyBrowserHeaders(headers)
 
@@ -470,10 +469,10 @@ class AgentTools : KoinComponent, AgentToolExecutor {
                 parsedResults += buildJsonObject {
                     put("rank", parsedResults.size + 1)
                     put("title", title)
-                    put("url", url)
-                    put("displayUrl", displayUrl)
+                    //put("url", url)
+                    //put("displayUrl", displayUrl)
                     put("snippet", snippet)
-                    pageContent.forEach { (key, value) -> put(key, value) }
+                    //pageContent.forEach { (key, value) -> put(key, value) }
                 }
             }
 
