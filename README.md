@@ -223,3 +223,7 @@ Open `iosApp/iosApp.xcworkspace` in Xcode, select your Target/Simulator for code
 <p align="center">
   Made with 💚 by <strong>Onion99</strong> and the Open Source Community
 </p>
+
+## Links
+
+Linux Do Community: https://linux.do
